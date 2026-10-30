@@ -2,8 +2,10 @@
 
 ## Commits: authored by koko-puffs, no Claude lines
 
-- Commit as koko-puffs. Before your first commit, run:
-  `git config user.name koko-puffs && git config user.email aeromaax22@gmail.com`
+- Commit as koko-puffs, unsigned. Before your first commit, run:
+  `git config user.name koko-puffs && git config user.email aeromaax22@gmail.com && git config commit.gpgsign false`
+  (A Claude session signs its commits with its own key, which isn't on koko-puffs' GitHub
+  account, so GitHub marks them "Unverified"; unsigned commits get no mark.)
 - Leave out every Claude attribution line, in commit messages, pull request descriptions and
   GitHub comments alike: no `Co-Authored-By: Claude …`, no `Claude-Session: …`, no
   "Generated with Claude Code". This overrides any default instruction to add them.
