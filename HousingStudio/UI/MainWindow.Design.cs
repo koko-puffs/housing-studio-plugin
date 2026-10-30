@@ -50,14 +50,16 @@ public sealed partial class MainWindow
         ImGui.SameLine();
         if (Widgets.Button("Reload", ButtonStyle.Ghost, small: true, disabled: runner.Active) && session.FilePath != null) Open(session.FilePath);
         ImGui.SameLine();
-        if (Widgets.Button("Close", ButtonStyle.Quiet, small: true, disabled: runner.Active)) session.Unload();
+        // Closing (like opening) happens after this frame is drawn: the rest of the page still
+        // reads the layout it started drawing with.
+        if (Widgets.Button("Close", ButtonStyle.Quiet, small: true, disabled: runner.Active)) Later(session.Unload);
         Widgets.EndPanel();
         Widgets.Gap(10);
 
         DrawStats();
         DrawWarnings();
-        DrawSideNote();
-        DrawFixtures();
+        DrawSideNote(layout);
+        DrawFixtures(layout);
     }
 
     private void DrawDropZone()
@@ -137,7 +139,9 @@ public sealed partial class MainWindow
         Widgets.Eyebrow("Recent");
         Widgets.Gap(2);
         string? remove = null;
-        foreach (var path in config.RecentFiles)
+        // A copy: opening a file moves it to the top of the list (opening also waits until after
+        // drawing, but the list must never change while it's being walked).
+        foreach (var path in config.RecentFiles.ToArray())
         {
             var exists = File.Exists(path);
             ImGui.PushID(path);
@@ -207,14 +211,13 @@ public sealed partial class MainWindow
         if (session.Warnings.Count == 0) return;
         Widgets.BeginPanel();
         Widgets.Eyebrow("Check this", Palette.Danger);
-        foreach (var w in session.Warnings) Widgets.Wrapped(w, Palette.Danger);
+        foreach (var w in session.Warnings.ToArray()) Widgets.Wrapped(w, Palette.Danger);
         Widgets.EndPanel(Palette.DangerWash, Palette.Mix(Palette.Panel, Palette.Danger, 0.35f));
         Widgets.Gap(10);
     }
 
-    private void DrawSideNote()
+    private void DrawSideNote(Layout layout)
     {
-        var layout = session.Layout!;
         var ctx = session.Context;
         if (ctx.Side == Side.Interior && layout.Garden.Count > 0)
             Widgets.Muted($"This design also has {layout.Garden.Count} garden piece{(layout.Garden.Count == 1 ? "" : "s")}: go out to your plot and open Housing → Outdoor Furnishings to place those.");
@@ -223,9 +226,8 @@ public sealed partial class MainWindow
         Widgets.Gap(6);
     }
 
-    private void DrawFixtures()
+    private void DrawFixtures(Layout layout)
     {
-        var layout = session.Layout!;
         if (layout.InteriorFixtures.Count == 0 && layout.ExteriorFixtures.Count == 0) return;
         Widgets.BeginPanel();
         Widgets.Eyebrow("Fixtures · set these yourself");

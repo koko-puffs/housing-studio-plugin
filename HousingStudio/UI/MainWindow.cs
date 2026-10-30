@@ -91,7 +91,21 @@ public sealed partial class MainWindow : Window
         });
 
         dialogs.Draw();
+
+        // Whatever changes what the page shows (opening, closing a layout) waits until the frame is
+        // drawn, so nothing changes under the code drawing it.
+        if (later.Count > 0)
+        {
+            var actions = later.ToArray();
+            later.Clear();
+            foreach (var a in actions) a();
+        }
     }
+
+    private readonly System.Collections.Generic.List<Action> later = new();
+
+    /// <summary>Runs after this frame's drawing is finished.</summary>
+    private void Later(Action action) => later.Add(action);
 
     /// <summary>Makes the last item a drop target for layout files dragged in from outside the game.</summary>
     private void DropTarget()
@@ -142,7 +156,10 @@ public sealed partial class MainWindow : Window
         noticeUntil = DateTime.UtcNow + TimeSpan.FromSeconds(4);
     }
 
-    private void Open(string path)
+    /// <summary>Opens a layout once this frame is drawn.</summary>
+    private void Open(string path) => Later(() => OpenNow(path));
+
+    private void OpenNow(string path)
     {
         if (runner.Active)
         {

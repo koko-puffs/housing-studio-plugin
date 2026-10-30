@@ -39,9 +39,6 @@ public sealed record HousingContext(
         _ => null,
     };
 
-    /// <summary>Can pieces be moved right now (editor in Rotate mode, allowed, not busy)?</summary>
-    public bool CanEdit => Kind != PlaceKind.Elsewhere && HasPermission && EditorOpen && Mode == EditorMode.Rotate && !Busy;
-
     public static unsafe HousingContext Read(PlotTable plots)
     {
         if (!Services.ClientState.IsLoggedIn) return None;
