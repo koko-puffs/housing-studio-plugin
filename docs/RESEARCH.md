@@ -153,7 +153,7 @@ placed before starting.
 
 hgxiv.com and thegamer.com (housing guides) were blocked in this environment, so the exact wording of
 the game's menus ("Place", "Display Preview") wasn't checked. Since 0.2 the automation does choose a
-menu entry by its words, so they're editable in Settings → Diagnostics and logged on every run.
+menu entry by its words, so they're editable in Settings → Something not working? and logged on every run.
 
 ## 6. Automation (0.2): driving the game's windows
 

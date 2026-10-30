@@ -41,6 +41,12 @@ public enum Icon
 /// Lucide's outlined icons, drawn with ImGui's draw lists from the very SVG paths in the mockups
 /// (<c>viewBox="0 0 24 24"</c>, <c>stroke-width:1.8</c>, round caps and joins). The stroke is in the
 /// icon's 24-unit grid as in SVG, so a 16px icon has the mockup's 1.2px line and a 24px one 1.8px.
+///
+/// The paths are Lucide's (https://lucide.dev), under the ISC License: copyright (c) for portions of
+/// Lucide are held by Cole Bemis 2013-2022 as part of Feather (MIT); all other copyright (c) for
+/// Lucide are held by Lucide Contributors 2022. Permission to use, copy, modify, and/or distribute
+/// this software for any purpose with or without fee is hereby granted, provided that the above
+/// copyright notice and this permission notice appear in all copies.
 /// </summary>
 public static class Icons
 {

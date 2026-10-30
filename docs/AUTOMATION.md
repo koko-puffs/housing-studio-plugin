@@ -16,7 +16,7 @@ the storeroom and bags, floor pieces before what sits on them, and the dyes last
 gets there). Each piece is a list of steps run by `Core/StepQueue.cs`: one step per frame at most, at
 least 0.3 s between two clicks, each wait with a timeout, step-by-step mode holding before every
 click, and clean-up steps (close the menu or dye window it opened) when a piece ends badly. Between
-pieces it waits the interval set on the Place page (± the jitter).
+pieces it waits the pace set in Settings (± the jitter).
 
 Every frame it checks: same home, permission, the editor open (or, for up to 8 s while it switches
 modes, the Housing menu), not in combat/cutscene/zone change. A window that doesn't appear in time
@@ -113,6 +113,6 @@ is skipped as "dye missing".
 
 ## Sending diagnostics
 
-Settings → Diagnostics → **Start recording**; do the thing that went wrong by hand (and, with the
+Settings → Something not working? → **Start recording**; do the thing that went wrong by hand (and, with the
 Storeroom tab open, press **Write down the windows' values**); **Stop recording**; **Copy recording +
 log**.

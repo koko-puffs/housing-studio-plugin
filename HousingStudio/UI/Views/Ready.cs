@@ -339,6 +339,10 @@ public sealed partial class MainWindow
             (p, _) => Kit.Chip(p, chip, allDone), false);
         if (fixturesOpen)
         {
+            Kit.PushBox(Kit.Left + S(20), Kit.Width - S(40));
+            Txt.Note("The plugin doesn't set these: use the game's Housing → Interior Fixtures (or Exterior Fixtures), and tick each one as you set it.");
+            Kit.Gap(6);
+            Kit.PopBox();
             var design = DesignKey;
             var groups = all.GroupBy(f => f.Level).OrderBy(g => LevelRank(g.Key));
             foreach (var group in groups)
@@ -355,8 +359,6 @@ public sealed partial class MainWindow
             Kit.Gap(8);
         }
         Kit.EndPanel();
-        Kit.Gap(10);
-        Txt.Note("Walls, floors, lights and the outside are set from the game's own menus (Housing → Interior Fixtures or Exterior Fixtures). Tick each one as you set it.");
     }
 
     private static int LevelRank(string level)
