@@ -475,7 +475,7 @@ public sealed unsafe class PlacementRunner : IDisposable
             ChoosePlace(labels, "the item's menu", TimeSpan.FromMilliseconds(250)),
             AnswerYesNo(),
             Step.Wait("The game hands you the piece to place",
-                () => HousingEditor.Mode == EditorMode.Place || HousingEditor.ActiveItem != 0 || FurnitureReader.Preview() != null, WindowWait),
+                () => HousingEditor.Mode == EditorMode.Place || FurnitureReader.Preview() != null, WindowWait),
             Step.Act($"Aim {name} at its spot", () =>
             {
                 HousingActions.AimHeld(job.Target.Position, job.Target.Yaw);
@@ -484,8 +484,10 @@ public sealed unsafe class PlacementRunner : IDisposable
             Step.Act($"Set {name} down (the editor's set-down on the held piece)", () =>
             {
                 HousingActions.AimHeld(job.Target.Position, job.Target.Yaw);
-                var held = HousingEditor.ActiveItem;
-                if (held == 0) return StepOutcome.Halt("The editor isn't holding a piece to set down.");
+                // Only a piece the editor is placing right now: never one already in the room.
+                var held = HousingEditor.Mode == EditorMode.Place ? HousingEditor.ActiveItem : 0;
+                if (held == 0)
+                    return StepOutcome.Halt($"The editor isn't holding a piece to set down (mode {HousingEditor.Mode}, preview {(FurnitureReader.Preview() != null ? "shown" : "none")}).");
                 return editor.Place(held) ? StepOutcome.Done : StepOutcome.Halt("Couldn't set the held piece down.");
             }, TimeSpan.FromMilliseconds(150)),
             NewPiece(job, LandWait, StepStatus.Stop,

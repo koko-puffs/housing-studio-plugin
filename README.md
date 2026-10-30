@@ -1,75 +1,90 @@
 # Housing Studio (Dalamud plugin)
 
 Furnish your FFXIV house from a design on [Housing Studio](https://github.com/koko-puffs/kokos-tools):
-load its `.build` (or any MakePlace `.json` layout), see every piece matched to what you have, and let
-the plugin set each one at its exact spot, including pieces still in your bags or the storeroom.
+load its `.build` (or any MakePlace `.json` layout), see every piece matched to what you have, and
+press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
+its exact spot, then dyes everything to match.
 
-> **Status: early and untested in the game.** It compiles against Dalamud 15 (API 15, game patch
-> 7.5) and its file reading, coordinate maths and matching are unit-tested, but nobody has run it in
-> a house yet. Try the **Dry run** first, keep the **backup** option on, and expect rough edges.
+> **Status: 0.2, the automation is untested in the game.** It compiles against Dalamud 15 (API 15,
+> game patch 7.5) and its planning is unit-tested, but the clicks through the game's windows were
+> written from other plugins' research and haven't been run yet. Use **Step by step** (Place page)
+> for your first run, keep the **backup** on, and if anything stops, send a **recording**
+> (see [Sending diagnostics](#sending-diagnostics)).
 
 ## What it does
 
 - **Load** a `.build` or MakePlace `.json`: file picker, drag a file from Explorer onto the window,
   or pick from recent files. The last one reopens when the game starts.
-- **Match** every piece to what you have, nearest first and the right dye first:
-  - **in place** (already there, turned the right way),
-  - **to move** (placed somewhere else),
-  - **in the storeroom** (a piece in the design's dye is preferred),
-  - **in your bags** (with the bag, row and slot),
-  - **missing**, with a **copyable shopping list** (counts and dyes) and a full checklist.
-- **Place**, one piece at a time at the pace you set (default 1.5 s ± 25 %, never under 0.6 s):
-  - placed pieces are picked up and set down at their spot by the game's own editor functions,
-    and each is checked to have landed before the next;
-  - for pieces in your bags or the storeroom, it tells you which one is next (in the window and in
-    chat); you put it down **anywhere**, in any order, and it's set at its spot the moment it lands.
-    For storeroom pieces, the game's preview is aimed at the spot as soon as you pick it, so "Place"
-    puts it right there.
-  - Pause, resume, skip a piece, stop (also `/hstudio pause|resume|stop`), and a progress bar.
-- **Inside and the garden separately**: inside, in Housing → Indoor Furnishings; the garden from
-  your plot in Housing → Outdoor Furnishings (garden coordinates are turned to match your plot).
-- **Markers in the world**: a dot where each piece goes with a tick for which way it faces,
-  coloured by what's to be done, a line from a placed piece to its spot, the current piece ringed in
-  brass, names on hover.
-- **Filters**: by floor (basement, ground, upper) and "within N yalms of you" (stand in a room to
-  work on just that room), by state, and by name. Placing uses the same filters.
-- **Dye notes**: pieces whose dye differs from the design's, and pieces that need dyeing after
-  they're placed.
-- **Dry run**: walks every step, marking each spot and logging what it would do, without touching
-  anything.
-- **Backups**: what's placed is saved as a `.build` before every run (and on demand); load one to
-  put everything back. "Save what's placed as a build" also exports your current house for the site.
-- **Activity log**, copyable, and in Dalamud's log (`/xllog`).
+- **Match** every piece to what you have, nearest first and the right dye first: **in place**,
+  **to move**, **in the storeroom** (the design's dye preferred), **in your bags** (bag, row, slot),
+  or **missing**, with a **copyable shopping list** (pieces, the dyes to apply and the dyes to buy)
+  and a checklist.
+- **Start placing** runs three phases, one piece at a time at the pace you set (default
+  1.5 s ± 25 %, never under 0.6 s, at least 0.3 s between any two clicks):
+  1. **Move**: placed pieces are picked up and set at their spot with the editor's own functions.
+  2. **Place**: storeroom pieces are picked in the furnishing list, the game's preview is aimed at
+     the spot, and Place is chosen; pieces from your bags are placed from the item's menu, the held
+     piece is aimed and set down. Each is then checked and nudged to its exact spot.
+  3. **Dye**: every piece whose dye differs is dyed in the editor's dye mode with the game's dye
+     window, using dyes from your bags. Pieces whose dye you don't have are skipped and listed.
+
+  Floor pieces go first, then what sits on them or hangs on walls. Pause, resume, skip, stop
+  (also `/hstudio pause|resume|stop`), and per-phase progress with the step being done.
+- **Where the game's own button is needed** (the editor's Rotate and Dye modes, the furnishing
+  list's Storeroom tab: their clicks aren't known yet), the run asks you in the window and in chat,
+  and carries on as soon as you've pressed it.
+- **Safety**: only in a home you may decorate, with the furnishing editor open; it stops on leaving,
+  a zone change, combat or a cutscene, losing permission, a window that doesn't appear in time, the
+  furniture list changing under it, or a few pieces in a row failing; whatever a piece opened is
+  closed when it stops. A backup `.build` of what's placed is saved before every run.
+- **Inside and the garden separately** (garden coordinates are turned to match your plot).
+- **Markers in the world** where each piece goes, which way it faces, and the one being worked on.
+- **Filters** by floor, "within N yalms of you" (a room), state and name; placing follows them.
+- **Dry run**: walks every piece, marking each spot and logging what it would do, touching nothing.
+- **Activity log** of every step, with the windows and values used, copyable.
 
 ### What it doesn't do
 
-- **Pick pieces up for you from your bags or the storeroom.** You choose them through the game's
-  own menus; doing that for you means sending the game messages or clicking its menus, which other
-  plugins report can break the client. See `docs/RESEARCH.md`.
-- **Dyes, walls, floors, lights, the house's outside.** These are listed ("set these yourself").
-- **Pieces the game refuses** (floating, sunk or overlapping) unless you switch on **Place anywhere**
-  in Settings, which turns off the game's placement check for the run (as MakePlace does).
-- **Paintings' and fish prints' pictures, aquarium fish, a partition's wall material**: placed as
-  the piece itself only.
+- **Walls, floors, lights, the house's outside**: listed ("set these yourself").
+- **Removing a dye** (a piece dyed in your house but undyed in the design): listed.
+- **Pieces the game refuses** (floating, sunk or overlapping) unless **Place anywhere** is on in
+  Settings, which turns off the game's placement check for the run (as MakePlace does).
+- **The garden's storeroom**: you put those pieces down, the plugin sets them at their spot.
+- **Paintings' and fish prints' pictures, aquarium fish, a partition's wall material**.
 
 ## Using it
 
 1. `/hstudio`, then load a design (Design page).
-2. Go inside your house or apartment (or to your plot for the garden). You need permission to
-   decorate there.
-3. Housing → Indoor (or Outdoor) Furnishings, and switch the editor to **Rotate** (the circular
-   arrows).
-4. Optional: open the Furnishings window's **Storeroom** tab once, so storeroom pieces are counted.
-5. Place page → **Dry run** to see it, then **Start placing**.
+2. Go inside your house or apartment (or to your plot for the garden), with permission to decorate.
+3. Housing → **Indoor Furnishings** (or Outdoor), which opens the editor and the furnishing list.
+   Press **Rotate**.
+4. Place page → **Dry run** to see it, then **Start placing**. The first time, switch on **Step by
+   step**: it holds before every click and shows what it's about to do; press **Continue**
+   (or `/hstudio continue`).
 
-It stops by itself if you leave, change zones, get into combat or a cutscene, lose permission, the
-furniture list changes under it, or a few pieces in a row fail. It pauses (between pieces) if the
-editor closes.
+If you'd rather put pieces down yourself, switch off "Place … for me" in Settings: the run then waits
+for you to put each piece down anywhere and sets it at its spot.
+
+## Sending diagnostics
+
+If a run stops at a step, or does something unexpected:
+
+1. Settings → Diagnostics → **Start recording**.
+2. By hand: place one piece from your bags, one from the storeroom (pick it in the furnishing list's
+   Storeroom tab, choose Place), switch the editor to its Dye mode and dye one piece. Clicking the
+   editor's mode buttons and the Storeroom tab while recording helps too.
+3. **Stop recording**, then **Copy recording + log**, and paste it in an issue or a message.
+
+The recording lists every window that opened and closed, every click's values (yours and the
+plugin's), the menus' entries and the housing state; that's what's needed to fix the table of
+windows and clicks (`HousingStudio/Automation/UiTable.cs`). If your item menu's "place" entry has
+other words, type them in Settings → Diagnostics. More in [docs/AUTOMATION.md](docs/AUTOMATION.md).
 
 **Before you use it:** plugins that act in the game for you are against Square Enix's terms of
-service; this one only moves your own furniture in a home you may decorate, at a human pace, but the
-choice is yours. Placing binds a piece to you, as placing it by hand does. This plugin is installed
-from a custom repository, which goatcorp doesn't review.
+service; this one only works on your own furniture in a home you may decorate, through the game's
+own windows, at a human pace, but the choice is yours. Placing binds a piece to you and dyeing uses
+up the dye, as doing it by hand does. This plugin is installed from a custom repository, which
+goatcorp doesn't review.
 
 Install: see [docs/PUBLISHING.md](docs/PUBLISHING.md#3-install-it-in-the-game) (custom repository URL
 `https://raw.githubusercontent.com/koko-puffs/housing-studio-plugin/main/repo.json`).
@@ -92,20 +107,21 @@ It builds on Linux and macOS too (for checking); it only runs in the game on Win
 
 ```
 HousingStudio/
-  Core/        game-free: reading .build/.json (LayoutReader), axes and turns (Transforms),
-               plots (PlotTable + Data/plots.json), floors, dyes, matching, shopping list,
-               pacing, writing backups (LayoutWriter). Unit-tested.
-  Game/        the game: GameData (Lumina sheets), HousingContext (where you are),
-               HousingEditor (the editor's state, select/place), FurnitureReader,
-               InventoryReader, PlaceAnywhere.
-  Session/     LayoutSession (the loaded design matched to the game), PlacementRunner (the
-               step-by-step placer and its safety checks), Backups, ActivityLog.
-  UI/          Palette, Theme, Fonts, Widgets (the site's look in ImGui), MainWindow
-               (Design / Pieces / Place / Settings), Overlay (world markers).
-  Resources/   fonts (OFL), images/icon.png
-HousingStudio.Tests/   xUnit tests for Core, with a sample .build
-tools/         make-plots.mjs (plot table from the site's exteriors.json), icon.svg + make-icon.mjs
-docs/          RESEARCH.md (how it works and where that came from), PUBLISHING.md
+  Core/        game-free, unit-tested: reading .build/.json, axes and turns, plots, floors,
+               dyes, matching, the shopping list, pacing, backups; and for the automation the
+               step queue (StepQueue), the run's order and dye planning (RunSequence),
+               callbacks as data (UiCall) and menu/list helpers (Menus).
+  Automation/  UiTable (every window and click, with sources), GameUi (reading and clicking
+               windows), UiRecorder (diagnostics recording).
+  Game/        GameData (Lumina sheets), HousingContext (where you are), HousingEditor (the
+               editor's state, pick up / set down), HousingActions (item menus, the dye window,
+               aiming the held piece), FurnitureReader, InventoryReader, PlaceAnywhere.
+  Session/     LayoutSession (the design matched to the game), PlacementRunner (the run: each
+               piece's steps), Backups, ActivityLog.
+  UI/          the site's look in ImGui; MainWindow (Design / Pieces / Place / Settings), Overlay.
+HousingStudio.Tests/   xUnit tests for Core
+tools/         make-plots.mjs, icon.svg + make-icon.mjs
+docs/          AUTOMATION.md, RESEARCH.md, PUBLISHING.md
 ```
 
 The coordinate conventions mirror the site's `src/features/housing-studio/makeplace.ts` and
@@ -118,8 +134,9 @@ After a game patch, see [docs/PUBLISHING.md](docs/PUBLISHING.md#4-things-to-know
 ## Credits and licence
 
 The housing editor's patterns and offsets were found by the MakePlace plugin (jawslouis) and are
-kept current by its forks (RemakePlace, DisPlace); placing from the storeroom by aiming the preview
-comes from Refurnish. Fonts: Geist and Geist Mono (Vercel) and Source Serif 4 (Adobe), under the SIL
-Open Font License 1.1 (`HousingStudio/Resources/Fonts`).
+kept current by its forks (RemakePlace, DisPlace); the furnishing dye flow and its values come from
+RemakePlace; placing from the storeroom through the furnishing list and aiming its preview from
+Refurnish; context-menu and callback conventions from ECommons. Fonts: Geist and Geist Mono (Vercel)
+and Source Serif 4 (Adobe), under the SIL Open Font License 1.1 (`HousingStudio/Resources/Fonts`).
 
 Licensed under the GNU AGPL-3.0 (`LICENSE`).

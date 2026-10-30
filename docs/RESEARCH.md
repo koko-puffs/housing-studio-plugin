@@ -152,4 +152,44 @@ placed before starting.
 ## 5. Sources not reachable from here
 
 hgxiv.com and thegamer.com (housing guides) were blocked in this environment, so the exact wording of
-the game's menus ("Place", "Display Preview") wasn't checked; the plugin doesn't depend on it.
+the game's menus ("Place", "Display Preview") wasn't checked. Since 0.2 the automation does choose a
+menu entry by its words, so they're editable in Settings → Diagnostics and logged on every run.
+
+## 6. Automation (0.2): driving the game's windows
+
+Added after the first in-game feedback ("place everything for me, then dye"). How each part is done
+is in [AUTOMATION.md](AUTOMATION.md); the sources:
+
+- **Clicking windows**: firing `AtkUnitBase.FireCallback(count, AtkValue*, close)` with the values the
+  window itself sends, as ECommons' `Callback.Fire` does (`NightmareXIV/ECommons`,
+  `ECommons/Automation/Callback.cs`), never hand-made network messages.
+- **Context menus** (`ContextMenu`): entry count in `AtkValues[0]` (uint), entry texts from
+  `AtkValues[8 + i]`, choose = `(0, index, 0)` (ECommons
+  `UIHelpers/AddonMasterImplementations/ContextMenu.cs`); close = `(0, -1, …)` (Refurnish's learned
+  cancel). `SelectYesno` Yes = callback `0`.
+- **Storeroom placing** (Refurnish `Automation/UiPlacer.cs`, `UiPlaceLearner.cs`,
+  `UiPlaceProfile.cs`): the furnishing list is the `HousingGoods` window; picking a row is
+  `(1, list index)` and opens the row's `ContextMenu` and a preview (`ObjectArray.TempObject`); the
+  picked storeroom slot is `IndoorTerritory.StoreroomItemInventoryType/Slot`; `ShowStoreroomTab` says
+  which tab is shown; moving the preview (`SetPosition/SetRotation`) before choosing Place puts the
+  piece there. The tab switch's values weren't found (Refurnish asks you to open the tab too).
+- **Bag items' menus**: `AgentInventoryContext.OpenForItemSlot(type, slot, 0, owner addon id)`
+  (FFXIVClientStructs), as item automation plugins open an item's menu. The "place" entry's words and
+  what the game does after it's chosen (a held piece, editor mode 4) weren't confirmed by any source;
+  Refurnish leaves bag items to you. Setting the held piece down with the editor's set-down function
+  is this plugin's own, unverified, attempt.
+- **Dyeing** (RemakePlace `ReMakePlacePlugin.cs` `SetItemDye`/`DyeAllItems`, `Util/StainsUtils.cs`;
+  ECommons `ColorantColoring`, `MiragePrismMiragePlateConfirm`): editor mode 5, pick the piece,
+  `InteractWithHousingItem(agentHousing, GetSelectedHousingItemAddress(housingManager))` (patterns in
+  `Game/HousingActions.cs`) opens `ColorantColoring`; shade `(4, circle 0–7 from Stain.Shade)`, dye
+  `(5, Stain.SubOrder - 1, Stain row, 0)`, Dye `(0)`, close `(2)`; `MiragePrismMiragePlateConfirm`
+  Yes `(0)`, No `(-1)`. RemakePlace also reads the Dye button's state and the "not enough dye" mark
+  from node ids; here the dyes you own are counted beforehand (`InventoryManager.GetInventoryItemCount`
+  over `Stain.Item`) and the dye change is checked in the furniture list.
+- **Diagnostics**: the recorder hooks `FireCallback` (as Refurnish's `CallbackTap`/`PlacementRecorder`
+  and ECommons' debug hook do) and listens to `IAddonLifecycle` PostSetup/PreFinalize for every window.
+- **Editor modes**: no source had the furnishing bar's callbacks; the run asks you to press Rotate or
+  Dye when it needs them.
+- **No new dependencies**: ECommons would have given the same helpers, but it's a large shared library
+  that also hooks the game on its own; the few helpers needed (firing a callback, reading a menu) are
+  written here in `Automation/GameUi.cs`.
