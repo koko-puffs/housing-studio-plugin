@@ -138,6 +138,24 @@ public sealed class StoreroomRows
         }
     }
 
+    /// <summary>
+    /// The list's names read again (after a piece left it, or a pick showed the list had changed): the
+    /// names are replaced, rows picked earlier whose item no longer matches the name now shown there
+    /// are forgotten (the list re-sorts as well as shifting), and group guesses are dropped (the names
+    /// say it better). Returns how many picked rows were forgotten.
+    /// </summary>
+    public int RefreshNames(int offset, IReadOnlyList<string> rowNames, Func<uint, string> itemName)
+    {
+        names.Clear();
+        inferred.Clear();
+        LearnNames(offset, rowNames);
+        var stale = rows.Where(kv => names.TryGetValue(kv.Key, out var n)
+                                     && !string.Equals(n, Menus.Clean(itemName(kv.Value.ItemId)), StringComparison.OrdinalIgnoreCase))
+            .Select(kv => kv.Key).ToList();
+        foreach (var r in stale) rows.Remove(r);
+        return stale.Count;
+    }
+
     /// <summary>Rows whose read name is this piece's, leaving out rows known (picked) to hold something else.</summary>
     public List<int> ByName(string itemName, uint itemId)
     {

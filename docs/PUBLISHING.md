@@ -50,9 +50,19 @@ the plugin and keeps the zip as an artifact.
    - The release page has `HousingStudio.zip` (with `HousingStudio.dll`, `HousingStudio.json`, the
      licences).
    - `https://raw.githubusercontent.com/koko-puffs/housing-studio-plugin/main/repo.json` shows the new
-     version and links (raw.githubusercontent caches for a few minutes).
+     version and links (raw.githubusercontent caches for a few minutes), and so, within about ten
+     minutes more, does `https://www.kokos-tools.com/dalamud/repo.json` (see below).
    - `https://raw.githubusercontent.com/koko-puffs/housing-studio-plugin/main/HousingStudio/images/icon.png`
      loads (it's the installer's icon).
+
+## Koko's plugin repository
+
+Players add one address, `https://www.kokos-tools.com/dalamud/repo.json`, and get every plugin Koko
+makes, now and later. It's served by the kokos-tools site (`api/dalamud-repo.js` there): it reads each
+plugin's own `repo.json` from GitHub (this repository's included: the release workflow keeps it up to
+date, as above) and hands Dalamud them all as one list, cached for about ten minutes. For a new
+plugin, give its repository a `repo.json` and a release workflow like this one, then add its
+`owner/name` to `PLUGIN_REPOS` in the site's `api/dalamud-repo.js`. Players change nothing.
 
 ## 3. Install it in the game
 
@@ -60,8 +70,9 @@ Players (and you, for testing):
 
 1. In game, type `/xlsettings` (or Dalamud Settings from the system menu).
 2. **Experimental** tab → **Custom Plugin Repositories** → paste
-   `https://raw.githubusercontent.com/koko-puffs/housing-studio-plugin/main/repo.json` → press **+**
-   → make sure it's ticked (enabled) → **Save and Close**.
+   `https://www.kokos-tools.com/dalamud/repo.json` → press **+**
+   → make sure it's ticked (enabled) → **Save and Close**. (If you added this plugin's own
+   `raw.githubusercontent.com/…/repo.json` earlier, remove that one, or Dalamud lists the plugin twice.)
 3. `/xlplugins` → **All Plugins** → search **Housing Studio** → **Install**.
 4. `/hstudio` opens it.
 

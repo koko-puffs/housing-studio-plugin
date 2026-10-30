@@ -5,14 +5,14 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.3.0, partly tested in the game.** 0.3.0 is a new window (see [The window](#the-window));
-> the automation is 0.2.3's. Moving placed pieces works in game. In 0.2.2 no
-> storeroom piece was placed, most likely because the plugin moved the game's preview before choosing Place; 0.2.3
-> leaves the preview alone (as you do by hand), lets the game place the piece, then moves it to its
-> spot with the move that works. Still unverified: that combination, reading the storeroom list past its
-> first 200 rows, setting a bag piece down without a click, and opening the Housing menu from nothing
-> (see [docs/AUTOMATION.md](docs/AUTOMATION.md)). Use **Step by step** for your first run, keep the
-> **backup** on, and if anything stops, send a **recording** (see [Sending diagnostics](#sending-diagnostics)).
+> **Status: 0.3.0, working in the game, being made quicker.** 0.3.0 is a new window (see
+> [The window](#the-window)) on 0.2.4's automation. Moving placed pieces and placing from
+> the storeroom (the game places the piece, then it's moved to its spot) work in game. 0.2.4 aims at
+> about 2 s per storeroom piece: no fixed waits, the list's names read again after every placement,
+> and a quicker default pace. Still unverified: finding rows past the list's first 200 names, setting a
+> bag piece down without a click, and opening the Housing menu from nothing (see
+> [docs/AUTOMATION.md](docs/AUTOMATION.md)). Keep the **backup** on, and if anything stops or feels
+> slow, send the log: it ends with a **Timing** summary.
 
 ## What it does
 
@@ -22,8 +22,9 @@ its exact spot, then dyes everything to match.
   **to move**, **in the storeroom** (the design's dye preferred), **in your bags** (bag, row, slot),
   or **missing**, with a **copyable shopping list** (pieces, the dyes to apply and the dyes to buy)
   and a checklist.
-- **Start placing** runs three phases, one piece at a time at the pace you set (default
-  1.5 s ± 25 %, never under 0.6 s, at least 0.3 s between any two clicks):
+- **Start placing** runs three phases, one piece at a time at the pace you set (Quick 0.15 s,
+  Steady 0.4 s (the default) or Careful 1.5 s between pieces, ± 25 %; at least 0.25 s between any two
+  clicks in the game's windows):
   1. **Move**: placed pieces are picked up and set at their spot with the editor's own functions.
   2. **Place**: storeroom pieces are picked in the furnishing list and placed where the game puts
      them, then moved to their exact spot; pieces from your bags are placed from the item's menu, the
@@ -86,7 +87,7 @@ One window, no tabs: what it shows follows what you're doing.
   **Near me**; each with its state and a **Show where** button that lights its spot in your home (and
   points at it when it's off screen). **Copy shopping list** and **Copy checklist** at the foot.
 - **Settings** (from the header, or Dalamud's settings button): what Start does (place for me, dye,
-  backup, pace: Careful 2.5 s, Steady 1.5 s, Quick 0.9 s between pieces), markers in the world,
+  backup, pace: Careful 1.5 s, Steady 0.4 s, Quick 0.15 s between pieces), markers in the world,
   **More options** (place anywhere, pace variation, when to stop, chat, how far Near me reaches,
   storeroom and bags separately, floors to place, marker options, save what's placed as a build) and
   **Something not working?** (step by step, the old preview method, the recorder, the "Place" menu
@@ -131,7 +132,8 @@ up the dye, as doing it by hand does. This plugin is installed from a custom rep
 goatcorp doesn't review.
 
 Install: see [docs/PUBLISHING.md](docs/PUBLISHING.md#3-install-it-in-the-game) (custom repository URL
-`https://raw.githubusercontent.com/koko-puffs/housing-studio-plugin/main/repo.json`).
+`https://www.kokos-tools.com/dalamud/repo.json`, Koko's repository, which lists every plugin Koko
+makes).
 
 ## Developing
 

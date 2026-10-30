@@ -84,7 +84,7 @@ Paths are under `HousingStudio/UI/`.
 
 | Mockup | Code |
 | --- | --- |
-| Start does: Place pieces for me, Dye, Backup, Pace | `DrawSettings` → `SwitchRow`, `SetRow` + `Kit.Segmented`. Place pieces for me sets both `StoreroomAutomatic` and `BagsAutomatic`. Pace: Careful 2500 ms, Steady 1500 ms, Quick 900 ms (`Model/PaceSetting`). |
+| Start does: Place pieces for me, Dye, Backup, Pace | `DrawSettings` → `SwitchRow`, `SetRow` + `Kit.Segmented`. Place pieces for me sets both `StoreroomAutomatic` and `BagsAutomatic`. Pace: Careful 1.5 s, Steady 0.4 s, Quick 0.15 s, the `Pacing.Presets` (`Model/PaceSetting`). |
 | In the world: Show where pieces go | `ShowMarkers` |
 | More options (12) | `DrawMoreOptions`: place anywhere, pace variation (±5% steps), when to stop, chat, Near me reach, storeroom / bags separately, floors to place, marker labels, placed markers, marker range, save what's placed as a build, good to know |
 | Something not working? | `DrawTrouble`: step by step, move the preview before Place (old method), the recorder, the "Place" words, windows and clicks used |

@@ -62,9 +62,9 @@ public class UiWordsTests
 public class UiPaceTests
 {
     [Theory]
-    [InlineData(Pace.Careful, 2500)]
-    [InlineData(Pace.Steady, 1500)]
-    [InlineData(Pace.Quick, 900)]
+    [InlineData(Pace.Careful, 1500)]
+    [InlineData(Pace.Steady, 400)]
+    [InlineData(Pace.Quick, 150)]
     public void EachChoiceIsAPauseAboveTheFloor(Pace pace, int ms)
     {
         Assert.Equal(ms, PaceSetting.Ms(pace));
@@ -73,15 +73,20 @@ public class UiPaceTests
     }
 
     [Theory]
-    [InlineData(600, Pace.Quick)]
-    [InlineData(1200, Pace.Quick)]
-    [InlineData(1500, Pace.Steady)]
-    [InlineData(1999, Pace.Steady)]
-    [InlineData(3000, Pace.Careful)]
+    [InlineData(150, Pace.Quick)]
+    [InlineData(275, Pace.Quick)]
+    [InlineData(400, Pace.Steady)]
+    [InlineData(900, Pace.Steady)]
+    [InlineData(1500, Pace.Careful)]
+    [InlineData(2500, Pace.Careful)]
     public void OlderPausesShowAsTheNearestChoice(int ms, Pace expected) => Assert.Equal(expected, PaceSetting.Of(ms));
 
     [Fact]
     public void TheDefaultPaceIsSteady() => Assert.Equal(Pace.Steady, PaceSetting.Of(Pacing.DefaultMs));
+
+    [Fact]
+    public void TheChoicesAreThePresets() =>
+        Assert.Equal(Pacing.Presets.Select(p => p.Ms).OrderBy(x => x), new[] { Pace.Careful, Pace.Steady, Pace.Quick }.Select(PaceSetting.Ms).OrderBy(x => x));
 }
 
 public class UiPieceRowsTests
@@ -174,7 +179,7 @@ public class UiPieceRowsTests
         Assert.Equal(2, s.InPlace);
         Assert.Equal(1, s.Missing);
         Assert.Equal(0, StartSummary.Of(entries, dyeing: false).Dyes);
-        Assert.True(s.Estimate(entries, 1500) > TimeSpan.FromMinutes(1));
+        Assert.True(s.Estimate(entries, Pacing.SteadyMs) > TimeSpan.FromSeconds(30));
     }
 }
 

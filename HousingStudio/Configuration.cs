@@ -9,7 +9,7 @@ namespace HousingStudio;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
-    public int Version { get; set; } = 3;
+    public int Version { get; set; } = 4;
 
     /// <summary>Layouts opened lately, newest first.</summary>
     public List<string> RecentFiles { get; set; } = new();
@@ -96,15 +96,15 @@ public sealed class Configuration : IPluginConfiguration
     }
 
     /// <summary>
-    /// Version 3 (0.3.0): "Near me" became an on/off button with its reach in Settings; before, a
-    /// reach of 0 meant off. Returns true when something changed.
+    /// Version 4 (0.3.0, after 0.2.4's pace change made version 3): "Near me" became an on/off
+    /// button with its reach in Settings; before, a reach of 0 meant off. Returns true when something changed.
     /// </summary>
     public bool Migrate()
     {
-        if (Version >= 3) return false;
+        if (Version >= 4) return false;
         NearMe = NearMeRadius > 0;
         if (NearMeRadius <= 0) NearMeRadius = 8f;
-        Version = 3;
+        Version = 4;
         return true;
     }
 

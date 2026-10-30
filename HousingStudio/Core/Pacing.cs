@@ -9,9 +9,19 @@ namespace HousingStudio.Core;
 public static class Pacing
 {
     /// <summary>The quickest the plugin ever goes between two pieces, whatever the setting.</summary>
-    public const int MinimumMs = 600;
+    public const int MinimumMs = 150;
 
-    public const int DefaultMs = 1500;
+    /// <summary>The pace presets: Quick, Steady (the default) and Careful.</summary>
+    public const int QuickMs = 150;
+    public const int SteadyMs = 400;
+    public const int CarefulMs = 1500;
+
+    public const int DefaultMs = SteadyMs;
+
+    /// <summary>The least time between two clicks in the game's windows, within a piece.</summary>
+    public const int ClickGapMs = 250;
+
+    public static readonly (string Name, int Ms)[] Presets = { ("Quick", QuickMs), ("Steady", SteadyMs), ("Careful", CarefulMs) };
 
     /// <param name="intervalMs">The interval picked in Settings.</param>
     /// <param name="jitter">How much it varies, 0 to 0.5 (0.25 is ±25%).</param>

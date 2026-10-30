@@ -51,6 +51,9 @@ public sealed class Step
     /// <summary>What kind of problem a timeout is, for the problems list.</summary>
     public ProblemKind TimeoutProblem { get; init; } = ProblemKind.Other;
 
+    /// <summary>What kind of step this is, for the timing summary ("pick-row", "place"…); the label when unset.</summary>
+    public string? Key { get; init; }
+
     /// <summary>A short wait before the step first runs (the game needs a moment after a click).</summary>
     public TimeSpan Delay { get; init; }
 
@@ -118,6 +121,12 @@ public sealed class StepQueue
     /// <summary>Called for every step as it starts and as it ends: (step, "start" | "done" | outcome message).</summary>
     public event Action<Step, string>? Trace;
 
+    /// <summary>Called when a step ends, with how long it took from its start (its delay included).</summary>
+    public event Action<Step, TimeSpan>? Timed;
+
+    /// <summary>How many steps that finish at once may run in one frame (waits and checks; clicks keep their gap).</summary>
+    public int StepsPerTick { get; set; } = 1;
+
     /// <summary>Starts a new piece's steps; <paramref name="cleanupSteps"/> run (best effort, no waiting) if it ends badly.</summary>
     public void Begin(IEnumerable<Step> work, IEnumerable<Step>? cleanupSteps = null)
     {
@@ -152,6 +161,17 @@ public sealed class StepQueue
 
     /// <summary>Run once per frame.</summary>
     public void Tick()
+    {
+        for (var n = 0; n < Math.Max(1, StepsPerTick); n++)
+        {
+            var before = index;
+            TickOnce();
+            // Go on in the same frame only after a step finished, and never into a click.
+            if (State != QueueState.Running || index == before || index >= steps.Count || steps[index].IsAction) break;
+        }
+    }
+
+    private void TickOnce()
     {
         if (State != QueueState.Running) return;
         if (index >= steps.Count)
@@ -190,6 +210,7 @@ public sealed class StepQueue
             case StepStatus.Done:
                 if (step.IsAction) lastAction = t;
                 Trace?.Invoke(step, "done");
+                Timed?.Invoke(step, t - stepStarted);
                 index = finishEarly ? steps.Count : index + 1;
                 started = false;
                 approved = false;
@@ -200,6 +221,7 @@ public sealed class StepQueue
                 {
                     // A wait that's allowed to run out: go on to the next step.
                     Trace?.Invoke(step, "done");
+                    Timed?.Invoke(step, t - stepStarted);
                     index++;
                     started = false;
                     approved = false;
@@ -225,6 +247,7 @@ public sealed class StepQueue
         if (State is QueueState.Stopped or QueueState.Skipped) return;
         Message = why;
         Problem = problem;
+        if (started && index < steps.Count) Timed?.Invoke(steps[index], now() - stepStarted);
         Trace?.Invoke(steps.Count > 0 && index < steps.Count ? steps[index] : new Step { Label = "end", Run = () => StepOutcome.Done }, why);
         foreach (var c in cleanup)
         {
