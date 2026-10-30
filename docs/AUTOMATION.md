@@ -1,4 +1,4 @@
-# How the automation works (0.2.4)
+# How the automation works (0.3.1)
 
 "Start placing" drives the game's own windows the way established automation plugins do: by firing
 the callbacks a window fires when you click in it (`AtkUnitBase.FireCallback`, what ECommons'
@@ -14,8 +14,8 @@ The clicks come from two recordings a user made doing everything by hand ("Recor
 `Session/PlacementRunner.cs` builds a list of pieces (`Core/RunSequence.cs`): moves, then pieces from
 the storeroom and bags, floor pieces before what sits on them, and the dyes last (planned when the run
 gets there). Each piece is a list of steps run by `Core/StepQueue.cs`: waits poll every frame and go on
-the moment their condition holds (several checks can finish in one frame), at least 0.25 s between
-two clicks in the game's windows, each wait with a timeout, step-by-step mode holding before every
+the moment their condition holds (several checks can finish in one frame), at least 0.3 s between
+two game actions (window clicks and the editor's pick-up and set-down alike), each wait with a timeout, step-by-step mode holding before every
 click, and clean-up steps (close the menu or dye window it opened) when a piece ends badly. Between
 pieces it waits the pace set in Settings (± the jitter): Quick 0.15 s, Steady 0.4 s (the
 default; an old 1.5 s setting moves to it), Careful 1.5 s.
@@ -24,10 +24,24 @@ default; an old 1.5 s setting moves to it), Careful 1.5 s.
 and the end of a run (or a stop) logs a **Timing** summary: the average per piece and per phase, and
 the steps that took the most time in all. Send that when something feels slow.
 
-**Speed, roughly.** For a storeroom piece whose row is found by name: pick the row (the menu and the
-preview come within about 0.1 s), choose Place (0.25 s after the pick), the piece appears (about
-0.2 s), pick it up (0.25 s after), set it down (0.25 s after), it lands (0.1–0.5 s): about 1.5 s, plus
-the pace between pieces, so about 2 s a piece at Steady.
+**Confirmed state, not the frame of the click** (0.3.1). 0.2.4 read the game's state in the same frame
+as the click that changed it, and raced it: a just-placed piece "picked up" (in that frame only) that
+the game then dropped, and a list "loaded" whose 32 rows were still blank, with a storeroom count still
+climbing. Now (`Core/Settle.cs`), a state only counts once it has read the same over a few frames:
+- **The list has filled in**: its rows have names, as many as the storeroom has pieces (up to the 200
+  the component holds), and the storeroom's count, the list and the storeroom pages loaded read the
+  same for 5 frames and 0.25 s. Waited for when the tab opens and after every placement (the list
+  shifts and re-sorts); after 4 s it goes on with what's there.
+- **The placement has settled**: after Place, no active item, Rotate mode, and the placed count steady
+  for 5 frames and 0.3 s, before the new piece is picked up.
+- **The piece is held**: the editor's active item is that piece for 3 frames running.
+- A row search never gives up while a row could still be the piece: rows only guessed to belong to
+  another piece's group were never read, so they're picked before giving up.
+
+**Speed, roughly.** For a storeroom piece whose row is found by name: the list settles (about 0.25 s),
+pick the row, choose Place (0.3 s after), the piece appears (about 0.2–0.35 s), the placement settles
+(0.3 s), pick it up, held (about 0.05 s), set it down (0.3 s after the pick-up), it lands (0.1–0.5 s):
+about 2–2.5 s, plus the pace between pieces (0.4 s at Steady).
 
 Every frame it checks: same home, permission, the editor open (or, for up to 8 s while it switches
 modes, the Housing menu), not in combat/cutscene/zone change. A window that doesn't appear in time
@@ -111,7 +125,7 @@ is skipped as "dye missing".
 ## What's most likely to need fixing next
 
 1. **Rows past the first 200 names**: reading all names from the window's values, or scrolling.
-2. **The pace**: whether the game keeps up at 0.25 s between clicks and Steady between pieces.
+2. **The pace**: whether 0.3 s between game actions and the settle waits are enough everywhere.
 3. **Setting a held bag piece down.**
 4. **Opening the Housing menu** from nothing.
 5. **Picking another dye shade**, and closing Furnishing Color.
