@@ -28,25 +28,36 @@ public static class Backups
             // Two in the same second (a run stopped and started again at once) mustn't overwrite each other.
             var path = Path.Combine(Folder, stem + ".build");
             for (var n = 2; File.Exists(path); n++) path = Path.Combine(Folder, $"{stem}-{n}.build");
-            if (!SaveTo(path, session, data, $"Backup {why}")) return null;
+            if (!SaveTo(path, session, data, $"Backup {why}", out var failed))
+            {
+                log.Error($"Couldn't save a backup: {(failed.Length > 0 ? failed : "what's placed couldn't be read")}");
+                return null;
+            }
             log.Done($"Saved a backup of what's placed ({why}) to {path}.");
             Prune(log);
             return path;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex)
         {
+            // Never into the run's start: it carries on (and says so) without a backup.
+            Services.Log.Error(ex, "Backup failed");
             log.Error($"Couldn't save a backup: {ex.Message}");
             return null;
         }
     }
+
+    private static readonly System.Text.RegularExpressions.Regex BackupName =
+        new(@"^(interior|garden)-\d{8}-\d{6}(-\d+)?\.build$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 
     /// <summary>Deletes the plugin's own backups past the newest <see cref="Kept"/> (best effort).</summary>
     private static void Prune(ActivityLog log)
     {
         try
         {
+            // Only names a backup gets ("interior-20261030-091500.build", "-2" for a second in the same
+            // second): a garden saved there as "garden-2026-10-30" is yours, and stays.
             var old = new DirectoryInfo(Folder).GetFiles("*.build")
-                .Where(f => f.Name.StartsWith("interior-", StringComparison.Ordinal) || f.Name.StartsWith("garden-", StringComparison.Ordinal))
+                .Where(f => BackupName.IsMatch(f.Name))
                 .OrderByDescending(f => f.LastWriteTimeUtc)
                 .Skip(Kept)
                 .ToList();
@@ -86,7 +97,7 @@ public static class Backups
                 size == "Apartment" ? [] : Try(() => fixtures.ExteriorOfHome(ctx), [], "the outside"),
                 FixtureReader.PlotOfInterior());
             var inside = pieces.Select(p => Saved(p, p.Position, p.Yaw)).ToList();
-            return Write(path, LayoutWriter.Write(home, inside, [], title), out why);
+            return Write(path, () => LayoutWriter.Write(home, inside, [], title), out why);
         }
 
         if ((readPlot ?? session.Plot) is not { } plot)
@@ -100,7 +111,7 @@ public static class Backups
             return Saved(p, local, yaw);
         }).ToList();
         var outside = new SavedHome(ctx.HouseSize, StyleOf(ctx.District), [], Try(() => fixtures.ExteriorOfHome(ctx), [], "the outside"), plot.Number);
-        return Write(path, LayoutWriter.Write(outside, [], garden, title), out why);
+        return Write(path, () => LayoutWriter.Write(outside, [], garden, title), out why);
     }
 
     /// <summary>The home's fixtures and wallpapers are extras: when one can't be read, the furniture is still saved.</summary>
@@ -117,12 +128,12 @@ public static class Backups
         }
     }
 
-    private static bool Write(string path, string json, out string why)
+    private static bool Write(string path, Func<string> json, out string why)
     {
         why = string.Empty;
         try
         {
-            File.WriteAllText(path, json);
+            File.WriteAllText(path, json());
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)

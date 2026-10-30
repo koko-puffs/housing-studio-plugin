@@ -97,7 +97,8 @@ public static class LayoutReader
 
     private static float Scale(JsonElement root, string key)
     {
-        if (root.TryGetProperty(key, out var v) && TryNumber(v, out var n) && n > 0 && double.IsFinite(n)) return (float)n;
+        // MakePlace writes 1; anything outside a thousandth to a thousand times is a broken file.
+        if (root.TryGetProperty(key, out var v) && TryNumber(v, out var n) && n > 0 && double.IsFinite(n)) return (float)Math.Clamp(n, 0.001, 1000);
         return 1;
     }
 
@@ -128,6 +129,9 @@ public static class LayoutReader
             && raw.TryGetProperty("transform", out var t) && t.ValueKind == JsonValueKind.Object)
         {
             var (pos, yaw) = Transforms.FromFile(Numbers(t, "location"), Numbers(t, "rotation"), scale);
+            // A number too big for a float (1e39 reads as Infinity) or far past any home isn't a place
+            // to put a piece: the game would be handed it as it is.
+            if (!Usable(pos) || !float.IsFinite(yaw)) goto attachments;
             string? dye = null;
             uint? wall = null;
             if (raw.TryGetProperty("properties", out var props) && props.ValueKind == JsonValueKind.Object)
@@ -141,9 +145,17 @@ public static class LayoutReader
             self = into.Count;
             into.Add(new LayoutPiece(self.Value, (uint)id, name, side, pos, yaw, dye, wall, parent));
         }
+        attachments:
         if (depth < MaxDepth && raw.TryGetProperty("attachments", out var att) && att.ValueKind == JsonValueKind.Array)
             foreach (var a in att.EnumerateArray()) Add(a, side, scale, self ?? parent, depth + 1, into);
     }
+
+    /// <summary>The farthest a piece can be from a home's origin, in yalms (a ward is about 300 across).</summary>
+    public const float MaxReach = 2000;
+
+    private static bool Usable(System.Numerics.Vector3 p) =>
+        float.IsFinite(p.X) && float.IsFinite(p.Y) && float.IsFinite(p.Z)
+        && Math.Abs(p.X) <= MaxReach && Math.Abs(p.Y) <= MaxReach && Math.Abs(p.Z) <= MaxReach;
 
     private static List<double>? Numbers(JsonElement t, string key)
     {

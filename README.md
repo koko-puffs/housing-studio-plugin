@@ -5,7 +5,19 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.3.5, working in the game.** 0.3.5: a storeroom row that holds the copy (the dye)
+> **Status: 0.4.0, working in the game.** 0.4.0: **Save this house as a build** saves the whole
+> home: its size and style (Minimalist II too), every floor's walls, flooring and light, the house's
+> window and door, its outside with dyes (an all-in-one house as one), partition wallpapers and framed
+> paintings, and the plot; the file always ends in `.build`. A deep scan fixed: Put them back only
+> runs in the home (and on the side) its backup is of, so it can't put a whole house away; a pause no
+> longer counts against the step it paused (a piece was skipped on resume); a bag piece the game
+> stored late is placed, not given up on; a piece put down by hand just before a run isn't taken for
+> the one placed; a piece the editor still holds when a run stops is set down; matching gives undyed
+> spots the undyed copies (dyes can't be taken off) and no longer slows the game on designs with
+> hundreds of one item; the game's "set down" gets a fixed flag; place anywhere and unloading are
+> safer; your own garden saves aren't pruned with the backups; files with impossible numbers are
+> read safely. Not yet seen in the game: the fixtures, outside and wallpaper reads.
+> 0.3.5: a storeroom row that holds the copy (the dye)
 > another piece of the same item needs is placed for that piece instead of passed over, so mixed-dye
 > groups (a dozen partitions in three dyes) take far fewer picks; **Put them back** also puts away
 > the pieces placed since the backup; and the header's "you can decorate" pill isn't cut short. 0.3.4 turns **Place anywhere** on by default, makes the

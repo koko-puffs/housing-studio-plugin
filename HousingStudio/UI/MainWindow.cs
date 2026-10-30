@@ -91,6 +91,7 @@ public sealed partial class MainWindow : Window
 
     public override void Draw()
     {
+        if (runner.TakeNotice() is { } notice) Notify(notice);
         Kit.ResetFrame();
         Frame.ResetFrame();
         Theme.PushInside();
@@ -160,7 +161,23 @@ public sealed partial class MainWindow : Window
     private void Later(Action action) => later.Add(action);
 
     /// <summary>On the framework thread (the runner and the game are read there).</summary>
-    private static void OnFramework(Action action) => Services.Framework.RunOnFrameworkThread(action);
+    /// <summary>
+    /// On the framework thread (the runner and the game are read there). What it runs can't throw
+    /// into nothing: Dalamud hands an exception back as a Task no one looks at, so it's logged here
+    /// and you're told.
+    /// </summary>
+    private static void OnFramework(Action action) => Services.Framework.RunOnFrameworkThread(() =>
+    {
+        try
+        {
+            action();
+        }
+        catch (Exception ex)
+        {
+            Services.Log.Error(ex, "Housing Studio action failed");
+            Notify("Something went wrong (see /xllog)");
+        }
+    });
 
     private static void Notify(string text) => Frame.Toast(text);
 
@@ -180,14 +197,19 @@ public sealed partial class MainWindow : Window
     /// <summary>Do the floor switches or "Near me" leave pieces out?</summary>
     private bool Narrowed => config.NearMe || !config.ShowBasement || !config.ShowGround || !config.ShowUpper;
 
-    private void StartRun(bool dryRun, List<PlanEntry>? entries = null)
+    /// <param name="onStarted">Runs once the run has started (the Done view goes then, not when it can't start).</param>
+    private void StartRun(bool dryRun, List<PlanEntry>? entries = null, Action? onStarted = null)
     {
         entries ??= Filtered().ToList();
         vm.Starting(entries);
         OnFramework(() =>
         {
             runner.Start(dryRun, entries);
-            if (runner.Active) return;
+            if (runner.Active)
+            {
+                onStarted?.Invoke();
+                return;
+            }
             vm.NotStarted();
             if (runner.StopReason != null) Notify(runner.StopReason);
         });

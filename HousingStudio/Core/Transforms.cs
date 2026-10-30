@@ -43,6 +43,8 @@ public static class Transforms
 
     private static double Round(double v)
     {
+        // JSON has no NaN or Infinity (writing one throws): a broken reading is written as 0.
+        if (!double.IsFinite(v)) return 0;
         var r = Math.Round(v * 1000) / 1000;
         return r == 0 ? 0 : r; // no "-0"
     }

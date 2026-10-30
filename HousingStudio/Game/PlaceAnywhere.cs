@@ -23,6 +23,7 @@ public sealed class PlaceAnywhere : IDisposable
 
     private readonly List<(string Name, nint Address, byte Original)> applied = new();
     private List<(string Name, nint Address)>? found;
+    private string? notFound;
 
     public bool Active => applied.Count > 0;
     public string? Error { get; private set; }
@@ -30,6 +31,12 @@ public sealed class PlaceAnywhere : IDisposable
     private bool Find()
     {
         if (found != null) return true;
+        // A search that failed fails again until the game changes: not searched for every piece.
+        if (notFound != null)
+        {
+            Error = notFound;
+            return false;
+        }
         var list = new List<(string, nint)>();
         foreach (var (name, candidates) in Switches)
         {
@@ -42,7 +49,13 @@ public sealed class PlaceAnywhere : IDisposable
                 }
             if (at == 0)
             {
-                Error = $"Couldn't find the game's \"{name}\" switch (the game may have been patched), so placing anywhere isn't available.";
+                Error = notFound = $"Couldn't find the game's \"{name}\" switch (the game may have been patched), so placing anywhere isn't available.";
+                return false;
+            }
+            // Two patterns landing on one byte would read it back as already on, and never put it back.
+            if (list.Exists(f => f.Item2 == at))
+            {
+                Error = notFound = $"The game's \"{name}\" switch is where another one is (the game may have been patched), so placing anywhere isn't available.";
                 return false;
             }
             list.Add((name, at));
@@ -56,6 +69,8 @@ public sealed class PlaceAnywhere : IDisposable
         if (Active) return true;
         Error = null;
         if (!Find()) return false;
+        // The switches as found, read before any is changed.
+        var originals = new List<byte>(found!.Count);
         foreach (var (name, address) in found!)
         {
             var current = Marshal.ReadByte(address);
@@ -64,10 +79,12 @@ public sealed class PlaceAnywhere : IDisposable
                 Error = $"The game's \"{name}\" switch held an unexpected value ({current}), so nothing was changed.";
                 return false;
             }
+            originals.Add(current);
         }
-        foreach (var (name, address) in found!)
+        for (var i = 0; i < found.Count; i++)
         {
-            var original = Marshal.ReadByte(address);
+            var (name, address) = found[i];
+            var original = originals[i];
             if (!Write(address, 1))
             {
                 Disable();

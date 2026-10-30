@@ -39,6 +39,27 @@ public sealed record HousingContext(
         _ => null,
     };
 
+    private static (uint Territory, string? Size, string? District) interior;
+
+    /// <summary>An interior's size and district, from its territory's name (kept: it changes only with the zone).</summary>
+    private static (string? Size, string? District) InteriorOf(uint territory, string name)
+    {
+        if (interior.Territory == territory) return (interior.Size, interior.District);
+        string? district = name.Length >= 2
+            ? name[..2] switch
+            {
+                "s1" => "mist",
+                "f1" => "lavender-beds",
+                "w1" => "goblet",
+                "e1" => "shirogane",
+                "r1" => "empyreum",
+                _ => null,
+            }
+            : null;
+        interior = (territory, Districts.HouseSizeOfInterior(name), district);
+        return (interior.Size, interior.District);
+    }
+
     public static unsafe HousingContext Read(PlotTable plots)
     {
         if (!Services.ClientState.IsLoggedIn) return None;
@@ -50,24 +71,17 @@ public sealed record HousingContext(
                    || Services.Condition[ConditionFlag.BetweenAreas51] || Services.Condition[ConditionFlag.WatchingCutscene]
                    || Services.Condition[ConditionFlag.OccupiedInCutSceneEvent] || Services.Condition[ConditionFlag.LoggingOut];
         var name = GameData.TerritoryName(territory);
-        var mode = HousingEditor.Mode;
-        var open = HousingEditor.IsOpen;
+        // The editor's state is read only in a home (its offset isn't in ClientStructs: nothing is
+        // read through it elsewhere), once a frame.
+        var inHome = hm->IndoorTerritory != null || hm->OutdoorTerritory != null;
+        var mode = inHome ? HousingEditor.Mode : EditorMode.None;
+        var open = mode != EditorMode.None;
 
         if (hm->IndoorTerritory != null)
         {
-            var district = name.Length >= 2
-                ? name[..2] switch
-                {
-                    "s1" => "mist",
-                    "f1" => "lavender-beds",
-                    "w1" => "goblet",
-                    "e1" => "shirogane",
-                    "r1" => "empyreum",
-                    _ => null,
-                }
-                : null;
+            var (size, district) = InteriorOf(territory, name);
             return new HousingContext(PlaceKind.Interior, territory, name, hm->IndoorTerritory->HouseId.Id, hm->HasHousePermissions(),
-                Districts.HouseSizeOfInterior(name), district, null, mode, open, busy);
+                size, district, null, mode, open, busy);
         }
 
         if (hm->OutdoorTerritory != null)

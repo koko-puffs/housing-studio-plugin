@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using System.Text;
+using Dalamud.Bindings.ImGui;
 using HousingStudio.Automation;
 using HousingStudio.Core;
 using HousingStudio.UI.Model;
@@ -347,8 +348,9 @@ public sealed partial class MainWindow
                 {
                     placeWords = text;
                     config.PlaceMenuWords = text.Trim();
-                    config.Save();
                 }
+                // Saved once you're done typing, not every key (the whole config is written each time).
+                if (ImGui.IsItemDeactivatedAfterEdit()) config.Save();
             }, below: true);
 
         // The windows and clicks the run uses, each with where its values came from.

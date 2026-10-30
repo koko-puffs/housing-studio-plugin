@@ -161,7 +161,9 @@ public static unsafe class GameUi
     {
         try
         {
-            return SeString.Parse(ptr).TextValue.Trim();
+            // Lumina's span reader: no copy of the bytes and no payload objects (this runs for every
+            // row of the furnishing list, every frame it's being read).
+            return new Lumina.Text.ReadOnly.ReadOnlySeStringSpan(ptr).ExtractText().Trim();
         }
         catch
         {

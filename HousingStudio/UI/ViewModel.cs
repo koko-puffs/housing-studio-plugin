@@ -175,7 +175,9 @@ public sealed class ViewModel
         var key = string.Join("|", config.RecentFiles);
         bool pending;
         lock (parsing) pending = parsing.Count > 0;
-        if (recentRows != null && DateTime.UtcNow < recentUntil && key == recentKey && !pending) return recentRows;
+        // While files are being read in the background, the rows are made again a few times a second (to
+        // show them as they come), not every frame.
+        if (recentRows != null && DateTime.UtcNow < recentUntil && key == recentKey) return recentRows;
         recentRows = ReadRecent(max);
         recentKey = key;
         recentUntil = DateTime.UtcNow + TimeSpan.FromSeconds(pending ? 0.25 : 2);

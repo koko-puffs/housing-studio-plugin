@@ -114,6 +114,28 @@ public sealed class StepQueue
     public ProblemKind Problem { get; private set; }
 
     public Step? Current => index < steps.Count ? steps[index] : null;
+
+    /// <summary>How long the current step has run, past its delay (zero before it starts).</summary>
+    public TimeSpan Elapsed
+    {
+        get
+        {
+            if (!started || Current is not { } step) return TimeSpan.Zero;
+            var t = now() - stepStarted - step.Delay;
+            return t < TimeSpan.Zero ? TimeSpan.Zero : t;
+        }
+    }
+
+    /// <summary>
+    /// A pause of <paramref name="paused"/> is over: the current step's clock (its delay and timeout)
+    /// and the gap since the last action carry on from where they were, not counting the pause.
+    /// </summary>
+    public void Hold(TimeSpan paused)
+    {
+        if (paused <= TimeSpan.Zero) return;
+        if (started) stepStarted += paused;
+        if (lastAction != DateTime.MinValue) lastAction += paused;
+    }
     public int Index => index;
     public int Count => steps.Count;
     public IReadOnlyList<Step> Steps => steps;

@@ -211,20 +211,24 @@ public sealed partial class MainWindow
         var top = mid - wordsH / 2;
         Txt.Line(dl, new Vector2(x, top), "Not what you wanted?", Face.SansMedium, 14, Palette.Ivory);
         Txt.Flow(new Vector2(x, top + titleH + S(2)), tw, note, 19.5f, out _);
-        if (Kit.Button("##putback-btn", new Vector2(at.X + w - bw, mid - S(17)), label, Btn.Quiet, BtnSize.Sm))
+        var cannot = runner.CanRestore();
+        if (Kit.Button("##putback-btn", new Vector2(at.X + w - bw, mid - S(17)), label, Btn.Quiet, BtnSize.Sm, disabled: cannot != null, tip: cannot))
         {
             Ask("Put them back?",
                 $"This loads the backup saved at {Clock(savedAt)} as the design and starts a run that moves the {pieces} you had back to where they were, " +
                 "then puts the pieces placed since (not in the backup) away in the storeroom.",
                 "Put them back", "Keep it as it is", () =>
                 {
-                    vm.Dismiss();
                     OnFramework(() =>
                     {
-                        if (runner.RestoreBackup()) session.Refresh(Game.HousingContext.Read(Plugin.Plots));
-                        else Notify("The backup isn't there any more");
+                        if (runner.RestoreBackup(out var why))
+                        {
+                            vm.Dismiss();
+                            session.Refresh(Game.HousingContext.Read(Plugin.Plots));
+                            Notify("Putting them back…");
+                        }
+                        else Notify(why);
                     });
-                    Notify("Putting them back…");
                 });
         }
         Kit.Reserve(at, w, h);
@@ -245,8 +249,7 @@ public sealed partial class MainWindow
             var blocked = runner.CanStart(false);
             if (Kit.Button("##start-real", at, "Start placing", Btn.Primary, BtnSize.Lg, Icon.Play, primaryW, blocked != null, blocked))
             {
-                vm.Dismiss();
-                StartRun(false);
+                StartRun(false, onStarted: vm.Dismiss);
             }
         }
         else if (stopped)
@@ -254,8 +257,7 @@ public sealed partial class MainWindow
             var blocked = runner.CanStart(false);
             if (Kit.Button("##carry-on", at, "Carry on", Btn.Primary, BtnSize.Lg, Icon.Play, primaryW, blocked != null, blocked ?? "Starts again with what's still to do."))
             {
-                vm.Dismiss();
-                StartRun(false);
+                StartRun(false, onStarted: vm.Dismiss);
             }
         }
         else if (retry > 0)
@@ -265,8 +267,17 @@ public sealed partial class MainWindow
             {
                 var wanted = problems.Select(p => (p.Job.Target.Key, p.Job.Target.ItemId)).ToHashSet();
                 vm.Starting(session.Plan?.Entries.Where(e => wanted.Contains((e.Target.Key, e.Target.ItemId))) ?? Enumerable.Empty<PlanEntry>());
-                vm.Dismiss();
-                OnFramework(runner.RetryProblems);
+                OnFramework(() =>
+                {
+                    runner.RetryProblems();
+                    if (runner.Active)
+                    {
+                        vm.Dismiss();
+                        return;
+                    }
+                    vm.NotStarted();
+                    Notify(runner.StopReason ?? "Nothing to try again");
+                });
             }
         }
         else

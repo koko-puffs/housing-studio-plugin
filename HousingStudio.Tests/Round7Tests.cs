@@ -78,3 +78,83 @@ public class FullSaveTests
     [InlineData("C:/builds/v1.2 house", "C:/builds/v1.2 house.build")]
     public void EndsASavedFileInBuild(string chosen, string expected) => Assert.Equal(expected, LayoutWriter.WithExtension(chosen));
 }
+
+public class ScanFixesTests
+{
+    private static Target T(int key, uint item, float x, byte stain = 0) => new(key, item, new Vector3(x, 0, 0), 0, stain, Floor.Ground, false);
+    private static PlacedPiece P(int key, uint item, float x, byte stain = 0) => new(key, item, new Vector3(x, 0, 0), 0, stain);
+    private static StockSlot S(StockSource src, uint item, byte stain = 0) => new(src, src == StockSource.Inventory ? 0 : 27001, 0, item, stain, 1);
+
+    [Fact]
+    public void APauseDoesntCountAgainstAStepsWait()
+    {
+        var t = new DateTime(2026, 1, 1);
+        var q = new StepQueue(() => t);
+        q.Begin(new[] { Step.Wait("the preview", () => false, TimeSpan.FromSeconds(2), StepStatus.SkipJob) });
+        q.Tick();
+        t += TimeSpan.FromSeconds(1);
+        q.Tick();
+        Assert.Equal(TimeSpan.FromSeconds(1), q.Elapsed);
+        // Paused for a minute: the step carries on with the second it had left.
+        t += TimeSpan.FromMinutes(1);
+        q.Hold(TimeSpan.FromMinutes(1));
+        q.Tick();
+        Assert.Equal(QueueState.Running, q.State);
+        Assert.Equal(TimeSpan.FromSeconds(1), q.Elapsed);
+        t += TimeSpan.FromSeconds(1.5);
+        q.Tick();
+        Assert.Equal(QueueState.Skipped, q.State);
+    }
+
+    [Fact]
+    public void AnUndyedSpotIsntGivenADyedPieceItCantPutRight()
+    {
+        // U wants undyed, B wants blue (2); a red one (1) is placed by U, an undyed one is in the bags.
+        var plan = Matcher.Build(new[] { T(0, 10, 0), T(1, 10, 5, stain: 2) }, new[] { P(100, 10, 0.5f, stain: 1) }, new[] { S(StockSource.Inventory, 10) });
+        Assert.Equal(PieceState.FromInventory, plan.Entries[0].State);
+        Assert.Equal(100, plan.Entries[1].Placed!.Key);
+    }
+
+    [Fact]
+    public void BagPiecesGoToTheUndyedFirst()
+    {
+        // A wants red, B undyed; the storeroom has a blue one, the bags an undyed one.
+        var plan = Matcher.Build(new[] { T(0, 10, 0, stain: 1), T(1, 10, 5) }, Array.Empty<PlacedPiece>(),
+            new[] { S(StockSource.Storeroom, 10, stain: 3), S(StockSource.Inventory, 10) });
+        Assert.Equal(PieceState.FromStoreroom, plan.Entries[0].State);
+        Assert.Equal(PieceState.FromInventory, plan.Entries[1].State);
+    }
+
+    [Fact]
+    public void ManyCopiesInPlaceMatchQuickly()
+    {
+        var targets = Enumerable.Range(0, 2000).Select(i => T(i, 10, i * 0.5f)).ToArray();
+        var placed = Enumerable.Range(0, 2000).Select(i => P(1000 + i, 10, i * 0.5f)).ToArray();
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        var plan = Matcher.Build(targets, placed, Array.Empty<StockSlot>());
+        Assert.All(plan.Entries, e => Assert.Equal(PieceState.InPlace, e.State));
+        Assert.True(watch.ElapsedMilliseconds < 2000, $"took {watch.ElapsedMilliseconds} ms");
+    }
+
+    [Fact]
+    public void APieceAtAnUnusablePlaceIsLeftOut()
+    {
+        const string json = """
+        { "houseSize": "Small", "interiorScale": 1,
+          "interiorFurniture": [
+            { "itemId": 1, "transform": { "location": [1e39, 0, 0], "rotation": [0, 0, 0, 1] } },
+            { "itemId": 2, "transform": { "location": [100, 0, 0], "rotation": [0, 0, 0, 1] } } ] }
+        """;
+        var layout = LayoutReader.Parse(json);
+        var piece = Assert.Single(layout.Interior);
+        Assert.Equal(2u, piece.ItemId);
+        Assert.True(float.IsFinite(piece.Position.X) && Math.Abs(piece.Position.X) <= LayoutReader.MaxReach);
+    }
+
+    [Fact]
+    public void ABrokenReadingIsWrittenAsZero()
+    {
+        var json = LayoutWriter.Write("Small", "Mist", new[] { new SavedPiece(1, "x", new Vector3(float.NaN, 1, float.PositiveInfinity), float.NaN, null) }, [], null);
+        Assert.Single(LayoutReader.Parse(json).Interior);
+    }
+}

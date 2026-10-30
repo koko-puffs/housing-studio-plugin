@@ -90,28 +90,81 @@ public static class Matcher
 
         // 1. Placed pieces, pairing the closest (same dye first) across each item.
         var usedPlaced = new HashSet<int>();
+        var placedByItem = new Dictionary<uint, List<PlacedPiece>>();
+        foreach (var p in placed)
+        {
+            if (!placedByItem.TryGetValue(p.ItemId, out var l)) placedByItem[p.ItemId] = l = new List<PlacedPiece>();
+            l.Add(p);
+        }
+        void Assign(PlanEntry e, PlacedPiece p)
+        {
+            e.Placed = p;
+            usedPlaced.Add(p.Key);
+            var close = Vector3.Distance(e.Target.Position, p.Position) <= options.PositionTolerance
+                        && Transforms.AngleDiff(e.Target.Yaw, p.Yaw) <= options.YawTolerance;
+            e.State = close ? PieceState.InPlace : PieceState.Move;
+        }
         foreach (var group in entries.GroupBy(e => e.Target.ItemId))
         {
-            var candidates = placed.Where(p => p.ItemId == group.Key).ToList();
-            if (candidates.Count == 0) continue;
-            var pairs = new List<(float Cost, PlanEntry Entry, PlacedPiece Piece)>();
-            foreach (var e in group)
-                foreach (var p in candidates)
+            if (!placedByItem.TryGetValue(group.Key, out var candidates)) continue;
+            var wanted = group.ToList();
+
+            // Pieces already at their spot, in their dye, pair at once (by a grid of the tolerance):
+            // a design that's mostly placed then only pairs the few left over (every second, in game).
+            if (options.PositionTolerance > 0)
+            {
+                var cell = options.PositionTolerance;
+                (long, long, long) Cell(Vector3 v) => ((long)MathF.Floor(v.X / cell), (long)MathF.Floor(v.Y / cell), (long)MathF.Floor(v.Z / cell));
+                var grid = new Dictionary<(long, long, long), List<PlacedPiece>>();
+                foreach (var p in candidates.OrderBy(p => p.Key))
                 {
+                    var c = Cell(p.Position);
+                    if (!grid.TryGetValue(c, out var l)) grid[c] = l = new List<PlacedPiece>();
+                    l.Add(p);
+                }
+                foreach (var e in wanted.OrderBy(e => e.Target.Key))
+                {
+                    var (cx, cy, cz) = Cell(e.Target.Position);
+                    PlacedPiece? hit = null;
+                    for (var dx = -1; dx <= 1 && hit == null; dx++)
+                        for (var dy = -1; dy <= 1 && hit == null; dy++)
+                            for (var dz = -1; dz <= 1 && hit == null; dz++)
+                                if (grid.TryGetValue((cx + dx, cy + dy, cz + dz), out var near))
+                                    hit = near.FirstOrDefault(p => !usedPlaced.Contains(p.Key) && p.Stain == e.Target.Stain
+                                        && Vector3.Distance(e.Target.Position, p.Position) <= options.PositionTolerance
+                                        && Transforms.AngleDiff(e.Target.Yaw, p.Yaw) <= options.YawTolerance);
+                    if (hit != null) Assign(e, hit);
+                }
+            }
+
+            var open = wanted.Where(e => e.Placed == null).ToList();
+            var free = candidates.Where(p => !usedPlaced.Contains(p.Key)).ToList();
+            if (open.Count == 0 || free.Count == 0) continue;
+            var pairs = new (float Cost, PlanEntry Entry, PlacedPiece Piece)[open.Count * free.Count];
+            var n = 0;
+            foreach (var e in open)
+                foreach (var p in free)
+                {
+                    // Another dye costs a dyeing; on a piece the design wants undyed it can't be put right
+                    // (dyes can't be taken off here), so that costs more again.
+                    var dyeCost = p.Stain == e.Target.Stain ? 0 : e.Target.Stain == 0 ? 2 * DyePenalty : DyePenalty;
                     var cost = Vector3.Distance(e.Target.Position, p.Position)
                                + Transforms.AngleDiff(e.Target.Yaw, p.Yaw) * 0.01f
-                               + (p.Stain == e.Target.Stain ? 0 : DyePenalty);
-                    pairs.Add((cost, e, p));
+                               + dyeCost;
+                    pairs[n++] = (cost, e, p);
                 }
             // Deterministic: by cost, then by the design's order, then the game's.
-            foreach (var (_, e, p) in pairs.OrderBy(x => x.Cost).ThenBy(x => x.Entry.Target.Key).ThenBy(x => x.Piece.Key))
+            Array.Sort(pairs, (a, b) =>
+            {
+                var c = a.Cost.CompareTo(b.Cost);
+                if (c != 0) return c;
+                c = a.Entry.Target.Key.CompareTo(b.Entry.Target.Key);
+                return c != 0 ? c : a.Piece.Key.CompareTo(b.Piece.Key);
+            });
+            foreach (var (_, e, p) in pairs)
             {
                 if (e.Placed != null || usedPlaced.Contains(p.Key)) continue;
-                e.Placed = p;
-                usedPlaced.Add(p.Key);
-                var close = Vector3.Distance(e.Target.Position, p.Position) <= options.PositionTolerance
-                            && Transforms.AngleDiff(e.Target.Yaw, p.Yaw) <= options.YawTolerance;
-                e.State = close ? PieceState.InPlace : PieceState.Move;
+                Assign(e, p);
             }
         }
 
@@ -134,9 +187,12 @@ public static class Matcher
         var waiting = entries.Where(e => e.Placed == null).ToList();
         foreach (var e in waiting.ToList())
             if (Take(e, s => s.Source == StockSource.Storeroom && s.Stain == e.Target.Stain, PieceState.FromStoreroom)) waiting.Remove(e);
-        foreach (var e in waiting.ToList())
+        // Bag pieces are undyed: the pieces the design wants undyed take them first (a dyed one can be dyed
+        // from any copy, an undyed one only comes from an undyed copy).
+        foreach (var e in waiting.OrderBy(e => e.Target.Stain == 0 ? 0 : 1).ToList())
             if (Take(e, s => s.Source == StockSource.Inventory, PieceState.FromInventory)) waiting.Remove(e);
-        foreach (var e in waiting.ToList())
+        // A copy in another dye: to the dyed pieces first (dyeing puts them right), the undyed ones last.
+        foreach (var e in waiting.OrderBy(e => e.Target.Stain == 0 ? 1 : 0).ToList())
             if (Take(e, s => s.Source == StockSource.Storeroom, PieceState.FromStoreroom)) waiting.Remove(e);
 
         plan.Entries.AddRange(entries);

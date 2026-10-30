@@ -153,9 +153,21 @@ public sealed class LayoutSession
 
         var targets = Targets(side.Value);
         var placed = Live.Values.Select(p => new PlacedPiece(p.Key, p.ItemId, p.Position, p.Yaw, p.Stain)).ToList();
-        Plan = Matcher.Build(targets, placed, stock);
+        // Matched again only when something changed (the matching pairs every piece of an item with
+        // every placed one: hundreds of one partition take a while, and this runs every second).
+        if (Plan == null || PlanSide != side || matchedLayout != Layout
+            || !targets.SequenceEqual(matchedTargets) || !placed.SequenceEqual(matchedPlaced) || !stock.SequenceEqual(matchedStock))
+        {
+            Plan = Matcher.Build(targets, placed, stock);
+            (matchedLayout, matchedTargets, matchedPlaced, matchedStock) = (Layout, targets, placed, stock);
+        }
         PlanSide = side;
     }
+
+    private Layout? matchedLayout;
+    private IReadOnlyList<Target> matchedTargets = Array.Empty<Target>();
+    private IReadOnlyList<PlacedPiece> matchedPlaced = Array.Empty<PlacedPiece>();
+    private IReadOnlyList<StockSlot> matchedStock = Array.Empty<StockSlot>();
 
     /// <summary>
     /// What's placed where you are, read now, with or without a design loaded and whatever the editor's
@@ -230,13 +242,30 @@ public sealed class LayoutSession
         {
             var local = p.Position;
             var yaw = p.Yaw;
-            if (Layout.GardenInWardCoordinates && designPlot is { } dp)
+            if (GardenInWard() && designPlot is { } dp)
                 (local, yaw) = Transforms.WardToPlot(p.Position, p.Yaw, dp);
             var (world, worldYaw) = Transforms.PlotToWard(local, yaw, plot);
             list.Add(new Target(p.Index, p.ItemId, world, worldYaw, data.StainOf(p.DyeHex), Floor.Garden,
                 p.ParentIndex != null || data.GoesOnSomethingElse(p.ItemId)));
         }
         return list;
+    }
+
+    /// <summary>
+    /// Whether the design's garden is in the ward's coordinates: its middle more than 40 yalms out
+    /// (<see cref="Layout.GardenInWardCoordinates"/>), or, for a file that names its plot, nearer that
+    /// plot's middle than the origin (a few plots lie within 40 yalms of the ward's origin: the
+    /// Lavender Beds' 20 at 9).
+    /// </summary>
+    private bool GardenInWard()
+    {
+        if (Layout == null || Layout.Garden.Count == 0) return false;
+        if (Layout.GardenInWardCoordinates) return true;
+        var district = Layout.District ?? Context.District;
+        if (Layout.Plot is not { } n || district == null || !plots.TryGet(district, n, out var spot)) return false;
+        var c = new Vector2(Layout.Garden.Average(g => g.Position.X), Layout.Garden.Average(g => g.Position.Z));
+        var toPlot = Vector2.Distance(c, new Vector2(spot.X, spot.Z));
+        return toPlot < 15 && toPlot < c.Length();
     }
 
     /// <summary>For a garden saved in the ward's coordinates: the plot it was laid out on (the nearest to its middle).</summary>

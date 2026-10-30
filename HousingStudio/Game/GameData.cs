@@ -93,10 +93,10 @@ public sealed class GameData
 
     /// <summary>
     /// The fixture tables: read in the background once the plugin starts (the whole Item sheet is
-    /// gone through), so saving a home doesn't hitch the game; a save before that reads them itself
-    /// (and a failed read is tried again next time, not kept).
+    /// gone through), so saving a home doesn't hitch the game; a save before that waits for them. A
+    /// sheet that can't be read leaves its table empty (logged once), rather than being read again.
     /// </summary>
-    private readonly System.Lazy<Fixtures> fixtures = new(() => new Fixtures(), System.Threading.LazyThreadSafetyMode.PublicationOnly);
+    private readonly System.Lazy<Fixtures> fixtures = new(() => new Fixtures(), System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
 
     private Fixtures FixtureTables => fixtures.Value;
 
@@ -171,6 +171,25 @@ public sealed class GameData
 
         public Fixtures()
         {
+            Read("the fixture items", ReadItems);
+            Read("the themed houses", ReadUnited);
+            Read("the wallpapers and paintings", ReadMaterials);
+        }
+
+        private static void Read(string what, System.Action read)
+        {
+            try
+            {
+                read();
+            }
+            catch (System.Exception ex)
+            {
+                Services.Log.Warning(ex, $"Couldn't read {what}: saved homes leave them out");
+            }
+        }
+
+        private void ReadItems()
+        {
             // A fixture item's AdditionalData is its HousingExterior, HousingInterior or (themed houses)
             // HousingUnitedExterior row: the key the game keeps for what's put up.
             foreach (var item in Services.Data.GetExcelSheet<Item>())
@@ -180,7 +199,10 @@ public sealed class GameData
                 var key = item.AdditionalData.RowId;
                 if (key != 0) ItemOfKey.TryAdd(key, item.RowId);
             }
+        }
 
+        private void ReadUnited()
+        {
             // A themed house's parts each have their own key; the house is put up as all of them.
             foreach (var row in Services.Data.GetExcelSheet<HousingUnitedExterior>())
             {
@@ -193,7 +215,10 @@ public sealed class GameData
                 if (row.Roof.RowId != 0) UnitedOfPart.TryAdd(row.Roof.RowId, united);
                 if (row.Walls.RowId != 0) UnitedOfPart.TryAdd(row.Walls.RowId, united);
             }
+        }
 
+        private void ReadMaterials()
+        {
             // VaseFlower: 1001-1999 paintings, 2001-2999 wallpapers, then the four sizes of fish print.
             foreach (var row in Services.Data.GetExcelSheet<VaseFlower>())
             {

@@ -133,6 +133,19 @@ later in the run, of the same item and in the same pass, that wants that very dy
 the two swap where they go and which copy), and the first piece comes later. Rows known to hold the
 piece in another dye are passed over by the order search as well.
 
+**0.4.0: the scan.** Timing: a pause holds the step it paused (`StepQueue.Hold`, steps time
+themselves with `queue.Elapsed`), so resuming carries on the wait instead of timing it out. A bag
+piece's "goes into the storeroom" checks for the store first (one that settles after 3.5 s still
+counts) and its backstop skips the piece rather than calling it done. Yes/no dialogs are answered
+once a click gap (`AnswerYes`), not every frame. The new piece after a placement is told from the
+slots read just before it (not the session's list, a second old); a picked storeroom row is
+followed by its container and slot, as rows above it may come out before it's placed. A piece that
+ends badly while the editor holds something sets it down (Rotate/Move) or says to press Esc
+(Place). The set-down function gets 1 as its flag (it reads only `dl`). Put them back remembers
+where its backup was taken (kind, territory, house) and refuses anywhere else, and puts nothing
+away when the backup has no pieces for the side. The live furniture is read once a frame, the
+matching only when targets, placed pieces or stock change.
+
 **0.4.0: saving a whole home.** Saving reads, besides the furniture (`FurnitureReader`): the
 interior's fixtures from `LayoutWorld.ActiveLayout->IndoorAreaData` (the interior territory's own
 copy when that's missing): `Floor0` ground, `Floor1` upper, `Floor2` basement and `Exterior`, the

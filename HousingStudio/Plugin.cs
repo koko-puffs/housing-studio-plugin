@@ -83,10 +83,36 @@ public sealed class Plugin : IDalamudPlugin
         if (config.RecentFiles.Count > 0 && System.IO.File.Exists(config.RecentFiles[0])) session.Load(config.RecentFiles[0]);
     }
 
+    private DateTime drawFailedAt;
+
     private void Draw()
     {
-        overlay.Draw();
-        windows.Draw();
+        try
+        {
+            overlay.Draw();
+            windows.Draw();
+        }
+        catch (Exception ex)
+        {
+            // Dalamud stops drawing a plugin whose Draw throws; a run carrying on then has no window
+            // to stop it from, so it pauses, and the error is logged (not every frame).
+            if (DateTime.UtcNow - drawFailedAt > TimeSpan.FromSeconds(10)) Services.Log.Error(ex, "Housing Studio couldn't draw its window");
+            drawFailedAt = DateTime.UtcNow;
+            Safely(() => runner.Pause("The window couldn't be drawn (see /xllog); /hstudio resume or stop."));
+        }
+    }
+
+    /// <summary>Runs one step of shutting down or recovering, whatever the others do.</summary>
+    private static void Safely(Action action)
+    {
+        try
+        {
+            action();
+        }
+        catch (Exception ex)
+        {
+            Services.Log.Error(ex, "Housing Studio clean-up step failed");
+        }
     }
 
     private void OpenMain() => window.ShowMain();
@@ -110,7 +136,8 @@ public sealed class Plugin : IDalamudPlugin
         catch (Exception ex)
         {
             Services.Log.Error(ex, "Housing Studio update failed");
-            runner.Stop("Something went wrong reading the game; stopped to be safe.");
+            Safely(() => runner.Stop("Something went wrong reading the game; stopped to be safe."));
+            Safely(anywhere.Disable);
         }
     }
 
@@ -151,18 +178,20 @@ public sealed class Plugin : IDalamudPlugin
 
     public void Dispose()
     {
-        runner.Stop("The plugin was unloaded.");
+        // The game's code is put back first, whatever else fails on the way out.
+        Safely(anywhere.Dispose);
+        Safely(() => runner.Stop("The plugin was unloaded."));
         Services.Framework.Update -= OnUpdate;
         Services.ClientState.TerritoryChanged -= OnTerritoryChanged;
         Services.ClientState.Logout -= OnLogout;
         Services.PluginInterface.UiBuilder.Draw -= Draw;
         Services.PluginInterface.UiBuilder.OpenMainUi -= OpenMain;
         Services.PluginInterface.UiBuilder.OpenConfigUi -= OpenSettings;
-        Services.Commands.RemoveHandler(Command);
-        windows.RemoveAllWindows();
-        runner.Dispose();
-        recorder.Dispose();
-        anywhere.Dispose();
-        fonts.Dispose();
+        Safely(() => Services.Commands.RemoveHandler(Command));
+        Safely(windows.RemoveAllWindows);
+        Safely(runner.Dispose);
+        Safely(recorder.Dispose);
+        Safely(anywhere.Dispose);
+        Safely(fonts.Dispose);
     }
 }

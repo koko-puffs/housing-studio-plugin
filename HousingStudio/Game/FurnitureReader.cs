@@ -103,6 +103,7 @@ public sealed unsafe class FurnitureReader
         // The plot whose furnishings are being edited, else the one you're standing on (0-based).
         var plotIndex = ot->EditingFurnishingsOfPlot >= 0 ? (byte)ot->EditingFurnishingsOfPlot : ot->HouseUnit.Value;
         var list = new List<LivePiece>();
+        var mismatched = 0;
         for (var slot = 0; slot < container->Size; slot++)
         {
             var inv = container->GetInventorySlot(slot);
@@ -111,6 +112,10 @@ public sealed unsafe class FurnitureReader
             if (key < 0 || key >= memory.Length) continue;
             ref var f = ref memory[key];
             var itemId = inv->GetBaseItemId();
+            // The list is the plot whose Outdoor Furnishings were last opened; standing on another
+            // plot, its slots would be that plot's pieces under this list's items.
+            var slotItem = data.ItemOfPlaced(f.Id, yard: true);
+            if (slotItem != 0 && slotItem != itemId) mismatched++;
             nint instance = 0;
             var position = new Vector3(f.Position.X, f.Position.Y, f.Position.Z);
             var yaw = f.Rotation;
@@ -122,6 +127,11 @@ public sealed unsafe class FurnitureReader
                 yaw = ho->GameObject.Rotation;
             }
             list.Add(new LivePiece(key, itemId, f.Id, position, yaw, inv->GetStain(0), instance));
+        }
+        if (mismatched > 0)
+        {
+            why = "The game's garden list is another plot's. Open Housing → Outdoor Furnishings on this plot, then try again.";
+            return null;
         }
         return list;
     }

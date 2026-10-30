@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using FFXIVClientStructs.FFXIV.Client.LayoutEngine;
 using HousingStudio.Core;
 
@@ -24,6 +25,7 @@ public sealed unsafe class HousingEditor
     private const int EditorStateOffset = 0x40;
     private const int ModeOffset = 0x0;
     private const int ActiveItemOffset = 0x18;
+    private static readonly int MaxMode = Enum.GetValues<EditorMode>().Max(m => (int)m);
 
     private delegate* unmanaged<nint, nint, void> select;
     private delegate* unmanaged<nint, nint, void> place;
@@ -79,7 +81,7 @@ public sealed unsafe class HousingEditor
             var state = State;
             if (state == 0) return EditorMode.None;
             var raw = *(int*)(state + ModeOffset);
-            return Enum.IsDefined(typeof(EditorMode), raw) ? (EditorMode)raw : EditorMode.None;
+            return raw >= (int)EditorMode.None && raw <= MaxMode ? (EditorMode)raw : EditorMode.None;
         }
     }
 
@@ -102,12 +104,20 @@ public sealed unsafe class HousingEditor
         return true;
     }
 
-    /// <summary>Sets the picked piece down where its transform now says. Framework thread only.</summary>
+    /// <summary>
+    /// Sets the picked piece down where its transform now says. Framework thread only. The game
+    /// takes the piece from the editor's state itself (<c>mov r8, [rcx+18h]</c>) and reads only the
+    /// low byte of the second argument, as a flag (<c>movzx esi, dl</c>). Until 0.4.0 the piece's
+    /// pointer went there, so the flag was its low byte: set for 15 pieces in 16 (that's the way every
+    /// log has shown working), clear for the rest. It's now always set. MakePlace passes 0.
+    /// </summary>
     public bool Place(nint layoutInstance)
     {
         var state = State;
         if (!Ready || state == 0 || layoutInstance == 0) return false;
-        place(state, layoutInstance);
+        place(state, SetDownFlag);
         return true;
     }
+
+    private const nint SetDownFlag = 1;
 }

@@ -221,13 +221,49 @@ public sealed unsafe class PlacementRunner : IDisposable
     public bool DyesPlanned => dyesPlanned;
 
     /// <summary>About how long the run has left, from the pace and how long pieces have taken so far.</summary>
-    public TimeSpan TimeLeft => Active ? RunEstimate.TimeLeft(jobs, Speed, !dyesPlanned, dyesExpected) : TimeSpan.Zero;
+    public TimeSpan TimeLeft
+    {
+        get
+        {
+            if (!Active) return TimeSpan.Zero;
+            // Worked out a few times a second: the window asks every frame.
+            if (DateTime.UtcNow >= timeLeftUntil)
+            {
+                timeLeft = RunEstimate.TimeLeft(jobs, Speed, !dyesPlanned, dyesExpected);
+                timeLeftUntil = DateTime.UtcNow + TimeSpan.FromMilliseconds(250);
+            }
+            return timeLeft;
+        }
+    }
 
-    /// <summary>Every piece that didn't work this run, with why.</summary>
-    public IReadOnlyList<RunProblem> Problems =>
-        jobs.Where(j => j.Outcome is JobOutcome.Failed or JobOutcome.Skipped)
-            .Select(j => new RunProblem(j, Name(j), j.Problem == ProblemKind.None ? ProblemKind.Other : j.Problem, j.Note ?? "Didn't work."))
-            .ToList();
+    private TimeSpan timeLeft;
+    private DateTime timeLeftUntil;
+
+    /// <summary>Every piece that didn't work this run, with why (made again only when that changes).</summary>
+    public IReadOnlyList<RunProblem> Problems
+    {
+        get
+        {
+            var count = 0;
+            foreach (var j in jobs)
+                if (j.Outcome is JobOutcome.Failed or JobOutcome.Skipped) count++;
+            var key = (jobsVersion, jobs.Count, count);
+            if (problems == null || key != problemsKey)
+            {
+                problems = jobs.Where(j => j.Outcome is JobOutcome.Failed or JobOutcome.Skipped)
+                    .Select(j => new RunProblem(j, Name(j), j.Problem == ProblemKind.None ? ProblemKind.Other : j.Problem, j.Note ?? "Didn't work."))
+                    .ToList();
+                problemsKey = key;
+            }
+            return problems;
+        }
+    }
+
+    private List<RunProblem>? problems;
+    private (int, int, int) problemsKey;
+
+    /// <summary>Counts each new run's list of pieces (a retry can have as many as the run before).</summary>
+    private int jobsVersion;
 
     /// <summary>Dyes the dye phase needed more of than your bags hold (its own dye items), when planned.</summary>
     public IReadOnlyList<(byte Stain, string Name, int Needed, int Owned)> DyeShortfall { get; private set; } = Array.Empty<(byte, string, int, int)>();
@@ -264,6 +300,8 @@ public sealed unsafe class PlacementRunner : IDisposable
 
         entries = shown.ToList();
         jobs.Clear();
+        jobsVersion++;
+        timeLeftUntil = DateTime.MinValue;
         jobs.AddRange(RunSequence.Build(entries));
         var dyes = config.DyeAfterPlacing || forceDyes;
         // The same calculation as the dye phase's (PlanDyes), predicting what placing will leave.
@@ -314,7 +352,16 @@ public sealed unsafe class PlacementRunner : IDisposable
         nextJobAt = DateTime.UtcNow;
         editorMayCloseUntil = DateTime.UtcNow + ModeSwitchGrace;
 
-        if (!dryRun && config.BackupBeforePlacing) LastBackupPath = Backups.Save(session, data, log, "before placing") ?? LastBackupPath;
+        if (!dryRun && config.BackupBeforePlacing)
+        {
+            if (Backups.Save(session, data, log, "before placing") is { } saved)
+            {
+                LastBackupPath = saved;
+                var c = session.Context;
+                backupOf = (c.Kind, c.TerritoryId, c.HouseId);
+            }
+            else log.Warn("No backup was saved for this run (see why above): Put them back won't be offered for it.");
+        }
         if (!dryRun && config.PlaceAnywhere && !anywhere.Enable()) log.Warn(anywhere.Error ?? "Couldn't switch on place anywhere; placing with the game's usual checks.");
 
         log.Info($"{(dryRun ? "Dry run" : "Placing")} started: {Count(RunPhase.Move)} to move, {Count(RunPhase.Place)} to place "
@@ -328,41 +375,97 @@ public sealed unsafe class PlacementRunner : IDisposable
     public void RetryProblems()
     {
         if (Active || session.Plan == null) return;
-        var wanted = Problems.Select(p => (p.Job.Target.Key, p.Job.Target.ItemId)).ToHashSet();
+        var problems = Problems;
+        var wanted = problems.Select(p => (p.Job.Target.Key, p.Job.Target.ItemId)).ToHashSet();
         if (wanted.Count == 0) return;
         var again = session.Plan.Entries.Where(e => wanted.Contains((e.Target.Key, e.Target.ItemId))).ToList();
-        log.Info($"Trying again: {again.Count} piece{(again.Count == 1 ? "" : "s")}.");
-        Start(false, again, forceDyes: true);
+        // Pieces a restore couldn't put away aren't the design's: they go to be put away again.
+        var putAgain = problems.Where(p => p.Job.Kind == JobKind.Store && p.Job.Key is not null)
+            .Select(p => new PlacedPiece(p.Job.Key!.Value, p.Job.Target.ItemId, p.Job.Target.Position, p.Job.Target.Yaw, p.Job.Target.Stain))
+            .ToList();
+        log.Info($"Trying again: {again.Count + putAgain.Count} piece{(again.Count + putAgain.Count == 1 ? "" : "s")}.");
+        Start(false, again, forceDyes: true, putAway: putAgain);
     }
 
     /// <summary>
     /// Puts everything back as the backup made before the last run had it: loads that backup as the
     /// design and starts a run on it once it's been matched (next refresh). False when there's no backup.
     /// </summary>
-    public bool RestoreBackup()
+    public bool RestoreBackup() => RestoreBackup(out _);
+
+    public bool RestoreBackup(out string why)
     {
-        if (Active || LastBackupPath == null || !System.IO.File.Exists(LastBackupPath)) return false;
-        if (!session.Load(LastBackupPath)) return false;
+        if (CanRestore() is { } problem)
+        {
+            why = problem;
+            return false;
+        }
+        if (!session.Load(LastBackupPath!))
+        {
+            why = session.LoadError ?? "Couldn't open the backup.";
+            return false;
+        }
+        why = string.Empty;
         restorePath = LastBackupPath;
         log.Info($"Restoring the backup {LastBackupPath}: it starts once it's matched against the house.");
         return true;
     }
 
+    /// <summary>Where the last backup was taken: a restore only runs there (another home's, or the garden's inside, would store everything).</summary>
+    private (PlaceKind Kind, uint Territory, ulong House)? backupOf;
+
+    /// <summary>Why the last backup can't be put back here and now, or null.</summary>
+    public string? CanRestore()
+    {
+        if (Active) return "Already running.";
+        if (LastBackupPath == null || backupOf == null) return "There's no backup from this session.";
+        if (!System.IO.File.Exists(LastBackupPath)) return "The backup isn't there any more.";
+        var c = session.Context;
+        if ((c.Kind, c.TerritoryId, c.HouseId) != backupOf.Value)
+            return backupOf.Value.Kind == PlaceKind.Ward ? "The backup is of your garden: go back to it to put things back." : "The backup is of a home's inside: go back in to put things back.";
+        return CanStart(false);
+    }
+
+    /// <summary>A message for you from the runner (a restore that couldn't start), taken once.</summary>
+    public string? TakeNotice()
+    {
+        var n = notice;
+        notice = null;
+        return n;
+    }
+
+    private string? notice;
+
     /// <summary>Every frame, before <see cref="Tick"/>: starts a restore once its backup has been matched.</summary>
     public void Update()
     {
+        liveThisFrame = null;
         if (restorePath == null || Active) return;
         if (session.FilePath != restorePath) { restorePath = null; return; }
         if (session.Plan == null || session.PlanSide == null) return;
         restorePath = null;
-        // The backup is what was there: what's placed now and isn't in it (placed since) goes back to the storeroom.
-        Start(false, session.Plan.Entries, forceDyes: true, putAway: session.Plan.Extras);
+        if (CanRestore() is { } problem)
+        {
+            log.Warn($"Not putting things back: {problem}");
+            notice = problem;
+            return;
+        }
+        // The backup is what was there: what's placed now and isn't in it (placed since) goes back to
+        // the storeroom; but a backup with nothing for here would put everything away, so it doesn't.
+        var backupHas = session.PlanSide == Side.Interior ? session.Layout?.Interior.Count : session.Layout?.Garden.Count;
+        IReadOnlyList<PlacedPiece> putAway = backupHas > 0 ? session.Plan.Extras : Array.Empty<PlacedPiece>();
+        if (backupHas is not > 0) log.Warn("The backup has no pieces here, so nothing is put away.");
+        Start(false, session.Plan.Entries, forceDyes: true, putAway: putAway);
+        if (!Active) notice = StopReason ?? "Couldn't start putting them back.";
     }
+
+    private DateTime? pausedAt;
 
     public void Pause(string why)
     {
         if (State != RunState.Running) return;
         State = RunState.Paused;
+        pausedAt = DateTime.UtcNow;
         StatusText = why;
         log.Warn($"Paused: {why} (a step that's waiting carries on waiting when you resume)");
         if (config.ChatMessages) Services.Chat.Print($"Paused: {why}", "Housing Studio");
@@ -372,6 +475,9 @@ public sealed unsafe class PlacementRunner : IDisposable
     {
         if (State != RunState.Paused) return;
         State = RunState.Running;
+        // The step waiting carries on its wait: the pause doesn't count against its timeout.
+        if (pausedAt is { } at) queue.Hold(DateTime.UtcNow - at);
+        pausedAt = null;
         failuresInARow = 0;
         editorMayCloseUntil = DateTime.UtcNow + ModeSwitchGrace;
         log.Info("Resumed.");
@@ -407,7 +513,8 @@ public sealed unsafe class PlacementRunner : IDisposable
     /// <summary>Skips the piece being worked on (closing whatever it opened).</summary>
     public void SkipCurrent()
     {
-        if (Current is not { } job) return;
+        // Only a piece still being worked on: one that just finished (the click came a frame late) stays as it ended.
+        if (Current is not { Outcome: JobOutcome.Working } job) return;
         queue.Abort("Skipped by you.");
         job.Outcome = JobOutcome.Skipped;
         job.Problem = ProblemKind.Skipped;
@@ -420,6 +527,7 @@ public sealed unsafe class PlacementRunner : IDisposable
     /// <summary>Every frame, on the framework thread.</summary>
     public void Tick(HousingContext ctx)
     {
+        liveThisFrame = null;
         if (!Active) return;
 
         if (ctx.Kind != startKind || ctx.TerritoryId != startTerritory || ctx.HouseId != startHouse)
@@ -591,12 +699,42 @@ public sealed unsafe class PlacementRunner : IDisposable
 
     private (List<Step> Steps, List<Step> Cleanup) Script(RunJob job) => job.Kind switch
     {
-        JobKind.Move => (MoveSteps(job, job.Key!.Value), new List<Step>()),
-        JobKind.PlaceFromStoreroom when side == Side.Interior && config.StoreroomAutomatic => (StoreroomSteps(job), MenuCleanup()),
-        JobKind.PlaceFromBags when config.BagsAutomatic => (BagSteps(job), MenuCleanup()),
+        JobKind.Move => (MoveSteps(job, job.Key!.Value), HeldCleanup()),
+        JobKind.PlaceFromStoreroom when side == Side.Interior && config.StoreroomAutomatic => (StoreroomSteps(job), MenuCleanup().Concat(HeldCleanup()).ToList()),
+        JobKind.PlaceFromBags when config.BagsAutomatic => (BagSteps(job), MenuCleanup().Concat(HeldCleanup()).ToList()),
         JobKind.Dye => (DyeSteps(job), DyeCleanup()),
         JobKind.Store => (StoreSteps(job), new List<Step>()),
-        _ => (ByHandSteps(job), new List<Step>()),
+        _ => (ByHandSteps(job), HeldCleanup()),
+    };
+
+    /// <summary>
+    /// When a piece ends badly (skipped, stopped) with the editor still holding something: a picked-up
+    /// piece is set down where it is now (in Rotate, the game's own set-down); a piece being placed
+    /// can't be let go of from here, so you're told (Esc puts it back), else the next piece would
+    /// wait 30 s for the editor and stop.
+    /// </summary>
+    private List<Step> HeldCleanup() => new()
+    {
+        new Step
+        {
+            Label = "Let go of what the editor holds",
+            Run = () =>
+            {
+                var held = HousingEditor.ActiveItem;
+                if (held == 0) return StepOutcome.Done;
+                var mode = HousingEditor.Mode;
+                if (mode == EditorMode.Rotate || mode == EditorMode.Move)
+                {
+                    if (editor.Place(held)) log.Info("  Set down the piece the editor was holding, where it is now.");
+                }
+                else if (mode == EditorMode.Place)
+                {
+                    log.Warn("  The editor is still holding a piece to place: press Esc to put it back.");
+                    if (config.ChatMessages) Services.Chat.Print("The editor is still holding a piece: press Esc to put it back.", "Housing Studio");
+                }
+                return StepOutcome.Done;
+            },
+        },
     };
 
     private List<Step> MoveSteps(RunJob job, int key, int attempt = 0, bool justPlaced = false)
@@ -782,7 +920,8 @@ public sealed unsafe class PlacementRunner : IDisposable
     private List<Step> StoreroomAttempt(RunJob job, int attempt)
     {
         var name = Name(job);
-        var chosen = new[] { -1 };
+        // The row picked, and the storeroom container and slot it showed (its row can move by the time it's placed).
+        var chosen = new[] { -1, -1, -1 };
         var tried = new HashSet<int>();
         Vector3? previewAt = null;
         var placedBefore = -1;
@@ -828,6 +967,9 @@ public sealed unsafe class PlacementRunner : IDisposable
             Run = () =>
             {
                 previewAt = HousingActions.PreviewAt()?.Position;
+                // What's placed right now, so a piece put down since the run's (a second old) list
+                // isn't taken for the one this places.
+                if (ReadLive() is { } liveNow) knownKeys.UnionWith(liveNow.Keys);
                 placedBefore = FurnitureReader.PlacedCount(side == Side.Garden);
                 storedBefore = InventoryReader.StoreroomOccupied(side).Count;
                 lastToast = null;
@@ -845,18 +987,22 @@ public sealed unsafe class PlacementRunner : IDisposable
             OnTimeout = StepStatus.Done, // handled below: a second try, then skip with the reason
             Run = () =>
             {
-                if (GameUi.YesNoText() is { } question)
-                {
-                    log.Info($"  The game asks: \"{question}\" → {UiTable.YesNoYes.Describe()}");
-                    GameUi.Fire(UiTable.YesNoYes);
-                }
+                AnswerYes();
                 var key = IdentifyNew(job, previewAt);
                 if (key != null)
                 {
                     var count = FurnitureReader.PlacedCount(side == Side.Garden);
                     log.Info($"  Placed: furniture slot {key} ({placedBefore} → {count} pieces placed).");
                     job.Key = key;
+                    // The picked piece's row now: found by its storeroom slot, as rows above it may have
+                    // come out (and the rest moved down one) since it was picked.
                     var r = chosen[0];
+                    if (chosen[1] >= 0)
+                    {
+                        var (c, sl, picked) = (chosen[1], chosen[2], chosen[0]);
+                        r = rows.Known.Where(kv => kv.Value.Container == c && kv.Value.Slot == sl)
+                            .OrderBy(kv => Math.Abs(kv.Key - picked)).Select(kv => kv.Key).DefaultIfEmpty(-1).First();
+                    }
                     if (r >= 0 && rows.Known.TryGetValue(r, out var what))
                     {
                         rowsLeaving.Add((r, new StockSlot(StockSource.Storeroom, what.Container, what.Slot, what.ItemId, 0, 1)));
@@ -907,7 +1053,6 @@ public sealed unsafe class PlacementRunner : IDisposable
     private Step ListSettles()
     {
         var settle = new Settle(5, Speed.Wait(250));
-        DateTime? since = null;
         return new Step
         {
             Label = "The furnishing list has filled in",
@@ -915,7 +1060,6 @@ public sealed unsafe class PlacementRunner : IDisposable
             Timeout = TimeSpan.FromSeconds(10),
             Run = () =>
             {
-                since ??= DateTime.UtcNow;
                 var count = InventoryReader.StoreroomOccupied(side).Count;
                 var list = ListReader.Read(UiTable.FurnishingList).OrderByDescending(l => l.Rows.Count).FirstOrDefault();
                 // How many storeroom pages have loaded goes into the state too: the count climbs as they do.
@@ -927,7 +1071,7 @@ public sealed unsafe class PlacementRunner : IDisposable
                     listExpect = null;
                     return StepOutcome.Done;
                 }
-                if (DateTime.UtcNow - since > TimeSpan.FromSeconds(4))
+                if (queue.Elapsed > TimeSpan.FromSeconds(4))
                 {
                     // Go on with what's there (the names are checked by picking anyway).
                     log.Info($"  The list didn't settle in 4 s ({count} pieces in the storeroom, {list?.Rows.Count ?? 0} rows read, {list?.Rows.Count(r => r.Length > 0) ?? 0} with names); going on.");
@@ -952,7 +1096,6 @@ public sealed unsafe class PlacementRunner : IDisposable
     private Step SettlesAfterPlace(int key, int storedBefore, nint previewItem)
     {
         var settle = new Settle(4, Speed.Wait(120));
-        DateTime? since = null;
         return new Step
         {
             Label = "The game has finished placing it",
@@ -961,10 +1104,9 @@ public sealed unsafe class PlacementRunner : IDisposable
             OnTimeout = StepStatus.Done,
             Run = () =>
             {
-                since ??= DateTime.UtcNow;
                 var stored = InventoryReader.StoreroomOccupied(side).Count;
                 var instance = InstanceOf(key);
-                var through = stored < storedBefore || DateTime.UtcNow - since > TimeSpan.FromSeconds(1.5);
+                var through = stored < storedBefore || queue.Elapsed > TimeSpan.FromSeconds(1.5);
                 var state = through && instance != 0 && HousingEditor.ActiveItem == 0 && HousingEditor.Mode == EditorMode.Rotate
                     ? $"{FurnitureReader.PlacedCount(side == Side.Garden)}|{stored}|{instance:X}"
                     : null;
@@ -1151,6 +1293,8 @@ public sealed unsafe class PlacementRunner : IDisposable
         var occupied = Occupied();
         if (rowsReady && rows.Count == occupied.Count) return;
         var fp = StoreroomRows.Fingerprint(occupied);
+        // Rows still to come out are counted in the rows being replaced.
+        rowsLeaving.Clear();
         if (config.StoreroomRows.TryGetValue(HouseKey, out var saved) && rows.Import(saved, fp))
             log.Info($"  Using {rows.Known.Count} storeroom list rows learnt in an earlier run (the storeroom hasn't changed since).");
         else
@@ -1394,6 +1538,8 @@ public sealed unsafe class PlacementRunner : IDisposable
                     if (right)
                     {
                         chosen[0] = row;
+                        chosen[1] = container;
+                        chosen[2] = slot;
                         return StepOutcome.Done;
                     }
                     // Another of this item still to place wants this very dye: it's placed for that one now (no pick
@@ -1403,6 +1549,8 @@ public sealed unsafe class PlacementRunner : IDisposable
                         log.Info($"  That's the copy another {name} needs ({DyeWord(held.Stain)}): it's placed for that one now; this one ({DyeWord(dye)}) comes later.");
                         job.SwapTargets(other);
                         chosen[0] = row;
+                        chosen[1] = container;
+                        chosen[2] = slot;
                         return StepOutcome.Done;
                     }
                     // Not it: close its menu now, in this step (only the pick is a click with the gap before it;
@@ -1442,7 +1590,6 @@ public sealed unsafe class PlacementRunner : IDisposable
         var stock = job.Entry?.Stock;
         var storedBefore = -1;
         var inBagsBefore = -1;
-        DateTime? since = null;
         var settle = new Settle(3, Speed.Wait(100));
         var storeWords = UiTable.StoreLabels(Services.ClientState.ClientLanguage);
         var noStore = false;
@@ -1487,29 +1634,28 @@ public sealed unsafe class PlacementRunner : IDisposable
             {
                 Label = $"{name} goes into the storeroom",
                 Key = "stored",
-                Timeout = TimeSpan.FromSeconds(4),
-                OnTimeout = StepStatus.Done, // decided here: a refusal or no change means the bag's own way
+                // Decided in the step (stored → the storeroom's steps; refused or no change in 3.5 s → the
+                // bag's own way); the queue's timeout is only a backstop, and then the piece is skipped.
+                Timeout = TimeSpan.FromSeconds(8),
+                OnTimeout = StepStatus.SkipJob,
                 Run = () =>
                 {
-                    since ??= DateTime.UtcNow;
                     if (noStore)
                     {
                         queue.InsertNext(new[] { Step.Wait("Its menu closes", () => !GameUi.IsOpen(UiTable.ContextMenu), WindowWait, StepStatus.Done) }.Concat(HeldAttempt(job)));
                         return StepOutcome.Done;
                     }
-                    if (GameUi.YesNoText() is { } question)
-                    {
-                        log.Info($"  The game asks: \"{question}\" → {UiTable.YesNoYes.Describe()}");
-                        GameUi.Fire(UiTable.YesNoYes);
-                        return StepOutcome.Waiting;
-                    }
+                    var timedOut = queue.Elapsed > TimeSpan.FromSeconds(3.5);
+                    // A yes/no is answered once a click gap (not every frame), and not past the wait.
+                    if (!timedOut && AnswerYes()) return StepOutcome.Waiting;
                     var stored = StoredCount(job.Target.ItemId);
                     var inBags = BagCount(job.Target.ItemId);
                     var refused = lastToast != null;
-                    var timedOut = DateTime.UtcNow - since > TimeSpan.FromSeconds(3.5);
-                    if (!refused && !timedOut)
+                    // A store that happened wins, even if it settles after the 3.5 s.
+                    var isStored = BagRoute.Stored(storedBefore, stored, inBagsBefore, inBags);
+                    if (isStored || (!refused && !timedOut))
                     {
-                        var state = BagRoute.Stored(storedBefore, stored, inBagsBefore, inBags) ? $"{stored}|{inBags}" : null;
+                        var state = isStored ? $"{stored}|{inBags}" : null;
                         if (!settle.Update(state, DateTime.UtcNow)) return StepOutcome.Waiting;
                         log.Info($"  Stored: {stored} in the storeroom (was {storedBefore}), {inBags} in your bags (was {inBagsBefore}). Placing it from the storeroom.");
                         // Its row goes where the list's order puts it, the rows after it moving down (rather than every row being learnt again).
@@ -1537,6 +1683,22 @@ public sealed unsafe class PlacementRunner : IDisposable
                 },
             },
         };
+    }
+
+    private DateTime lastYes;
+
+    /// <summary>
+    /// When the game asks yes/no, answers Yes, once a click gap (a dialog can take frames to close;
+    /// answering every frame could also answer the one after it). True while one is open.
+    /// </summary>
+    private bool AnswerYes()
+    {
+        if (GameUi.YesNoText() is not { } question) return false;
+        if (DateTime.UtcNow - lastYes < TimeSpan.FromMilliseconds(Math.Max(Speed.ClickGapMs, 250))) return true;
+        lastYes = DateTime.UtcNow;
+        log.Info($"  The game asks: \"{question}\" → {UiTable.YesNoYes.Describe()}");
+        GameUi.Fire(UiTable.YesNoYes);
+        return true;
     }
 
     private string DyeWord(byte stain) => stain == 0 ? "no dye" : data.DyeName(stain);
@@ -1583,7 +1745,6 @@ public sealed unsafe class PlacementRunner : IDisposable
     private List<Step> HeldSteps(RunJob job)
     {
         var name = Name(job);
-        DateTime? setAt = null;
         return new List<Step>
         {
             Step.Wait("The editor holds the piece (Place mode)", () => HousingEditor.Mode == EditorMode.Place && HousingEditor.ActiveItem != 0, WindowWait, StepStatus.SkipJob),
@@ -1608,7 +1769,6 @@ public sealed unsafe class PlacementRunner : IDisposable
                     else log.Info($"  Couldn't switch place anywhere on ({anywhere.Error}); setting it down with the game's usual checks.");
                 }
                 lastToast = null;
-                setAt = DateTime.UtcNow;
                 return editor.Place(held) ? StepOutcome.Done : StepOutcome.Halt("Couldn't set the held piece down.");
             }, Speed.Wait(150)),
             new Step
@@ -1629,7 +1789,7 @@ public sealed unsafe class PlacementRunner : IDisposable
                     }
                     // Refused (0.3.0: "Unable to place item.", then back to Rotate with nothing placed), or nothing after 3.5 s.
                     var refused = lastToast != null && HousingEditor.Mode != EditorMode.Place;
-                    if (!refused && DateTime.UtcNow - (setAt ?? DateTime.UtcNow) < TimeSpan.FromSeconds(3.5)) return StepOutcome.Waiting;
+                    if (!refused && queue.Elapsed < TimeSpan.FromSeconds(3.4)) return StepOutcome.Waiting;
                     EndAnywhereForOne();
                     log.Warn($"  {name} wasn't set down{(lastToast != null ? $" (the game said \"{lastToast}\")" : string.Empty)}: you put it down, and it's then set at its spot.");
                     queue.InsertNext(ByHandSteps(job));
@@ -1672,7 +1832,8 @@ public sealed unsafe class PlacementRunner : IDisposable
             },
             Step.Act($"Set {name} at its spot", () =>
             {
-                queue.InsertNext(MoveSteps(job, job.Key!.Value));
+                // Just put down: picked up only once the game has let go of it, as for a placed piece.
+                queue.InsertNext(MoveSteps(job, job.Key!.Value, justPlaced: true));
                 return StepOutcome.Done;
             }),
         };
@@ -2064,22 +2225,21 @@ public sealed unsafe class PlacementRunner : IDisposable
     /// <summary>Presses Yes if the game asks a yes/no question within a moment (logging the question); goes on if it doesn't.</summary>
     private Step AnswerYesNo()
     {
-        DateTime? since = null;
         return new Step
         {
             Label = $"Answer Yes if the game asks ({UiTable.YesNo})",
             Run = () =>
             {
-                since ??= DateTime.UtcNow;
                 var question = GameUi.YesNoText();
                 if (question != null)
                 {
+                    lastYes = DateTime.UtcNow;
                     log.Info($"  The game asks: \"{question}\" → {UiTable.YesNoYes.Describe()}");
                     GameUi.Fire(UiTable.YesNoYes);
                     return StepOutcome.Done;
                 }
                 // Already placing (bags) or placed (storeroom): nothing was asked.
-                if (HousingEditor.Mode == EditorMode.Place || DateTime.UtcNow - since > TimeSpan.FromSeconds(0.8)) return StepOutcome.Done;
+                if (HousingEditor.Mode == EditorMode.Place || queue.Elapsed > TimeSpan.FromSeconds(0.8)) return StepOutcome.Done;
                 return StepOutcome.Waiting;
             },
             Timeout = TimeSpan.FromSeconds(3),
@@ -2195,7 +2355,8 @@ public sealed unsafe class PlacementRunner : IDisposable
         if (live == null) return;
         foreach (var p in toPutAway)
         {
-            if (!live.TryGetValue(p.Key, out var now) || now.ItemId != p.ItemId) continue;
+            // The same piece, still where it was (a slot that came to hold another copy isn't put away).
+            if (!live.TryGetValue(p.Key, out var now) || now.ItemId != p.ItemId || Vector3.Distance(now.Position, p.Position) > 0.25f) continue;
             var target = new Target(-1 - p.Key, p.ItemId, p.Position, p.Yaw, p.Stain, Floor.Ground, false);
             jobs.Add(new RunJob { Kind = JobKind.Store, Target = target, Key = p.Key });
         }
@@ -2216,7 +2377,8 @@ public sealed unsafe class PlacementRunner : IDisposable
         var key = job.Key!.Value;
         return new List<Step>
         {
-            EnsureMode(EditorMode.Rotate),
+            // From the second piece on, the editor is in Store mode already: no Rotate and back.
+            HousingEditor.Mode == EditorMode.Store ? Step.Pause("Already in Store mode", TimeSpan.Zero) : EnsureMode(EditorMode.Rotate),
             new Step
             {
                 Label = "The editor is in Store mode",
@@ -2260,12 +2422,7 @@ public sealed unsafe class PlacementRunner : IDisposable
                 TimeoutMessage = "It wasn't put away (Store mode didn't take it from the plugin). Put it in the storeroom by hand.",
                 Run = () =>
                 {
-                    if (GameUi.YesNoText() is { } question)
-                    {
-                        log.Info($"  The game asks: \"{question}\" → {UiTable.YesNoYes.Describe()}");
-                        GameUi.Fire(UiTable.YesNoYes);
-                        return StepOutcome.Waiting;
-                    }
+                    if (AnswerYes()) return StepOutcome.Waiting;
                     var live = ReadLive();
                     if (live == null || live.TryGetValue(key, out var piece) && piece.ItemId == job.Target.ItemId) return StepOutcome.Waiting;
                     job.Note = "Put away in the storeroom.";
@@ -2312,10 +2469,20 @@ public sealed unsafe class PlacementRunner : IDisposable
 
     private byte StainOf(int key) => FurnitureReader.StoredStain(side == Side.Garden, key) ?? 0;
 
+    private Dictionary<int, LivePiece>? liveThisFrame;
+
+    /// <summary>
+    /// What's placed, by furniture slot: read once a frame (the game doesn't change it between two
+    /// steps of the same frame, and several steps a frame ask). Callers don't change it.
+    /// </summary>
     private Dictionary<int, LivePiece>? ReadLive()
     {
+        if (liveThisFrame != null) return liveThisFrame;
         var list = side == Side.Interior ? furniture.ReadInterior() : furniture.ReadGarden(out _);
-        return list?.GroupBy(p => p.Key).ToDictionary(g => g.Key, g => g.First());
+        if (list == null) return null;
+        var byKey = new Dictionary<int, LivePiece>(list.Count);
+        foreach (var p in list) byKey.TryAdd(p.Key, p);
+        return liveThisFrame = byKey;
     }
 
     /// <summary>Back to Rotate if the run left the editor in Store mode.</summary>
@@ -2380,7 +2547,14 @@ public sealed unsafe class PlacementRunner : IDisposable
     public void Dispose()
     {
         Services.Toasts.ErrorToast -= OnErrorToast;
-        SaveRows(force: true);
         anywhere.Disable();
+        try
+        {
+            SaveRows(force: true);
+        }
+        catch (Exception ex)
+        {
+            Services.Log.Warning(ex, "Couldn't keep the storeroom rows learnt");
+        }
     }
 }
