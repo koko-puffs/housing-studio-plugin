@@ -26,7 +26,13 @@ public sealed unsafe class FixtureReader
     private DateTime nextLook;
 
     /// <summary>A plot: its world, the ward's territory, the ward (0-based) and the plot (0-based).</summary>
-    private readonly record struct PlotKey(ushort World, uint Territory, int Ward, int Plot);
+    private readonly record struct PlotKey(uint World, uint Territory, int Ward, int Plot);
+
+    /// <summary>
+    /// The world you're on: the same read in the ward and in a house (the game's own house ids
+    /// carry a world too, but nothing says the ward's is filled in).
+    /// </summary>
+    private static uint World() => Services.PlayerState.IsLoaded ? Services.PlayerState.CurrentWorld.RowId : 0;
 
     public FixtureReader(GameData data) => this.data = data;
 
@@ -162,7 +168,7 @@ public sealed unsafe class FixtureReader
         if (ward < 0) return;
         var area = OutdoorArea();
         if (area == null) return;
-        var world = hm->OutdoorTerritory->HouseId.WorldId;
+        var world = World();
         for (var plot = 1; plot <= area->Plots.Length; plot++)
             if (ReadExterior(plot) is { } parts) seenOutside[new PlotKey(world, ctx.TerritoryId, ward, plot - 1)] = parts;
     }
@@ -177,10 +183,10 @@ public sealed unsafe class FixtureReader
             var id = hm->IndoorTerritory->HouseId;
             if (id.IsApartment || hm->GetCurrentWard() is var ward && ward < 0) return null;
             // The ward the house is in (you're in its interior's territory now).
-            return new PlotKey(id.WorldId, HousingManager.GetOriginalHouseTerritoryTypeId(), ward, id.PlotIndex);
+            return new PlotKey(World(), HousingManager.GetOriginalHouseTerritoryTypeId(), ward, id.PlotIndex);
         }
         if (ctx.Kind == PlaceKind.Ward && hm->OutdoorTerritory != null && ctx.Plot is { } plot && hm->GetCurrentWard() is var w && w >= 0)
-            return new PlotKey(hm->OutdoorTerritory->HouseId.WorldId, ctx.TerritoryId, w, plot - 1);
+            return new PlotKey(World(), ctx.TerritoryId, w, plot - 1);
         return null;
     }
 

@@ -8,7 +8,12 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.4.1, working in the game.** 0.4.1: a scan's fixes. A piece the editor holds when
+> **Status: 0.4.2, working in the game.** 0.4.2: a check of 0.4.1. The outside kept for saving
+> is told apart by the world you're on (0.4.1 read it from the game's house ids, which may not
+> carry it in the ward, and a save from inside could then have lost its outside); a held piece
+> isn't set down while a zone change or logout is under way (it showed as that before the
+> territory changed); Try again for a garden also needs its plot.
+> 0.4.1: a scan's fixes. A piece the editor holds when
 > a run stops is only set down while you're still in that home (not after a zone change or a
 > logout); the dye window's fallback only opens on the piece being dyed; Put them back for a
 > garden is tied to its plot; Try again only runs in the home the run was in; the outside kept

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using Dalamud.Game.ClientState.Conditions;
 using FFXIVClientStructs.FFXIV.Client.LayoutEngine.Group;
 using HousingStudio.Automation;
 using HousingStudio.Core;
@@ -149,6 +150,7 @@ public sealed unsafe class PlacementRunner : IDisposable
     private PlaceKind startKind;
     private uint startTerritory;
     private ulong startHouse;
+    private int? startPlot;
     private Side side;
 
     public PlacementRunner(Configuration config, LayoutSession session, HousingEditor editor, HousingActions actions, FurnitureReader furniture, PlaceAnywhere anywhere, GameData data, ActivityLog log)
@@ -321,6 +323,7 @@ public sealed unsafe class PlacementRunner : IDisposable
         startKind = ctx.Kind;
         startTerritory = ctx.TerritoryId;
         startHouse = ctx.HouseId;
+        startPlot = ctx.Plot;
         side = ctx.Side!.Value;
         DryRun = dryRun;
         index = -1;
@@ -375,9 +378,10 @@ public sealed unsafe class PlacementRunner : IDisposable
     public void RetryProblems()
     {
         if (Active || session.Plan == null) return;
-        // Its pieces are the last run's home's (its put-away pieces by their slots there).
+        // Its pieces are the last run's home's (its put-away pieces by their slots there; a
+        // garden's plot too, as the ward's other plots share its territory).
         var here = session.Context;
-        if (here.Kind != startKind || here.TerritoryId != startTerritory || here.HouseId != startHouse)
+        if (here.Kind != startKind || here.TerritoryId != startTerritory || here.HouseId != startHouse || here.Plot != startPlot)
         {
             StopReason = "Go back to the home the run was in to try those again.";
             return;
@@ -716,19 +720,26 @@ public sealed unsafe class PlacementRunner : IDisposable
     };
 
     /// <summary>
-    /// When a piece ends badly (skipped, stopped) with the editor still holding something: a picked-up
-    /// piece is set down where it is now (in Rotate, the game's own set-down); a piece being placed
-    /// can't be let go of from here, so you're told (Esc puts it back), else the next piece would
-    /// wait 30 s for the editor and stop.
+    /// Still in the home the run started in (its territory, with a housing territory loaded), and
+    /// not on the way out of it (a zone change or logout shows as these first, while the old
+    /// territory is still loaded).
     /// </summary>
-    /// <summary>Still in the home the run started in (its territory, with a housing territory loaded).</summary>
     private unsafe bool StillInStartHome()
     {
+        if (Services.Condition[ConditionFlag.BetweenAreas] || Services.Condition[ConditionFlag.BetweenAreas51]
+            || Services.Condition[ConditionFlag.LoggingOut])
+            return false;
         var hm = FFXIVClientStructs.FFXIV.Client.Game.HousingManager.Instance();
         if (hm == null || (hm->IndoorTerritory == null && hm->OutdoorTerritory == null)) return false;
         return Services.ClientState.TerritoryType == startTerritory;
     }
 
+    /// <summary>
+    /// When a piece ends badly (skipped, stopped) with the editor still holding something: a picked-up
+    /// piece is set down where it is now (in Rotate, the game's own set-down); a piece being placed
+    /// can't be let go of from here, so you're told (Esc puts it back), else the next piece would
+    /// wait 30 s for the editor and stop.
+    /// </summary>
     private List<Step> HeldCleanup() => new()
     {
         new Step
