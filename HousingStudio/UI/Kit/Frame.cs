@@ -19,6 +19,13 @@ public static class Frame
     private static readonly Stack<(string Id, float Start)> Bottoms = new();
     private static float bodyPadBottom;
 
+    /// <summary>At the start of each frame: nothing left over from a frame whose drawing threw part way.</summary>
+    public static void ResetFrame()
+    {
+        Footers.Clear();
+        Bottoms.Clear();
+    }
+
     public const float SidePad = 28;
 
     /// <summary>Starts the header: the window's top-left plus its padding.</summary>

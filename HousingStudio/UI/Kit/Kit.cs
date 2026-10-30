@@ -74,6 +74,13 @@ public static class Kit
 
     public static void PushBox(float left, float width) => Boxes.Push((left, MathF.Max(0, width)));
 
+    /// <summary>At the start of each frame: nothing left over from a frame whose drawing threw part way.</summary>
+    public static void ResetFrame()
+    {
+        Boxes.Clear();
+        Panels.Clear();
+    }
+
     public static void PopBox() => Boxes.Pop();
 
     public static float Left => Boxes.Count > 0 ? Boxes.Peek().Left : ImGui.GetCursorScreenPos().X;
@@ -547,11 +554,45 @@ public static class Kit
     /// <summary>An eyebrow: Geist Mono 12, uppercase, .18em apart, brass. Returns its height.</summary>
     public static float Eyebrow(Vector2 pos, string text, Vector4? color = null, float maxWidth = 0)
     {
-        var upper = text.ToUpperInvariant();
-        if (maxWidth > 0)
-            while (upper.Length > 1 && Txt.SpacedWidth(upper, Face.Mono, 12, 0.18f) > maxWidth) upper = upper[..^2] + "…";
+        var upper = maxWidth > 0 ? FitEyebrow(text, maxWidth) : text.ToUpperInvariant();
         Txt.Spaced(Dl, pos, upper, Face.Mono, 12, color ?? Palette.Brass, 0.18f);
         return Txt.Natural(Face.Mono, 12);
+    }
+
+    private static readonly Dictionary<(string Text, float Width), string> EyebrowFits = new();
+
+    /// <summary>
+    /// An eyebrow's words in capitals, cut with "…" to fit: the longest start that fits, found by
+    /// halving (0.3.2 took a character off at a time, measuring each letter every time: a long design
+    /// name in "Placing …" cost tens of thousands of measurements a frame). Remembered per width.
+    /// </summary>
+    private static string FitEyebrow(string text, float maxWidth)
+    {
+        if (EyebrowFits.TryGetValue((text, maxWidth), out var fit)) return fit;
+        var upper = text.ToUpperInvariant();
+        bool Fits(string s) => Txt.SpacedWidth(s, Face.Mono, 12, 0.18f) <= maxWidth;
+        if (!Fits(upper))
+        {
+            var lo = 0;
+            var hi = upper.Length - 1;
+            while (lo < hi)
+            {
+                var mid = (lo + hi + 1) / 2;
+                if (Fits(Cut(upper, mid))) lo = mid;
+                else hi = mid - 1;
+            }
+            upper = Cut(upper, lo);
+        }
+        if (EyebrowFits.Count > 256) EyebrowFits.Clear();
+        EyebrowFits[(text, maxWidth)] = upper;
+        return upper;
+    }
+
+    /// <summary>The first <paramref name="n"/> characters and "…", never splitting a surrogate pair.</summary>
+    private static string Cut(string s, int n)
+    {
+        if (n > 0 && char.IsHighSurrogate(s[n - 1])) n--;
+        return s[..n].TrimEnd() + "…";
     }
 
     /// <summary>An eyebrow on its own row.</summary>

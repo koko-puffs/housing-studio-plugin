@@ -42,7 +42,7 @@ Paths are under `HousingStudio/UI/`.
 | "2 pieces are already in place. 29 pieces…" | `SummaryLine` (also: missing pieces, Near me, floors left out, storeroom not read, the other side's pieces) |
 | Fixtures disclosure with "x of 11 done" | `DrawFixtures` → `Disclosure`, `Kit.Chip`; ticks in `Configuration.FixturesDone` via `Model/FixtureTicks` |
 | Info note | the bottom block of `DrawReady` |
-| Start placing / Preview first; "About N minutes at a steady pace"; "Preview marks each spot, moving nothing" | `DrawReadyFooter`; estimate from `Core/RunEstimate` (cached), words from `Words.About`. When Start can't run, it's at 50% and the left line says why (`runner.CanStart`). |
+| Start placing / Preview first; "About N minutes at a quick pace"; "Preview marks each spot, moving nothing" | `DrawReadyFooter`; estimate from `Core/RunEstimate` (cached), words from `Words.About`. When Start can't run, it's at 50% and the left line says why (`runner.CanStart`). |
 
 ## Running (`Views/Running.cs`)
 
@@ -84,7 +84,7 @@ Paths are under `HousingStudio/UI/`.
 
 | Mockup | Code |
 | --- | --- |
-| Start does: Place pieces for me, Dye, Backup, Pace | `DrawSettings` → `SwitchRow`, `SetRow` + `Kit.Segmented`. Place pieces for me sets both `StoreroomAutomatic` and `BagsAutomatic`. Pace: Careful 1.5 s, Steady 0.4 s, Quick 0.15 s, the `Pacing.Presets` (`Model/PaceSetting`). |
+| Start does: Place pieces for me, Dye, Backup, Pace | `DrawSettings` → `SwitchRow`, `SetRow` + `Kit.Segmented`. Place pieces for me sets both `StoreroomAutomatic` and `BagsAutomatic`. Pace: Steady, Quick (the default) or Daring, the `Pacing.Profiles` (`Model/PaceSetting`), with a line under it saying what the one chosen does. |
 | In the world: Show where pieces go | `ShowMarkers` |
 | More options (12) | `DrawMoreOptions`: place anywhere, pace variation (±5% steps), when to stop, chat, Near me reach, storeroom / bags separately, floors to place, marker labels, placed markers, marker range, save what's placed as a build, good to know |
 | Something not working? | `DrawTrouble`: step by step, move the preview before Place (old method), the recorder, the "Place" words, windows and clicks used |

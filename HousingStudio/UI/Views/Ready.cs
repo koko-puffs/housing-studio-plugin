@@ -15,14 +15,14 @@ namespace HousingStudio.UI;
 public sealed partial class MainWindow
 {
     private bool fixturesOpen;
-    private (Plan? Plan, int Count, int Interval, bool Dyes, TimeSpan Time) estimate;
+    private (Plan? Plan, int Count, Pace Pace, bool Dyes, TimeSpan Time) estimate;
 
     /// <summary>The time estimate, worked out again only when the plan or the pace changes.</summary>
     private TimeSpan Estimate(StartSummary s, List<PlanEntry> entries)
     {
-        var key = (session.Plan, entries.Count, config.IntervalMs, config.DyeAfterPlacing);
-        if (estimate.Plan != key.Plan || estimate.Count != key.Count || estimate.Interval != key.IntervalMs || estimate.Dyes != key.DyeAfterPlacing)
-            estimate = (key.Plan, key.Count, key.IntervalMs, key.DyeAfterPlacing, s.Estimate(entries, config.IntervalMs));
+        var key = (session.Plan, entries.Count, config.Pace, config.DyeAfterPlacing);
+        if (estimate.Plan != key.Plan || estimate.Count != key.Count || estimate.Pace != key.Pace || estimate.Dyes != key.DyeAfterPlacing)
+            estimate = (key.Plan, key.Count, key.Pace, key.DyeAfterPlacing, s.Estimate(entries, config.Pace));
         return estimate.Time;
     }
 
@@ -458,8 +458,7 @@ public sealed partial class MainWindow
         Kit.Reserve(at, w, S(46));
         Kit.Gap(12);
 
-        var pace = PaceSetting.Of(config.IntervalMs);
-        var left = blocked ?? $"{Words.Capital(Words.About(Estimate(s, entries)))} at a {PaceSetting.Word(pace)} pace";
+        var left = blocked ?? $"{Words.Capital(Words.About(Estimate(s, entries)))} at a {PaceSetting.Word(config.Pace)} pace";
         const string right = "Preview marks each spot, moving nothing";
         var row = Kit.At;
         var lw = Txt.Measure(left, Face.Sans, 13).X;

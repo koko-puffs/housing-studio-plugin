@@ -26,17 +26,19 @@ public sealed partial class MainWindow
     private PieceFilter pieceFilter = PieceFilter.ToDo;
     private string pieceSearch = string.Empty;
     private readonly Dictionary<Floor, bool> floorOpen = new();
-    private Layout? targetsFor;
+    private (Layout? Layout, Side Side, PlotSpot? Plot) targetsFor;
     private List<PlanEntry> designPieces = new();
 
     /// <summary>The pieces to list: the plan's (matched, with states), or before you're home, the design's own.</summary>
     private (List<PlanEntry> Entries, bool Known) PieceEntries()
     {
         if (session.Plan is { } plan) return (Filtered().ToList(), true);
-        if (!ReferenceEquals(targetsFor, session.Layout))
+        // Worked out again when the design, the side or the plot changes (a garden's pieces move with its plot).
+        var key = (session.Layout, ReadySide, session.Plot);
+        if (!ReferenceEquals(targetsFor.Layout, key.Layout) || targetsFor.Side != key.ReadySide || !Equals(targetsFor.Plot, key.Plot))
         {
-            targetsFor = session.Layout;
-            designPieces = session.Targets(ReadySide).Select(t => new PlanEntry { Target = t, State = PieceState.Missing }).ToList();
+            targetsFor = key;
+            designPieces = session.Targets(ReadySide, toList: true).Select(t => new PlanEntry { Target = t, State = PieceState.Missing }).ToList();
         }
         return (designPieces, false);
     }

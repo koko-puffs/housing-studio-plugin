@@ -91,7 +91,31 @@ public sealed partial class MainWindow : Window
 
     public override void Draw()
     {
+        Kit.ResetFrame();
+        Frame.ResetFrame();
         Theme.PushInside();
+        // If drawing throws (Dalamud catches it and logs it), the style pushed above still comes off:
+        // left on, every frame would push more.
+        try
+        {
+            DrawBody();
+        }
+        finally
+        {
+            Theme.Pop();
+        }
+
+        // Whatever changes what a view shows (opening, closing a design) waits until the frame is drawn.
+        if (later.Count > 0)
+        {
+            var actions = later.ToArray();
+            later.Clear();
+            foreach (var a in actions) a();
+        }
+    }
+
+    private void DrawBody()
+    {
         vm.Observe();
         using (fonts.Push(Face.Sans, 14))
         {
@@ -130,15 +154,6 @@ public sealed partial class MainWindow : Window
             ImGui.TextUnformatted($"Load {Path.GetFileName(m.Files.First(IsLayoutFile))}");
             return true;
         });
-        Theme.Pop();
-
-        // Whatever changes what a view shows (opening, closing a design) waits until the frame is drawn.
-        if (later.Count > 0)
-        {
-            var actions = later.ToArray();
-            later.Clear();
-            foreach (var a in actions) a();
-        }
     }
 
     /// <summary>Runs after this frame's drawing is finished.</summary>
@@ -172,7 +187,9 @@ public sealed partial class MainWindow : Window
         OnFramework(() =>
         {
             runner.Start(dryRun, entries);
-            if (!runner.Active && runner.StopReason != null) Notify(runner.StopReason);
+            if (runner.Active) return;
+            vm.NotStarted();
+            if (runner.StopReason != null) Notify(runner.StopReason);
         });
     }
 

@@ -207,7 +207,7 @@ public static class RunEstimate
     /// The pieces left times how long a piece has taken (the same phase's average when there is
     /// one, else the run's, else a guess from the pace), plus the pause between pieces.
     /// </summary>
-    public static TimeSpan TimeLeft(IReadOnlyList<RunJob> jobs, int intervalMs, bool dyesStillToPlan = false, int dyesExpected = 0)
+    public static TimeSpan TimeLeft(IReadOnlyList<RunJob> jobs, PaceProfile pace, bool dyesStillToPlan = false, int dyesExpected = 0)
     {
         var finished = jobs.Where(j => j.StartedAt != null && j.EndedAt != null && j.Outcome is JobOutcome.Done).ToList();
         double Average(IEnumerable<RunJob> js)
@@ -216,13 +216,14 @@ public static class RunEstimate
             return list.Count == 0 ? double.NaN : list.Average();
         }
         var overall = Average(finished);
-        var pause = Math.Max(Pacing.MinimumMs, intervalMs) / 1000.0;
+        var pause = Math.Max(Pacing.MinimumMs, pace.PieceGapMs) / 1000.0;
         double PerPiece(RunPhase phase)
         {
             var a = Average(finished.Where(j => j.Phase == phase));
             if (!double.IsNaN(a)) return a;
             if (!double.IsNaN(overall)) return overall;
-            return phase switch
+            // Quick's guesses, longer or shorter with the pace's waits.
+            return pace.WaitScale * phase switch
             {
                 RunPhase.Move => 1.5,
                 RunPhase.Place => 4,

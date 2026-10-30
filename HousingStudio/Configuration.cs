@@ -9,13 +9,16 @@ namespace HousingStudio;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
-    public int Version { get; set; } = 4;
+    public int Version { get; set; } = 5;
 
     /// <summary>Layouts opened lately, newest first.</summary>
     public List<string> RecentFiles { get; set; } = new();
 
-    /// <summary>The pause between two pieces, in milliseconds (never below <see cref="Pacing.MinimumMs"/>).</summary>
-    public int IntervalMs { get; set; } = Pacing.DefaultMs;
+    /// <summary>How fast a run goes (Settings → Pace): the pause between pieces, between clicks, and the waits for the game.</summary>
+    public Pace Pace { get; set; } = Pacing.Default;
+
+    /// <summary>Before 0.3.3, the pace was only the pause between two pieces, in milliseconds; read once to choose <see cref="Pace"/>.</summary>
+    public int IntervalMs { get; set; } = 150;
 
     /// <summary>How much the pause varies, 0 to 0.5.</summary>
     public float Jitter { get; set; } = 0.25f;
@@ -99,12 +102,20 @@ public sealed class Configuration : IPluginConfiguration
     /// Version 4 (0.3.0, after 0.2.4's pace change made version 3): "Near me" became an on/off
     /// button with its reach in Settings; before, a reach of 0 meant off. Returns true when something changed.
     /// </summary>
+    /// <remarks>
+    /// Version 5 (0.3.3): the pace became a choice of Steady, Quick (the new default) and Daring, each
+    /// setting more than the pause between pieces; Careful becomes Steady, the rest Quick.
+    /// </remarks>
     public bool Migrate()
     {
-        if (Version >= 4) return false;
-        NearMe = NearMeRadius > 0;
-        if (NearMeRadius <= 0) NearMeRadius = 8f;
-        Version = 4;
+        if (Version >= 5) return false;
+        if (Version < 4)
+        {
+            NearMe = NearMeRadius > 0;
+            if (NearMeRadius <= 0) NearMeRadius = 8f;
+        }
+        Pace = Pacing.FromOldInterval(IntervalMs);
+        Version = 5;
         return true;
     }
 

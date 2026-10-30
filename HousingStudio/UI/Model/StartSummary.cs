@@ -30,6 +30,6 @@ public sealed record StartSummary(IReadOnlyList<PlanEntry> Moves, int Storeroom,
     }
 
     /// <summary>About how long Start takes at a pace, with the runner's own guesses per piece (<see cref="RunEstimate"/>).</summary>
-    public TimeSpan Estimate(IReadOnlyCollection<PlanEntry> entries, int intervalMs) =>
-        RunEstimate.TimeLeft(RunSequence.Build(entries), intervalMs, dyesStillToPlan: Dyes > 0, dyesExpected: Dyes);
+    public TimeSpan Estimate(IReadOnlyCollection<PlanEntry> entries, Pace pace) =>
+        RunEstimate.TimeLeft(RunSequence.Build(entries), Pacing.Profile(pace), dyesStillToPlan: Dyes > 0, dyesExpected: Dyes);
 }

@@ -2,31 +2,59 @@ using System;
 
 namespace HousingStudio.Core;
 
+/// <summary>Settings → Pace, slowest first: Steady, Quick (the default) and Daring.</summary>
+public enum Pace
+{
+    Steady,
+    Quick,
+    Daring,
+}
+
 /// <summary>
-/// How long to wait between pieces: the interval you pick, give or take a little (a person never
-/// clicks on an exact beat), and never quicker than <see cref="MinimumMs"/>.
+/// What a pace sets: the pause between two pieces, the least time between two game actions within a
+/// piece (window clicks and the editor's own pick-up and set-down alike), and how long the run waits
+/// for the game to settle (its "a few frames running" checks and short pauses; timeouts aren't touched,
+/// they only decide when to give up).
+/// </summary>
+public readonly record struct PaceProfile(Pace Pace, string Name, int PieceGapMs, int ClickGapMs, double WaitScale)
+{
+    /// <summary>A settle or pause of the Quick pace, at this one.</summary>
+    public TimeSpan Wait(int quickMs) => TimeSpan.FromMilliseconds(Math.Round(quickMs * WaitScale));
+}
+
+/// <summary>
+/// How fast a run goes. Quick is what 0.3.2 ran (0.15 s between pieces, 0.3 s between clicks), and
+/// the default since 0.3.3; Steady gives the game half as long again for everything, for a slow
+/// connection or a busy house; Daring cuts it to two thirds, for whoever likes to live dangerously
+/// (0.2.4's 0.25 s between clicks with no settling raced the game; the settling checks stay).
+/// The pause between pieces varies a little (a person never clicks on an exact beat).
 /// </summary>
 public static class Pacing
 {
     /// <summary>The quickest the plugin ever goes between two pieces, whatever the setting.</summary>
-    public const int MinimumMs = 150;
+    public const int MinimumMs = 50;
 
-    /// <summary>The pace presets: Quick, Steady (the default) and Careful.</summary>
-    public const int QuickMs = 150;
-    public const int SteadyMs = 400;
-    public const int CarefulMs = 1500;
+    public const Pace Default = Pace.Quick;
 
-    public const int DefaultMs = SteadyMs;
+    /// <summary>The presets, in <see cref="Pace"/>'s order.</summary>
+    public static readonly PaceProfile[] Profiles =
+    {
+        new(Pace.Steady, "Steady", 600, 450, 1.5),
+        new(Pace.Quick, "Quick", 150, 300, 1.0),
+        new(Pace.Daring, "Daring", 50, 200, 0.65),
+    };
+
+    /// <summary>A pace's profile (an unknown value, from a hand-edited config, is the default's).</summary>
+    public static PaceProfile Profile(Pace pace) =>
+        (int)pace >= 0 && (int)pace < Profiles.Length ? Profiles[(int)pace] : Profiles[(int)Default];
 
     /// <summary>
-    /// The least time between two game actions within a piece: window clicks and the editor's own
-    /// pick-up and set-down alike (0.2.4's 0.25 s with no settling raced the game).
+    /// The pace a pause between pieces from before 0.3.3 becomes: Careful (1.5 s) the safer Steady, the
+    /// rest Quick, the new default.
     /// </summary>
-    public const int ClickGapMs = 300;
+    public static Pace FromOldInterval(int intervalMs) => intervalMs >= 950 ? Pace.Steady : Pace.Quick;
 
-    public static readonly (string Name, int Ms)[] Presets = { ("Quick", QuickMs), ("Steady", SteadyMs), ("Careful", CarefulMs) };
-
-    /// <param name="intervalMs">The interval picked in Settings.</param>
+    /// <param name="intervalMs">The pace's pause between pieces.</param>
     /// <param name="jitter">How much it varies, 0 to 0.5 (0.25 is ±25%).</param>
     /// <param name="random">A value from 0 to 1.</param>
     public static int NextDelayMs(int intervalMs, float jitter, double random)

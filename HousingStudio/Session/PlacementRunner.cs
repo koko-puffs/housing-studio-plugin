@@ -97,7 +97,7 @@ public sealed unsafe class PlacementRunner : IDisposable
     private bool scrollUseless;
 
     /// <summary>Watches the list settle every frame between steps, so the wait overlaps the move of the piece just placed.</summary>
-    private readonly Settle listWatch = new(5, TimeSpan.FromMilliseconds(250));
+    private Settle listWatch = new(5, TimeSpan.FromMilliseconds(250));
 
     /// <summary>How many pieces the storeroom holds once the last placement has gone through (the list isn't settled before).</summary>
     private int? listExpect;
@@ -108,10 +108,20 @@ public sealed unsafe class PlacementRunner : IDisposable
     /// <summary>Picks the sort-order search has made for each piece.</summary>
     private readonly Dictionary<RunJob, int> searchPicks = new();
 
+    /// <summary>
+    /// Rows whose pieces were just placed while the storeroom still showed them (its count lags the new
+    /// piece by up to 1.5 s): each taken out of the rows once its slot is empty (0.3.2 kept them, and
+    /// every row after one was then off by one).
+    /// </summary>
+    private readonly List<(int Row, StockSlot Slot)> rowsLeaving = new();
+
     /// <summary>Place anywhere was switched on for one set-down only (a bag piece the game refused); it's switched off after.</summary>
     private bool anywhereForOne;
 
     private string? restorePath;
+
+    /// <summary>The pace chosen in Settings (read as it goes: a change takes effect from the next step).</summary>
+    private PaceProfile Speed => Pacing.Profile(config.Pace);
 
     private PlaceKind startKind;
     private uint startTerritory;
@@ -188,7 +198,7 @@ public sealed unsafe class PlacementRunner : IDisposable
     public bool DyesPlanned => dyesPlanned;
 
     /// <summary>About how long the run has left, from the pace and how long pieces have taken so far.</summary>
-    public TimeSpan TimeLeft => Active ? RunEstimate.TimeLeft(jobs, config.IntervalMs, !dyesPlanned, dyesExpected) : TimeSpan.Zero;
+    public TimeSpan TimeLeft => Active ? RunEstimate.TimeLeft(jobs, Speed, !dyesPlanned, dyesExpected) : TimeSpan.Zero;
 
     /// <summary>Every piece that didn't work this run, with why.</summary>
     public IReadOnlyList<RunProblem> Problems =>
@@ -258,16 +268,17 @@ public sealed unsafe class PlacementRunner : IDisposable
         DyeShortfall = Array.Empty<(byte, string, int, int)>();
         knownKeys = session.Live.Keys.ToHashSet();
         queue.StepByStep = config.StepByStep && !dryRun;
-        queue.ActionGap = TimeSpan.FromMilliseconds(dryRun ? 0 : Pacing.ClickGapMs);
+        queue.ActionGap = TimeSpan.FromMilliseconds(dryRun ? 0 : Speed.ClickGapMs);
         queue.StepsPerTick = 8;
         timings.Clear();
         namesStale = false;
         listSettled = false;
         scrollUseless = false;
-        listWatch.Reset();
+        listWatch = new Settle(5, Speed.Wait(250));
         listExpect = null;
         orderChecked = false;
         anywhereForOne = false;
+        rowsLeaving.Clear();
         searchPicks.Clear();
         queue.Begin(Array.Empty<Step>());
         nextJobAt = DateTime.UtcNow;
@@ -400,6 +411,7 @@ public sealed unsafe class PlacementRunner : IDisposable
             Stop("The furnishing editor closed.");
             return;
         }
+        if (!DryRun) queue.ActionGap = TimeSpan.FromMilliseconds(Speed.ClickGapMs);
         SaveRows(force: false);
         if (!DryRun) WatchList();
         if (anywhereForOne && queue.State != QueueState.Running && queue.State != QueueState.AwaitingContinue) EndAnywhereForOne();
@@ -461,7 +473,7 @@ public sealed unsafe class PlacementRunner : IDisposable
 
     private void NextAfter(bool quick)
     {
-        var delay = quick ? 150 : Pacing.NextDelayMs(config.IntervalMs, config.Jitter, random.NextDouble());
+        var delay = quick ? 150 : Pacing.NextDelayMs(Speed.PieceGapMs, config.Jitter, random.NextDouble());
         if (DryRun) delay /= 2;
         nextJobAt = DateTime.UtcNow + TimeSpan.FromMilliseconds(delay);
         queue.Begin(Array.Empty<Step>());
@@ -607,7 +619,7 @@ public sealed unsafe class PlacementRunner : IDisposable
                     {
                         log.Info($"  The game didn't keep {name} picked up (held {(HousingEditor.ActiveItem == 0 ? "nothing" : $"0x{HousingEditor.ActiveItem:X}")}, wanted 0x{instance:X}"
                                  + $"{(now != instance ? $"; the piece's object is now 0x{now:X}" : string.Empty)}); trying again.");
-                        queue.InsertNext(new[] { Step.Pause("Wait a moment", TimeSpan.FromMilliseconds(300)) }.Concat(MoveSteps(job, key, attempt + 1, justPlaced)));
+                        queue.InsertNext(new[] { Step.Pause("Wait a moment", Speed.Wait(300)) }.Concat(MoveSteps(job, key, attempt + 1, justPlaced)));
                         return StepOutcome.Done;
                     }
                     return StepOutcome.Skip("The game wouldn't pick it up (three tries). It's placed; \"Try again\" moves it later.", ProblemKind.DidNotLand);
@@ -642,7 +654,7 @@ public sealed unsafe class PlacementRunner : IDisposable
                         if (attempt < 2)
                         {
                             log.Info($"  The game let go of {name} before it could be set (held {(HousingEditor.ActiveItem == 0 ? "nothing" : $"0x{HousingEditor.ActiveItem:X}")}); picking it up again.");
-                            queue.InsertNext(new[] { Step.Pause("Wait a moment", TimeSpan.FromMilliseconds(400)) }.Concat(MoveSteps(job, key, attempt + 1, justPlaced)));
+                            queue.InsertNext(new[] { Step.Pause("Wait a moment", Speed.Wait(400)) }.Concat(MoveSteps(job, key, attempt + 1, justPlaced)));
                             return StepOutcome.Done;
                         }
                         return StepOutcome.Skip("The game dropped the piece before it could be set (three tries).", ProblemKind.DidNotLand);
@@ -726,7 +738,7 @@ public sealed unsafe class PlacementRunner : IDisposable
         var storedBefore = -1;
         nint previewItem = 0;
         var placed = false;
-        var previewSettle = new Settle(3, TimeSpan.FromMilliseconds(60));
+        var previewSettle = new Settle(3, Speed.Wait(60));
         var steps = new List<Step>
         {
             FindRowStep(job, tried, chosen),
@@ -756,7 +768,7 @@ public sealed unsafe class PlacementRunner : IDisposable
             {
                 HousingActions.AimPreview(job.Target.Position, job.Target.Yaw);
                 return StepOutcome.Done;
-            }, TimeSpan.FromMilliseconds(150)));
+            }, Speed.Wait(150)));
         }
         steps.Add(new Step
         {
@@ -794,11 +806,10 @@ public sealed unsafe class PlacementRunner : IDisposable
                     log.Info($"  Placed: furniture slot {key} ({placedBefore} → {count} pieces placed).");
                     job.Key = key;
                     var r = chosen[0];
-                    if (r >= 0 && rows.Known.TryGetValue(r, out var what)
-                        && !InventoryReader.StillHolds(new StockSlot(StockSource.Storeroom, what.Container, what.Slot, what.ItemId, 0, 1)))
+                    if (r >= 0 && rows.Known.TryGetValue(r, out var what))
                     {
-                        rows.Removed(r);
-                        rowsDirty = true;
+                        rowsLeaving.Add((r, new StockSlot(StockSource.Storeroom, what.Container, what.Slot, what.ItemId, 0, 1)));
+                        RowLeft();
                     }
                     // The list shifts (and re-sorts) once a piece leaves it: read its names again before the next piece.
                     // The list is watched settling while the piece is moved (WatchList), once the storeroom has one fewer.
@@ -844,7 +855,7 @@ public sealed unsafe class PlacementRunner : IDisposable
     /// </summary>
     private Step ListSettles()
     {
-        var settle = new Settle(5, TimeSpan.FromMilliseconds(250));
+        var settle = new Settle(5, Speed.Wait(250));
         DateTime? since = null;
         return new Step
         {
@@ -889,7 +900,7 @@ public sealed unsafe class PlacementRunner : IDisposable
     /// </summary>
     private Step SettlesAfterPlace(int key, int storedBefore, nint previewItem)
     {
-        var settle = new Settle(4, TimeSpan.FromMilliseconds(120));
+        var settle = new Settle(4, Speed.Wait(120));
         DateTime? since = null;
         return new Step
         {
@@ -921,6 +932,7 @@ public sealed unsafe class PlacementRunner : IDisposable
     /// </summary>
     private void WatchList()
     {
+        RowLeft();
         if (listSettled || !rowsReady || listExpect == null) return;
         if (!GameUi.IsOpen(UiTable.FurnishingList) || !InventoryReader.StoreroomTabShown()) return;
         var count = InventoryReader.StoreroomOccupied(side).Count;
@@ -942,9 +954,9 @@ public sealed unsafe class PlacementRunner : IDisposable
     /// The editor holds this piece, and has for a few frames running (not just the frame of the click):
     /// three frames and 50 ms; a piece just placed, four frames and 120 ms (0.3.0: let go after 19 ms).
     /// </summary>
-    private static Step HeldSteady(Func<nint> instance, bool justPlaced = false)
+    private Step HeldSteady(Func<nint> instance, bool justPlaced = false)
     {
-        var settle = justPlaced ? new Settle(4, TimeSpan.FromMilliseconds(120)) : new Settle(3, TimeSpan.FromMilliseconds(50));
+        var settle = justPlaced ? new Settle(4, Speed.Wait(120)) : new Settle(3, Speed.Wait(50));
         return new Step
         {
             Label = "The game picks it up",
@@ -1029,6 +1041,7 @@ public sealed unsafe class PlacementRunner : IDisposable
     /// </summary>
     private void PrepareRows()
     {
+        RowLeft();
         var occupied = Occupied();
         if (rowsReady && rows.Count == occupied.Count) return;
         var fp = StoreroomRows.Fingerprint(occupied);
@@ -1073,7 +1086,7 @@ public sealed unsafe class PlacementRunner : IDisposable
                 new Step
                 {
                     Label = "Read the rows the list holds now",
-                    Delay = TimeSpan.FromMilliseconds(250),
+                    Delay = Speed.Wait(250),
                     Run = () =>
                     {
                         var list = ListReader.Read(UiTable.FurnishingList).FirstOrDefault(l => l.NodeId == listNode);
@@ -1090,6 +1103,9 @@ public sealed unsafe class PlacementRunner : IDisposable
                             scrollUseless = true;
                             log.Info($"  Scrolling didn't show further rows ({(list == null ? "list gone" : offset == null ? "couldn't line the rows up" : "same rows")}): rows past those read are found from the list's sort order (not scrolled again this run).");
                         }
+                        // Back to the top: the names are read again from row 0 after each placement (0.3.2 left the
+                        // list scrolled, and the rows read then were taken for rows 0 onwards).
+                        ListReader.ScrollTo(UiTable.FurnishingList, listNode, 0);
                         return StepOutcome.Done;
                     },
                 },
@@ -1213,8 +1229,14 @@ public sealed unsafe class PlacementRunner : IDisposable
                     var seen = new StoreroomRow(container, slot, held.ItemId, held.Stain);
                     if (held.ItemId != 0) rows.Learn(row, seen, occupied.Count(o => o.ItemId == held.ItemId));
                     rowsDirty = true;
-                    var right = held.ItemId == job.Target.ItemId;
-                    log.Info($"  row {row} → storeroom {container}/{slot}: {(held.ItemId == 0 ? "nothing?" : data.ItemName(held.ItemId))}{(right ? " (this one)" : string.Empty)}");
+                    // The piece in the dye the plan chose it in (the design's, or one to dye) while the storeroom
+                    // has one: 0.3.2 took any of the item, so an undyed table placed for a black one used up a
+                    // dye and the black one was left over.
+                    var sameItem = held.ItemId == job.Target.ItemId;
+                    var dye = job.Entry?.Stock?.Stain ?? job.Target.Stain;
+                    var right = sameItem && (held.Stain == dye || !occupied.Any(o => o.ItemId == held.ItemId && o.Stain == dye));
+                    log.Info($"  row {row} → storeroom {container}/{slot}: {(held.ItemId == 0 ? "nothing?" : data.ItemName(held.ItemId))}"
+                             + $"{(right ? " (this one)" : sameItem ? $" in {DyeWord(held.Stain)}; the storeroom has one in {DyeWord(dye)}" : string.Empty)}");
                     if (right)
                     {
                         chosen[0] = row;
@@ -1227,7 +1249,7 @@ public sealed unsafe class PlacementRunner : IDisposable
                     {
                         Step.Wait("Its menu closes", () => !GameUi.IsOpen(UiTable.ContextMenu), WindowWait),
                     };
-                    if (expected)
+                    if (expected && !sameItem)
                     {
                         // The row was meant to hold it (by its name, or remembered): the list has changed. Read it again, not scan.
                         log.Info($"  Row {row} was expected to hold {name}; the list has changed, so its names are read again.");
@@ -1265,7 +1287,7 @@ public sealed unsafe class PlacementRunner : IDisposable
         var storedBefore = -1;
         var inBagsBefore = -1;
         DateTime? since = null;
-        var settle = new Settle(3, TimeSpan.FromMilliseconds(100));
+        var settle = new Settle(3, Speed.Wait(100));
         var storeWords = UiTable.StoreLabels(Services.ClientState.ClientLanguage);
         var noStore = false;
         return new List<Step>
@@ -1334,6 +1356,15 @@ public sealed unsafe class PlacementRunner : IDisposable
                         var state = BagRoute.Stored(storedBefore, stored, inBagsBefore, inBags) ? $"{stored}|{inBags}" : null;
                         if (!settle.Update(state, DateTime.UtcNow)) return StepOutcome.Waiting;
                         log.Info($"  Stored: {stored} in the storeroom (was {storedBefore}), {inBags} in your bags (was {inBagsBefore}). Placing it from the storeroom.");
+                        // Its row goes where the list's order puts it, the rows after it moving down (rather than every row being learnt again).
+                        var occupiedNow = Occupied();
+                        if (rowsReady && rows.Count == occupiedNow.Count - 1)
+                        {
+                            var at = StoreroomOrder.FirstRow(occupiedNow.Select(o => o.ItemId).Where(i => i != job.Target.ItemId), data.SortKey, job.Target.ItemId);
+                            rows.Inserted(at);
+                            rowsDirty = true;
+                            log.Info($"  Its row should be {at}, by the list's order: the rows after it move down one.");
+                        }
                         // The list has one more row now: read again before looking for it.
                         namesStale = true;
                         listSettled = false;
@@ -1350,6 +1381,8 @@ public sealed unsafe class PlacementRunner : IDisposable
             },
         };
     }
+
+    private string DyeWord(byte stain) => stain == 0 ? "no dye" : data.DyeName(stain);
 
     /// <summary>How many of this item the storeroom holds.</summary>
     private int StoredCount(uint itemId) => InventoryReader.StoreroomOccupied(side).Count(o => o.ItemId == itemId);
@@ -1401,7 +1434,7 @@ public sealed unsafe class PlacementRunner : IDisposable
             {
                 HousingActions.AimHeld(job.Target.Position, job.Target.Yaw);
                 return StepOutcome.Done;
-            }, TimeSpan.FromMilliseconds(200)),
+            }, Speed.Wait(200)),
             Step.Act($"Set {name} down (the editor's set-down on the held piece, place anywhere on)", () =>
             {
                 HousingActions.AimHeld(job.Target.Position, job.Target.Yaw);
@@ -1420,12 +1453,12 @@ public sealed unsafe class PlacementRunner : IDisposable
                 lastToast = null;
                 setAt = DateTime.UtcNow;
                 return editor.Place(held) ? StepOutcome.Done : StepOutcome.Halt("Couldn't set the held piece down.");
-            }, TimeSpan.FromMilliseconds(150)),
+            }, Speed.Wait(150)),
             new Step
             {
                 Label = $"{name} appears in the room",
                 Key = "appears",
-                Delay = TimeSpan.FromMilliseconds(100),
+                Delay = Speed.Wait(100),
                 Timeout = TimeSpan.FromSeconds(4),
                 OnTimeout = StepStatus.Done, // decided here
                 Run = () =>
@@ -1535,7 +1568,7 @@ public sealed unsafe class PlacementRunner : IDisposable
             new Step
             {
                 Label = $"The dye window ({UiTable.DyeWindow}) opens",
-                Delay = TimeSpan.FromMilliseconds(200),
+                Delay = Speed.Wait(200),
                 Timeout = TimeSpan.FromSeconds(1),
                 OnTimeout = StepStatus.Done,
                 Run = () => GameUi.IsOpen(UiTable.DyeWindow) ? StepOutcome.Done : StepOutcome.Waiting,
@@ -1561,7 +1594,7 @@ public sealed unsafe class PlacementRunner : IDisposable
                         {
                             row[0] = Menus.DyeRow(GameUi.TextValues(UiTable.DyeWindow), dye, UiTable.DyeListFirstValue) ?? Fallback();
                             return StepOutcome.Done;
-                        }, TimeSpan.FromMilliseconds(300)),
+                        }, Speed.Wait(300)),
                     });
                     return StepOutcome.Done;
                 }
@@ -1654,7 +1687,7 @@ public sealed unsafe class PlacementRunner : IDisposable
             new Step
             {
                 Label = "Is it this piece?",
-                Delay = TimeSpan.FromMilliseconds(250),
+                Delay = Speed.Wait(250),
                 Timeout = TimeSpan.FromSeconds(1.5),
                 Run = () =>
                 {
@@ -1931,12 +1964,31 @@ public sealed unsafe class PlacementRunner : IDisposable
     private List<StoreroomRow> Occupied() =>
         InventoryReader.StoreroomOccupied(side).Select(o => new StoreroomRow(o.Container, o.Slot, o.ItemId, o.Stain)).ToList();
 
+    /// <summary>Takes placed pieces' rows out of the rows once the storeroom no longer holds them (see <see cref="rowsLeaving"/>).</summary>
+    private void RowLeft()
+    {
+        if (rowsLeaving.Count == 0) return;
+        // The lowest last, so taking one out doesn't move the others still to come out.
+        foreach (var leaving in rowsLeaving.OrderByDescending(l => l.Row).ToList())
+        {
+            if (InventoryReader.StillHolds(leaving.Slot)) continue;
+            rowsLeaving.Remove(leaving);
+            rows.Removed(leaving.Row);
+            for (var i = 0; i < rowsLeaving.Count; i++)
+                if (rowsLeaving[i].Row > leaving.Row) rowsLeaving[i] = (rowsLeaving[i].Row - 1, rowsLeaving[i].Slot);
+            rowsDirty = true;
+        }
+    }
+
     /// <summary>Saves the learnt rows for this house (every few seconds while they change, and when the run ends).</summary>
     private void SaveRows(bool force)
     {
         if (!rowsReady || !rowsDirty || DryRun) return;
         if (!force && DateTime.UtcNow - rowsSavedAt < RowsSaveEvery) return;
-        config.StoreroomRows[HouseKey] = rows.Export(StoreroomRows.Fingerprint(Occupied()));
+        var occupied = Occupied();
+        // Only rows that line up with the storeroom as it is now (not while a placed piece's row is still to come out).
+        if (rows.Count != occupied.Count || rowsLeaving.Count > 0) return;
+        config.StoreroomRows[HouseKey] = rows.Export(StoreroomRows.Fingerprint(occupied));
         config.Save();
         rowsDirty = false;
         rowsSavedAt = DateTime.UtcNow;

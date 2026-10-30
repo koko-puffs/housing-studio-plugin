@@ -279,6 +279,18 @@ public class StoreroomOrderTests
     }
 
     [Fact]
+    public void OneRowOffTakesTwoPicks()
+    {
+        // 100 different pieces, one row each: 0.3.2 took three picks for a prediction one row off (49, 51, 50).
+        var list = Enumerable.Range(1, 100).Select(i => (uint)i).ToList();
+        ListSortKey Key(uint i) => new(7, 20, 1000 * (int)i, i);
+        Assert.Equal(2, PicksToFind(list, Key, 51, predicted: 49));
+        Assert.Equal(2, PicksToFind(list, Key, 51, predicted: 51));
+        Assert.InRange(PicksToFind(list, Key, 51, predicted: 47), 1, 3);
+        Assert.InRange(PicksToFind(list, Key, 51, predicted: 53), 1, 3);
+    }
+
+    [Fact]
     public void AFarOffPredictionStillFindsItWithoutScanning()
     {
         // 0.3.1 picked up to 28 rows one by one for a piece; from the wrong end of 445 rows this takes under 20.

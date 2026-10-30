@@ -14,11 +14,15 @@ The clicks come from two recordings a user made doing everything by hand ("Recor
 `Session/PlacementRunner.cs` builds a list of pieces (`Core/RunSequence.cs`): moves, then pieces from
 the storeroom and bags, floor pieces before what sits on them, and the dyes last (planned when the run
 gets there). Each piece is a list of steps run by `Core/StepQueue.cs`: waits poll every frame and go on
-the moment their condition holds (several checks can finish in one frame), at least 0.3 s between
-two game actions (window clicks and the editor's pick-up and set-down alike), each wait with a timeout, step-by-step mode holding before every
-click, and clean-up steps (close the menu or dye window it opened) when a piece ends badly. Between
-pieces it waits the pace set in Settings (± the jitter): Quick 0.15 s, Steady 0.4 s (the
-default; an old 1.5 s setting moves to it), Careful 1.5 s.
+the moment their condition holds (several checks can finish in one frame), at least the pace's click
+gap between two game actions (window clicks and the editor's pick-up and set-down alike; 0.3 s at
+Quick), each wait with a timeout, step-by-step mode holding before every click, and clean-up steps
+(close the menu or dye window it opened) when a piece ends badly. Between pieces it waits the pace's
+pause (± the jitter). The pace (`Core/Pacing.cs`, `PaceProfile`) sets the pause between pieces, the
+click gap and a scale for the settle checks and short pauses (`Speed.Wait`), never the timeouts:
+Steady 0.6 s / 0.45 s / ×1.5, Quick (the default since 0.3.3, 0.3.2's pace) 0.15 s / 0.3 s / ×1,
+Daring 0.05 s / 0.2 s / ×0.65. Before 0.3.3 the pace was only the pause between pieces: Careful
+(1.5 s) moves to Steady, the rest to Quick (`Configuration.Migrate`, version 5).
 
 **Timing.** Every step is logged when it ends, with how long it took ("→ Pick row 165: … (12 ms)"),
 and the end of a run (or a stop) logs a **Timing** summary: the average per piece and per phase, and
@@ -52,7 +56,7 @@ climbing. Now (`Core/Settle.cs`), a state only counts once it has read the same 
 **Speed, roughly.** For a storeroom piece whose row is found by name: pick the row, the preview
 settles (about 0.1 s), choose Place (0.3 s after the pick), the piece appears (about 0.2–0.5 s), the
 placement goes through (about 0.15–0.3 s), pick it up, held (about 0.12 s), set it down (0.3 s after
-the pick-up), it lands (0.1–0.5 s): about 1.8–2.2 s, plus the pace between pieces (0.4 s at Steady).
+the pick-up), it lands (0.1–0.5 s): about 1.8–2.2 s at Quick, plus the pause between pieces (0.15 s).
 The list settling now overlaps the move. 0.3.1 measured about 2.4 s a piece found by name.
 
 Every frame it checks: same home, permission, the editor open (or, for up to 8 s while it switches
@@ -120,7 +124,17 @@ order (an item that sorts differently), the search hands over to trying rows in 
 once a run, how many known rows the order predicts.
 
 A pick that turns out to be another piece (a probe) closes its menu in the same step: only the next
-pick waits the 0.3 s between actions (0.3.1 spent 0.6 s a row, closing with a second paced click).
+pick waits the gap between actions (0.3.1 spent 0.6 s a row, closing with a second paced click).
+
+**0.3.3's storeroom fixes.** A row is taken only in the dye the plan chose the piece in, while the
+storeroom has one in that dye (0.3.2 took any of the item, so an undyed table placed for a black one
+used up a dye and the black one was left over). A placed piece's row comes out of the rows once its
+slot is empty, even when the storeroom's count lags the new piece (0.3.2 kept it, and every later row
+was off by one); rows are saved only while they line up with the storeroom. A bag piece stored to be
+placed gets its row where the sort order puts it, the rows after it moving down (0.3.2 forgot every
+learnt row each time). After reading further rows by scrolling, the list is scrolled back to the top,
+since names are read again from row 0. And the sort-order search steps out from the prediction after
+a miss, not from the bound the miss moved: a prediction one row off now takes two picks, not three.
 
 **Finding a storeroom row quickly** (`Core/StoreroomRows.cs`). The list isn't in storeroom order, it
 shifts and re-sorts as pieces leave it, and it's grouped by item.

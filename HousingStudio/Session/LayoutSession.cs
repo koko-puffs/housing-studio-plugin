@@ -133,7 +133,16 @@ public sealed class LayoutSession
             if (live == null && why != null) Warnings.Add(why);
         }
 
-        foreach (var p in live ?? new List<LivePiece>()) Live[p.Key] = p;
+        // What's placed couldn't be read: no plan, rather than one that takes every placed piece for
+        // missing and places it again (and takes an old piece for a new one once the list loads).
+        if (live == null)
+        {
+            if (side == Side.Interior) Warnings.Add("Couldn't read the furniture placed here yet. Wait a moment, or open Housing → Indoor Furnishings.");
+            Plan = null;
+            PlanSide = side;
+            return;
+        }
+        foreach (var p in live) Live[p.Key] = p;
         var stock = InventoryReader.Read(data, side.Value, out var storeroomLoaded);
         StoreroomLoaded = storeroomLoaded;
 
@@ -143,8 +152,12 @@ public sealed class LayoutSession
         PlanSide = side;
     }
 
-    /// <summary>The layout's pieces for a side, where they go in this house or on this plot.</summary>
-    public List<Target> Targets(Side side)
+    /// <summary>
+    /// The layout's pieces for a side, where they go in this house or on this plot. Away from the plot,
+    /// a garden has none, unless <paramref name="toList"/>: then its pieces come as the design has them
+    /// (for listing; their positions are the design's own, not a spot in this ward).
+    /// </summary>
+    public List<Target> Targets(Side side, bool toList = false)
     {
         var list = new List<Target>();
         if (Layout == null) return list;
@@ -157,7 +170,13 @@ public sealed class LayoutSession
             return list;
         }
 
-        if (Plot is not { } plot) return list;
+        if (Plot is not { } plot)
+        {
+            if (toList)
+                foreach (var p in Layout.Garden)
+                    list.Add(new Target(p.Index, p.ItemId, p.Position, p.Yaw, data.StainOf(p.DyeHex), Floor.Garden, p.ParentIndex != null || data.GoesOnSomethingElse(p.ItemId)));
+            return list;
+        }
         var designPlot = DesignPlot(plot);
         foreach (var p in Layout.Garden)
         {

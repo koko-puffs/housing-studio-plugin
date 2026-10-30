@@ -5,7 +5,10 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.3.2, working in the game, being made quicker.** 0.3.2 also fixes a freeze on closing a
+> **Status: 0.3.3, working in the game.** 0.3.3 makes Quick (0.3.2's pace) the default, with Steady
+> for a slow connection and Daring for the impatient, and fixes the storeroom picking a piece in the
+> wrong dye, a garden or house whose placed furniture couldn't be read being planned as empty (every
+> piece placed again), and a few slow spots in the window (see [Pace](#pace)). 0.3.2 also fixes a freeze on closing a
 > design and the title bar's buttons; 0.3.0 is a new window (see [The window](#the-window)). Moving placed pieces and placing from
 > the storeroom (the game places the piece, then it's moved to its spot) work in game, at about 2.4 s
 > a piece in 0.3.1. 0.3.2 stops scanning the storeroom list row by row: storeroom pieces whose names
@@ -25,9 +28,8 @@ its exact spot, then dyes everything to match.
   **to move**, **in the storeroom** (the design's dye preferred), **in your bags** (bag, row, slot),
   or **missing**, with a **copyable shopping list** (pieces, the dyes to apply and the dyes to buy)
   and a checklist.
-- **Start placing** runs three phases, one piece at a time at the pace you set (Quick 0.15 s,
-  Steady 0.4 s (the default) or Careful 1.5 s between pieces, ± 25 %; at least 0.25 s between any two
-  clicks in the game's windows):
+- **Start placing** runs three phases, one piece at a time at the [pace](#pace) you set (Quick, the
+  default: 0.15 s between pieces ± 25 % and 0.3 s between any two clicks in the game's windows):
   1. **Move**: placed pieces are picked up and set at their spot with the editor's own functions.
   2. **Place**: storeroom pieces are picked in the furnishing list and placed where the game puts
      them, then moved to their exact spot; pieces from your bags are placed from the item's menu, the
@@ -48,7 +50,7 @@ its exact spot, then dyes everything to match.
 - **Safety**: only in a home you may decorate, with the furnishing editor open; it stops on leaving,
   a zone change, combat or a cutscene, losing permission, a window that doesn't appear in time, the
   furniture list changing under it, or a few pieces in a row failing; whatever a piece opened is
-  closed when it stops. A backup `.build` of what's placed is saved before every run.
+  closed when it stops. A backup `.build` of what's placed is saved before every run (the newest 50 are kept; files you save in the backups folder yourself stay).
 - **Inside and the garden separately** (garden coordinates are turned to match your plot).
 - **Markers in the world** where each piece goes, which way it faces, and the one being worked on.
 - **Near me** (only pieces within a few yalms of you: a room) and the floors to place; placing
@@ -90,7 +92,7 @@ One window, no tabs: what it shows follows what you're doing.
   **Near me**; each with its state and a **Show where** button that lights its spot in your home (and
   points at it when it's off screen). **Copy shopping list** and **Copy checklist** at the foot.
 - **Settings** (from the header, or Dalamud's settings button): what Start does (place for me, dye,
-  backup, pace: Careful 1.5 s, Steady 0.4 s, Quick 0.15 s between pieces), markers in the world,
+  backup, [pace](#pace): Steady, Quick or Daring), markers in the world,
   **More options** (place anywhere, pace variation, when to stop, chat, how far Near me reaches,
   storeroom and bags separately, floors to place, marker options, save what's placed as a build) and
   **Something not working?** (step by step, the old preview method, the recorder, the "Place" menu
@@ -98,6 +100,24 @@ One window, no tabs: what it shows follows what you're doing.
 
 While a run goes, Pieces and Settings are hidden, so nothing that steers the run changes under it.
 [docs/UI.md](docs/UI.md) maps each part of the design to the code that draws it.
+
+## Pace
+
+Settings → Pace sets how fast a run goes. Each piece is many small steps; a pace sets the pause
+between pieces, the least time between two clicks, and how long the plugin waits for the game to
+settle (its "the same for a few frames" checks). Timeouts aren't touched: they only decide when to
+give up.
+
+| Pace | Between pieces | Between clicks | Waits for the game |
+|---|---|---|---|
+| Steady | 0.6 s | 0.45 s | half as long again |
+| **Quick** (default) | 0.15 s | 0.3 s | as 0.3.2 |
+| Daring | 0.05 s | 0.2 s | two thirds |
+
+Quick is 0.3.2's pace, as tested in the game. Steady is for a slow connection or a busy house, or if
+pieces get skipped. Daring is for the daring: every step still waits for the game to say it's done,
+but with less to spare; if pieces get skipped, go back to Quick. Before 0.3.3 the pace was only the
+pause between pieces: Careful (1.5 s) becomes Steady, the rest Quick.
 
 ## Using it
 

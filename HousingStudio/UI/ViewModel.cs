@@ -73,6 +73,12 @@ public sealed class ViewModel
     /// <summary>Call right before <see cref="PlacementRunner.Start"/> with what it's given, so the figure counts those pieces.</summary>
     public void Starting(IEnumerable<PlanEntry> entries) => starting = entries.ToList();
 
+    /// <summary>The runner didn't start (nothing to do, or you got busy): forget what it was given, or the next run that starts itself (a restore) would count those.</summary>
+    public void NotStarted()
+    {
+        if (!runner.Active) starting = null;
+    }
+
     /// <summary>Every frame: notices a run starting and ending.</summary>
     public void Observe()
     {
@@ -114,7 +120,18 @@ public sealed class ViewModel
     /// <summary>The run stopped because you said so (not for safety).</summary>
     public bool StoppedByYou => runner.StopReason?.StartsWith("Stopped by you", StringComparison.Ordinal) == true;
 
-    public DateTime? BackupAt => runner.LastBackupPath is { } p && File.Exists(p) ? File.GetLastWriteTime(p) : null;
+    private (string? Path, DateTime? At) backupAt;
+
+    /// <summary>When the last backup was saved (read from the disk once per backup, not every frame).</summary>
+    public DateTime? BackupAt
+    {
+        get
+        {
+            var p = runner.LastBackupPath;
+            if (p != backupAt.Path) backupAt = (p, p != null && File.Exists(p) ? File.GetLastWriteTime(p) : null);
+            return backupAt.At;
+        }
+    }
 
     // ---------------------------------------------------------------------------------------------
     // Dyes missing, read from your bags once per plan.
@@ -170,6 +187,8 @@ public sealed class ViewModel
         var rows = new List<(string Path, bool Backup, DateTime At)>();
         foreach (var path in config.RecentFiles)
         {
+            // A hand-edited config can hold an empty entry: File.GetLastWriteTime throws on one, every frame.
+            if (string.IsNullOrWhiteSpace(path)) continue;
             var exists = File.Exists(path);
             var at = config.RecentOpened.TryGetValue(path, out var t) ? t : exists ? File.GetLastWriteTime(path) : DateTime.MinValue;
             rows.Add((path, IsBackup(path), at));
@@ -244,11 +263,16 @@ public sealed class ViewModel
                 var info = new FileInfo(path);
                 if (info.Length <= LayoutReader.MaxBytes) layout = LayoutReader.Parse(File.ReadAllText(path));
             }
-            catch (Exception ex) when (ex is LayoutFormatException or IOException or UnauthorizedAccessException)
+            catch (Exception)
             {
+                // Any file that can't be read is a row without its details (never a parse left pending,
+                // which would read the disk again every 0.25 s for the rest of the session).
             }
-            parsed[path] = (stamp, layout);
-            lock (parsing) parsing.Remove(path);
+            finally
+            {
+                parsed[path] = (stamp, layout);
+                lock (parsing) parsing.Remove(path);
+            }
         });
         return p.Layout;
     }

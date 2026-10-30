@@ -91,8 +91,8 @@ public static class StoreroomOrder
         var gap = (1 << Math.Min(picks, 20)) - 1;
         if (picks == 0 || (predicted > low && predicted < high && Free(predicted))) guess = Math.Clamp(predicted, low, high);
         else if (2 * gap >= high - low) guess = low + (high - low) / 2;
-        else if (predicted <= low) guess = low + gap;
-        else guess = high - gap;
+        // Out from the prediction, not from the bound the miss moved (0.3.2: one row off took three picks).
+        else guess = Math.Clamp(predicted <= low ? predicted + gap : predicted - gap, low, high);
         if (Free(guess)) return new Probe(guess, low, high, guess == predicted);
         // Taken: the free row nearest it.
         for (var d = 1; d <= high - low; d++)

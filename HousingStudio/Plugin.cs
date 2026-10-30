@@ -42,7 +42,7 @@ public sealed class Plugin : IDalamudPlugin
         if (config.Version < 3)
         {
             // 0.2.4: the pace presets got much quicker; the old default (1.5 s) becomes the new one (Steady, 0.4 s).
-            if (config.IntervalMs == 1500) config.IntervalMs = Pacing.DefaultMs;
+            if (config.IntervalMs == 1500) config.IntervalMs = 400;
             config.Version = 3;
             config.Save();
         }

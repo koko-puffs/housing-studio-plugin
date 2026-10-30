@@ -63,13 +63,13 @@ public sealed partial class MainWindow
             config.BackupBeforePlacing = !config.BackupBeforePlacing;
             config.Save();
         }
-        var pace = (int)PaceSetting.Of(config.IntervalMs);
-        SetRow(3, "Pace", null, Kit.SegmentedWidth(PaceSetting.Labels), S(40), p =>
+        var pace = (int)config.Pace;
+        SetRow(3, "Pace", PaceSetting.Note(config.Pace), Kit.SegmentedWidth(PaceSetting.Labels), S(40), p =>
         {
             var picked = Kit.Segmented("##pace", p, PaceSetting.Labels, pace);
             if (picked != pace)
             {
-                config.IntervalMs = PaceSetting.Ms((Pace)picked);
+                config.Pace = (Pace)picked;
                 config.Save();
             }
         });
@@ -384,7 +384,7 @@ public sealed partial class MainWindow
         sb.AppendLine($"Where: {session.Context}");
         sb.AppendLine($"Now: {UiRecorder.DescribeState()}");
         sb.AppendLine($"Settings: storeroom auto {config.StoreroomAutomatic}, bags auto {config.BagsAutomatic}, dyes {config.DyeAfterPlacing}, step by step {config.StepByStep}, " +
-                      $"move preview {config.MovePreviewBeforePlace}, place words \"{config.PlaceMenuWords}\", pace {config.IntervalMs} ms ±{config.Jitter:P0}");
+                      $"move preview {config.MovePreviewBeforePlace}, place words \"{config.PlaceMenuWords}\", pace {config.Pace} ±{config.Jitter:P0}");
         var (known, rows) = runner.StoreroomRowsKnown;
         sb.AppendLine($"Storeroom list rows known: {known} of {rows}");
         sb.AppendLine();

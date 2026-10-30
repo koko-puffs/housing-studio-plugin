@@ -222,6 +222,27 @@ public sealed class StoreroomRows
         Count = Math.Max(0, Count - 1);
     }
 
+    /// <summary>
+    /// A piece came into the storeroom (a bag piece stored to be placed) and its row is this one: the
+    /// rows from here on move down one. What was learnt stays (0.3.2 forgot every row each time); a row
+    /// put in the wrong place shows when it's picked, and is learnt again.
+    /// </summary>
+    public void Inserted(int row)
+    {
+        row = Math.Clamp(row, 0, Count);
+        ShiftDown(rows, row);
+        ShiftDown(inferred, row);
+        ShiftDown(names, row);
+        Count++;
+    }
+
+    private static void ShiftDown<T>(Dictionary<int, T> map, int row)
+    {
+        var moved = map.Where(kv => kv.Key >= row).OrderByDescending(kv => kv.Key).ToList();
+        foreach (var (r, _) in moved) map.Remove(r);
+        foreach (var (r, what) in moved) map[r + 1] = what;
+    }
+
     private static void Shift<T>(Dictionary<int, T> map, int row)
     {
         var moved = map.Where(kv => kv.Key > row).OrderBy(kv => kv.Key).ToList();

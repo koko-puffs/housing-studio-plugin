@@ -14,6 +14,9 @@ public static class Backups
 {
     public static string Folder => Path.Combine(Services.PluginInterface.ConfigDirectory.FullName, "backups");
 
+    /// <summary>How many of its own backups the folder keeps (the oldest go as new ones come; files you saved there yourself stay).</summary>
+    public const int Kept = 50;
+
     /// <summary>Writes a backup to the plugin's backups folder; returns its path, or null.</summary>
     public static string? Save(LayoutSession session, GameData data, ActivityLog log, string why)
     {
@@ -21,16 +24,38 @@ public static class Backups
         {
             Directory.CreateDirectory(Folder);
             var ctx = session.Context;
-            var name = $"{(ctx.Side == Side.Garden ? "garden" : "interior")}-{DateTime.Now:yyyyMMdd-HHmmss}.build";
-            var path = Path.Combine(Folder, name);
+            var stem = $"{(ctx.Side == Side.Garden ? "garden" : "interior")}-{DateTime.Now:yyyyMMdd-HHmmss}";
+            // Two in the same second (a run stopped and started again at once) mustn't overwrite each other.
+            var path = Path.Combine(Folder, stem + ".build");
+            for (var n = 2; File.Exists(path); n++) path = Path.Combine(Folder, $"{stem}-{n}.build");
             if (!SaveTo(path, session, data, $"Backup {why}")) return null;
             log.Done($"Saved a backup of what's placed ({why}) to {path}.");
+            Prune(log);
             return path;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             log.Error($"Couldn't save a backup: {ex.Message}");
             return null;
+        }
+    }
+
+    /// <summary>Deletes the plugin's own backups past the newest <see cref="Kept"/> (best effort).</summary>
+    private static void Prune(ActivityLog log)
+    {
+        try
+        {
+            var old = new DirectoryInfo(Folder).GetFiles("*.build")
+                .Where(f => f.Name.StartsWith("interior-", StringComparison.Ordinal) || f.Name.StartsWith("garden-", StringComparison.Ordinal))
+                .OrderByDescending(f => f.LastWriteTimeUtc)
+                .Skip(Kept)
+                .ToList();
+            foreach (var f in old) f.Delete();
+            if (old.Count > 0) log.Info($"Removed {old.Count} old backup{(old.Count == 1 ? "" : "s")} (the newest {Kept} are kept).");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            log.Warn($"Couldn't tidy the old backups: {ex.Message}");
         }
     }
 

@@ -112,13 +112,28 @@ public class SpeedTests
     }
 
     [Fact]
-    public void TheDefaultPaceIsSteady()
+    public void TheDefaultPaceIsQuickAndEachStepIsQuickerThanTheLast()
     {
-        Assert.Equal(400, Pacing.DefaultMs);
-        Assert.Equal(new[] { 150, 400, 1500 }, Pacing.Presets.Select(p => p.Ms));
-        Assert.InRange(Pacing.NextDelayMs(Pacing.SteadyMs, 0.25f, 0), 300, 300);
-        Assert.InRange(Pacing.NextDelayMs(Pacing.QuickMs, 0.25f, 0), 150, 150);
+        Assert.Equal(Pace.Quick, Pacing.Default);
+        // Quick is 0.3.2's pace, as tested in game.
+        var quick = Pacing.Profile(Pace.Quick);
+        Assert.Equal((150, 300, 1.0), (quick.PieceGapMs, quick.ClickGapMs, quick.WaitScale));
+        var (steady, daring) = (Pacing.Profile(Pace.Steady), Pacing.Profile(Pace.Daring));
+        Assert.True(steady.PieceGapMs > quick.PieceGapMs && quick.PieceGapMs > daring.PieceGapMs);
+        Assert.True(steady.ClickGapMs > quick.ClickGapMs && quick.ClickGapMs > daring.ClickGapMs);
+        Assert.True(steady.WaitScale > quick.WaitScale && quick.WaitScale > daring.WaitScale);
+        Assert.True(daring.PieceGapMs >= Pacing.MinimumMs);
+        Assert.Equal(TimeSpan.FromMilliseconds(120), quick.Wait(120));
+        Assert.Equal(TimeSpan.FromMilliseconds(180), steady.Wait(120));
+        // An unknown value (a hand-edited config) is the default's.
+        Assert.Equal(quick, Pacing.Profile((Pace)7));
     }
+
+    [Theory]
+    [InlineData(1500, Pace.Steady)]
+    [InlineData(400, Pace.Quick)]
+    [InlineData(150, Pace.Quick)]
+    public void OlderPacesMoveToTheNewOnes(int intervalMs, Pace expected) => Assert.Equal(expected, Pacing.FromOldInterval(intervalMs));
 
     [Fact]
     public void SummarisesWhereTheTimeWent()

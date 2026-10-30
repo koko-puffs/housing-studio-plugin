@@ -72,6 +72,22 @@ public class StoreroomGroupTests
     }
 
     [Fact]
+    public void APieceStoredMovesTheRowsAfterItDown()
+    {
+        var rows = new StoreroomRows();
+        rows.Reset(4);
+        rows.Learn(0, R(1, 11));
+        rows.Learn(3, R(4, 14));
+        rows.LearnNames(0, new[] { "A", "B", "C", "D" });
+        rows.Inserted(2); // a bag piece stored, its row 2 by the list's order
+        Assert.Equal(5, rows.Count);
+        Assert.Equal(0, rows.Find(11, 0));
+        Assert.Equal(4, rows.Find(14, 0));
+        Assert.Equal("D", rows.Names[4]);
+        Assert.False(rows.Names.ContainsKey(2));
+    }
+
+    [Fact]
     public void OnlyARowThatStartsAGroupInfersIt()
     {
         var rows = new StoreroomRows();
@@ -168,6 +184,8 @@ public class DyeRowTests
 
 public class RunEstimateTests
 {
+    private static PaceProfile Gap(int ms) => new(Pace.Quick, "Test", ms, 300, 1.0);
+
     private static RunJob J(RunPhase phase, JobOutcome outcome, double seconds = 0)
     {
         var kind = phase switch { RunPhase.Move => JobKind.Move, RunPhase.Place => JobKind.PlaceFromStoreroom, _ => JobKind.Dye };
@@ -185,19 +203,27 @@ public class RunEstimateTests
     {
         var jobs = new[] { J(RunPhase.Place, JobOutcome.Done, 3), J(RunPhase.Place, JobOutcome.Done, 5), J(RunPhase.Place, JobOutcome.Pending), J(RunPhase.Place, JobOutcome.Pending) };
         // Two left at 4 s each, plus 1 s between pieces.
-        Assert.Equal(TimeSpan.FromSeconds(10), RunEstimate.TimeLeft(jobs, 1000));
+        Assert.Equal(TimeSpan.FromSeconds(10), RunEstimate.TimeLeft(jobs, Gap(1000)));
     }
 
     [Fact]
     public void GuessesBeforeAnythingIsMeasuredAndCountsDyesToCome()
     {
         var jobs = new[] { J(RunPhase.Move, JobOutcome.Pending) };
-        Assert.Equal(TimeSpan.FromSeconds(1.5 + 1.5), RunEstimate.TimeLeft(jobs, 1500));
-        Assert.Equal(TimeSpan.FromSeconds(Math.Round(3 + 2 * (5 + 1.5))), RunEstimate.TimeLeft(jobs, 1500, dyesStillToPlan: true, dyesExpected: 2));
+        Assert.Equal(TimeSpan.FromSeconds(1.5 + 1.5), RunEstimate.TimeLeft(jobs, Gap(1500)));
+        Assert.Equal(TimeSpan.FromSeconds(Math.Round(3 + 2 * (5 + 1.5))), RunEstimate.TimeLeft(jobs, Gap(1500), dyesStillToPlan: true, dyesExpected: 2));
     }
 
     [Fact]
-    public void NothingLeftIsZero() => Assert.Equal(TimeSpan.Zero, RunEstimate.TimeLeft(new[] { J(RunPhase.Move, JobOutcome.Done, 2) }, 1500));
+    public void ASlowerPaceGuessesLonger()
+    {
+        var jobs = new[] { J(RunPhase.Place, JobOutcome.Pending) };
+        Assert.True(RunEstimate.TimeLeft(jobs, Pacing.Profile(Pace.Steady)) > RunEstimate.TimeLeft(jobs, Pacing.Profile(Pace.Quick)));
+        Assert.True(RunEstimate.TimeLeft(jobs, Pacing.Profile(Pace.Quick)) > RunEstimate.TimeLeft(jobs, Pacing.Profile(Pace.Daring)));
+    }
+
+    [Fact]
+    public void NothingLeftIsZero() => Assert.Equal(TimeSpan.Zero, RunEstimate.TimeLeft(new[] { J(RunPhase.Move, JobOutcome.Done, 2) }, Gap(1500)));
 }
 
 public class StepQueueRound2Tests
