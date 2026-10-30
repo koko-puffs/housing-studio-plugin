@@ -1,7 +1,7 @@
 # Housing Studio (FFXIV plugin)
 
 A Dalamud plugin that furnishes your house for you from a design on
-[Housing Studio](https://kokos-tools.vercel.app/housing-studio).
+[Housing Studio](https://kokos-tools.com/housing-studio).
 
 Load a design (a `.build` from Housing Studio, or a MakePlace `.json`) and the plugin shows
 what you already have: placed, in your bags, in your storeroom, or still to buy. Press
