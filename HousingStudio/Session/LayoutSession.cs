@@ -194,6 +194,18 @@ public sealed class LayoutSession
         return bestDist < 40 ? best : fallback;
     }
 
+    /// <summary>
+    /// The dyes this design still needs beyond what's in your bags (each dyeing uses one): for pieces
+    /// missing, coming from your bags, or in another dye now. Counts only a Stain's own dye items (the
+    /// game's dye window may also offer a general dye such as Standard Spectrum Dye). Framework thread.
+    /// </summary>
+    public List<(byte Stain, string Name, int Count)> MissingDyes()
+    {
+        if (Plan == null) return new List<(byte, string, int)>();
+        var owned = Plan.Entries.Select(e => e.Target.Stain).Where(s => s != 0).Distinct().ToDictionary(s => s, s => HousingActions.DyesOwned(data, s));
+        return DyePlanner.ToBuy(Plan, owned).Select(b => (b.Stain, data.DyeName(b.Stain), b.Count)).ToList();
+    }
+
     /// <summary>"a medium house", "an apartment".</summary>
     private static string Home(string size) => size == "Apartment" ? "an apartment" : $"a {size.ToLowerInvariant()} house";
 

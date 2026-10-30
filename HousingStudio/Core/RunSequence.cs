@@ -44,12 +44,45 @@ public sealed class RunJob
     public JobOutcome Outcome { get; set; } = JobOutcome.Pending;
     public string? Note { get; set; }
 
+    /// <summary>Why it didn't work, when it didn't (for the problems list).</summary>
+    public ProblemKind Problem { get; set; }
+
+    /// <summary>When work on it started and ended (for the time left).</summary>
+    public DateTime? StartedAt { get; set; }
+    public DateTime? EndedAt { get; set; }
+
     public RunPhase Phase => Kind switch
     {
         JobKind.Move => RunPhase.Move,
         JobKind.Dye => RunPhase.Dye,
         _ => RunPhase.Place,
     };
+}
+
+/// <summary>Why a piece didn't work, for the problems list.</summary>
+public enum ProblemKind
+{
+    None,
+
+    /// <summary>Not where the plan said: not in the storeroom list, not in the bags, no longer placed.</summary>
+    NotFound,
+
+    /// <summary>Placed or moved, but the game didn't put it at its spot (or didn't place it at all).</summary>
+    DidNotLand,
+
+    /// <summary>The dye isn't in your bags (or the game wouldn't use it).</summary>
+    DyeMissing,
+
+    /// <summary>The dye was chosen but the piece didn't change.</summary>
+    DyeFailed,
+
+    /// <summary>The game hasn't loaded the piece (too far away).</summary>
+    NotLoaded,
+
+    /// <summary>Skipped by you.</summary>
+    Skipped,
+
+    Other,
 }
 
 public enum JobOutcome
@@ -164,5 +197,42 @@ public static class DyePlanner
             .OrderBy(x => x.Stain)
             .ToList();
         return needed;
+    }
+}
+
+/// <summary>How long a run has left, from what it has measured so far. Pure, so it's tested.</summary>
+public static class RunEstimate
+{
+    /// <summary>
+    /// The pieces left times how long a piece has taken (the same phase's average when there is
+    /// one, else the run's, else a guess from the pace), plus the pause between pieces.
+    /// </summary>
+    public static TimeSpan TimeLeft(IReadOnlyList<RunJob> jobs, int intervalMs, bool dyesStillToPlan = false, int dyesExpected = 0)
+    {
+        var finished = jobs.Where(j => j.StartedAt != null && j.EndedAt != null && j.Outcome is JobOutcome.Done).ToList();
+        double Average(IEnumerable<RunJob> js)
+        {
+            var list = js.Select(j => (j.EndedAt!.Value - j.StartedAt!.Value).TotalSeconds).ToList();
+            return list.Count == 0 ? double.NaN : list.Average();
+        }
+        var overall = Average(finished);
+        var pause = Math.Max(Pacing.MinimumMs, intervalMs) / 1000.0;
+        double PerPiece(RunPhase phase)
+        {
+            var a = Average(finished.Where(j => j.Phase == phase));
+            if (!double.IsNaN(a)) return a;
+            if (!double.IsNaN(overall)) return overall;
+            return phase switch
+            {
+                RunPhase.Move => 1.5,
+                RunPhase.Place => 4,
+                _ => 5,
+            };
+        }
+        var seconds = 0.0;
+        foreach (var j in jobs.Where(j => j.Outcome is JobOutcome.Pending or JobOutcome.Working))
+            seconds += PerPiece(j.Phase) + pause;
+        if (dyesStillToPlan) seconds += dyesExpected * (PerPiece(RunPhase.Dye) + pause);
+        return TimeSpan.FromSeconds(Math.Round(seconds));
     }
 }

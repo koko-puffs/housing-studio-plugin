@@ -1,50 +1,93 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace HousingStudio.Core;
 
 /// <summary>What one row of the furnishing list's storeroom tab holds: its storeroom slot and item.</summary>
 public readonly record struct StoreroomRow(int Container, int Slot, uint ItemId, byte Stain);
 
+/// <summary>The rows learnt in a house, saved between runs (Configuration), with what the storeroom held then.</summary>
+[Serializable]
+public sealed class SavedRows
+{
+    public string Fingerprint { get; set; } = string.Empty;
+    public int Count { get; set; }
+
+    /// <summary>Each row as [row, container, slot, item, stain].</summary>
+    public List<long[]> Rows { get; set; } = new();
+}
+
 /// <summary>
-/// The furnishing list's storeroom tab, row by row, as learnt during a run. The list isn't in the
-/// storeroom's slot order (0.2.0's guess was wrong: a user's recording showed rows 26–37 holding
-/// slots of three containers in no slot order), and there's no known way yet to read it without
-/// picking a row, so each row is picked once, what the game says it holds is kept here, and every
-/// later piece of the run looks here first. Picking a row and placing its piece removes that row,
-/// so the rows below it move up one. Pure, so it's tested without the game.
+/// The furnishing list's storeroom tab, row by row. The list isn't in the storeroom's slot order but
+/// it is grouped by item (a user's run: rows 0–2 Simple Hingan Pillar, 3–4 Planter Partition, 5–6
+/// Verdant Partition…), so:
+/// <list type="bullet">
+/// <item>rows are found by name first, when the list's own row names can be read
+/// (<see cref="ByName"/>);</item>
+/// <item>otherwise rows are picked from the top, and once a row turns out to start an item's group,
+/// the rest of the group (the storeroom says how many of it there are) is inferred and skipped, so a
+/// scan picks about one row per different item;</item>
+/// <item>every row picked is kept (<see cref="Known"/>), for the rest of the run and, saved per house,
+/// for later runs while the storeroom holds the same pieces (<see cref="Fingerprint"/>);</item>
+/// <item>a piece placed from a row removes it, and the rows below move up one.</item>
+/// </list>
+/// Picking a row always shows which slot the game really picked, so a wrong guess costs one pick.
+/// Pure, so it's tested without the game.
 /// </summary>
 public sealed class StoreroomRows
 {
     private readonly Dictionary<int, StoreroomRow> rows = new();
+    private readonly Dictionary<int, uint> inferred = new();
 
     /// <summary>How many rows the list has (the storeroom's pieces), when last told.</summary>
     public int Count { get; private set; }
 
+    /// <summary>Rows picked, and what the game said they hold.</summary>
     public IReadOnlyDictionary<int, StoreroomRow> Known => rows;
 
-    /// <summary>Starts over (a new run, or the list was found to have changed).</summary>
+    /// <summary>Rows not picked yet but taken to hold an item, from its group's size.</summary>
+    public IReadOnlyDictionary<int, uint> Inferred => inferred;
+
+    /// <summary>Starts over (a new house, or the list was found to have changed).</summary>
     public void Reset(int count)
     {
         rows.Clear();
+        inferred.Clear();
         Count = Math.Max(0, count);
     }
 
-    /// <summary>The game said picking <paramref name="row"/> picks this slot and item.</summary>
-    public void Learn(int row, StoreroomRow what)
+    /// <summary>
+    /// The game said picking <paramref name="row"/> picks this slot and item. With
+    /// <paramref name="groupSize"/> (how many of that item the storeroom holds), a row that starts a
+    /// group (the row above holds something else, or it's the first) lets the rest of the group be inferred.
+    /// </summary>
+    public void Learn(int row, StoreroomRow what, int groupSize = 0)
     {
         if (row < 0) return;
         // A slot is in one row only: if it was thought to be elsewhere, that was out of date.
         foreach (var stale in rows.Where(kv => kv.Key != row && kv.Value.Container == what.Container && kv.Value.Slot == what.Slot).Select(kv => kv.Key).ToList())
             rows.Remove(stale);
+        if (inferred.TryGetValue(row, out var guessed) && guessed != what.ItemId)
+            inferred.Clear(); // a group wasn't the size it seemed: stop trusting the guesses
+        inferred.Remove(row);
         rows[row] = what;
         if (row >= Count) Count = row + 1;
+
+        var startsGroup = row == 0 || ItemAt(row - 1) is { } above && above != what.ItemId;
+        if (startsGroup && groupSize > 1)
+            for (var r = row + 1; r < row + groupSize && r < Count; r++)
+                if (!rows.ContainsKey(r)) inferred[r] = what.ItemId;
     }
 
+    private uint? ItemAt(int row) =>
+        rows.TryGetValue(row, out var k) ? k.ItemId : inferred.TryGetValue(row, out var i) ? i : null;
+
     /// <summary>
-    /// A known row holding this item: one in the wanted dye first, then any. Null when none is known
-    /// yet (pick <see cref="NextUnknown"/> rows until one turns up).
+    /// A known row holding this item (one in the wanted dye first), else an inferred one. Null when
+    /// none is known yet.
     /// </summary>
     public int? Find(uint itemId, byte stain)
     {
@@ -55,14 +98,33 @@ public sealed class StoreroomRows
             if (what.Stain == stain) return row;
             any ??= row;
         }
-        return any;
+        if (any != null) return any;
+        foreach (var (row, item) in inferred.OrderBy(kv => kv.Key))
+            if (item == itemId) return row;
+        return null;
     }
 
-    /// <summary>The first row not picked yet, or null when every row is known.</summary>
+    /// <summary>
+    /// Rows the list's own names say hold this item (<paramref name="rowNames"/>: the list's rows in
+    /// order), leaving out rows already known to hold something else.
+    /// </summary>
+    public List<int> ByName(IReadOnlyList<string> rowNames, string itemName, uint itemId)
+    {
+        var list = new List<int>();
+        for (var r = 0; r < rowNames.Count; r++)
+        {
+            if (!string.Equals(Menus.Clean(rowNames[r]), Menus.Clean(itemName), StringComparison.OrdinalIgnoreCase)) continue;
+            if (rows.TryGetValue(r, out var known) && known.ItemId != itemId) continue;
+            list.Add(r);
+        }
+        return list;
+    }
+
+    /// <summary>The first row neither picked nor inferred, or null when every row is accounted for.</summary>
     public int? NextUnknown()
     {
         for (var r = 0; r < Count; r++)
-            if (!rows.ContainsKey(r)) return r;
+            if (!rows.ContainsKey(r) && !inferred.ContainsKey(r)) return r;
         return null;
     }
 
@@ -70,18 +132,52 @@ public sealed class StoreroomRows
     public void Removed(int row)
     {
         if (row < 0) return;
-        var moved = rows.Where(kv => kv.Key > row).OrderBy(kv => kv.Key).ToList();
-        rows.Remove(row);
-        foreach (var (r, _) in moved) rows.Remove(r);
-        foreach (var (r, what) in moved) rows[r - 1] = what;
+        Shift(rows, row);
+        Shift(inferred, row);
         Count = Math.Max(0, Count - 1);
     }
 
-    /// <summary>Picking a known row picked something else: the list changed, so forget it all.</summary>
+    private static void Shift<T>(Dictionary<int, T> map, int row)
+    {
+        var moved = map.Where(kv => kv.Key > row).OrderBy(kv => kv.Key).ToList();
+        map.Remove(row);
+        foreach (var (r, _) in moved) map.Remove(r);
+        foreach (var (r, what) in moved) map[r - 1] = what;
+    }
+
+    /// <summary>Does a known row still pick the slot it did?</summary>
     public bool Matches(int row, StoreroomRow seen) =>
         rows.TryGetValue(row, out var known) && known.Container == seen.Container && known.Slot == seen.Slot;
 
     /// <summary>The rows as text, for the log ("12 → 27006/36 Oak Table").</summary>
     public IEnumerable<string> Describe(Func<uint, string> itemName) =>
         rows.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key} → {kv.Value.Container}/{kv.Value.Slot} {itemName(kv.Value.ItemId)}");
+
+    /// <summary>
+    /// A short hash of what the storeroom holds (every slot, item and dye), to tell whether rows saved
+    /// earlier still apply: the list only stays the same while the storeroom does.
+    /// </summary>
+    public static string Fingerprint(IEnumerable<StoreroomRow> occupied)
+    {
+        var text = string.Join(";", occupied.OrderBy(o => o.Container).ThenBy(o => o.Slot).Select(o => $"{o.Container}/{o.Slot}={o.ItemId}:{o.Stain}"));
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)))[..16];
+    }
+
+    public SavedRows Export(string fingerprint) => new()
+    {
+        Fingerprint = fingerprint,
+        Count = Count,
+        Rows = rows.OrderBy(kv => kv.Key).Select(kv => new long[] { kv.Key, kv.Value.Container, kv.Value.Slot, kv.Value.ItemId, kv.Value.Stain }).ToList(),
+    };
+
+    /// <summary>Loads saved rows if they were saved for the storeroom as it is now; false (and nothing loaded) otherwise.</summary>
+    public bool Import(SavedRows? saved, string fingerprint)
+    {
+        if (saved == null || saved.Fingerprint != fingerprint || saved.Rows.Count == 0) return false;
+        Reset(saved.Count);
+        foreach (var r in saved.Rows)
+            if (r.Length >= 5 && r[0] >= 0 && r[0] < saved.Count)
+                rows[(int)r[0]] = new StoreroomRow((int)r[1], (int)r[2], (uint)r[3], (byte)r[4]);
+        return true;
+    }
 }

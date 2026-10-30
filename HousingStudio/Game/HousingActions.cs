@@ -67,6 +67,19 @@ public sealed unsafe class HousingActions
         return true;
     }
 
+    /// <summary>
+    /// Opens the Housing menu without going through the main menu (a recording showed you opening it
+    /// from Social → Housing): asks the housing agent to show itself. Unconfirmed; the run logs
+    /// whether the menu appeared, and asks you to open it if it didn't.
+    /// </summary>
+    public static bool OpenHousingMenu()
+    {
+        var agent = AgentModule.Instance()->GetAgentByInternalId(AgentId.Housing);
+        if (agent == null) return false;
+        if (!agent->IsAgentActive()) agent->Show();
+        return true;
+    }
+
     /// <summary>Opens the dye window on the piece the editor has picked (dye mode).</summary>
     public bool OpenDyeWindow()
     {
@@ -104,6 +117,20 @@ public sealed unsafe class HousingActions
             done = true;
         }
         return done;
+    }
+
+    /// <summary>
+    /// Moves the preview the game shows of a storeroom piece being picked (Refurnish's technique;
+    /// choosing Place then puts the piece where the preview is, as Recording 2 showed). Only the
+    /// preview object: never a piece already in the room.
+    /// </summary>
+    public static bool AimPreview(Vector3 position, float yaw)
+    {
+        var preview = FurnitureReader.Preview();
+        if (preview == null) return false;
+        preview->SetPosition(position.X, position.Y, position.Z);
+        preview->SetRotation(yaw);
+        return true;
     }
 
     /// <summary>Where the preview is now, or null.</summary>

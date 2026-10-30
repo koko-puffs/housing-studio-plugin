@@ -91,6 +91,7 @@ public sealed class Plugin : IDalamudPlugin
         try
         {
             var ctx = HousingContext.Read(Plots);
+            runner.Update();
             runner.Tick(ctx);
             recorder.Tick();
             if (DateTime.UtcNow >= nextRefresh)

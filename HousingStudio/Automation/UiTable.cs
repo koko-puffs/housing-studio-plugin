@@ -15,6 +15,10 @@ namespace HousingStudio.Automation;
 /// them opening Indoor Furnishings and Furnishing Color, switching Move/Rotate, opening the Storeroom
 /// tab, placing a storeroom piece, dyeing a piece, closing the editor. Values marked so are seen
 /// working in the game.</item>
+/// <item>[Recording 2] The same user, with 0.2.1: placing from the bags and from the storeroom,
+/// moving, leaving the editor, then dyeing through Furnishing Color's list (right-click → Paint).
+/// Opening the Housing menu itself went through the main menu (Social → Housing), which isn't replayed:
+/// the plugin asks the housing agent to show it instead.</item>
 /// <item>[Run 1] The same user's run of 0.2.0: picking furnishing-list rows with (1, row) opened their
 /// menus and picked storeroom slots, in no slot order.</item>
 /// <item>[Refurnish] Wyse2011/Refurnish (API 15): the furnishing list's row pick (1, row) and the menu's
@@ -80,10 +84,27 @@ public static class UiTable
     /// <summary>The Storeroom tab. [Recording 1]</summary>
     public static readonly UiCall ListStoreroomTab = new(FurnishingList, "i:11", true, "Recording 1");
 
-    /// <summary>Pick the n-th row of the list (opens its menu). [Refurnish, Run 1]</summary>
-    public static readonly UiCall ListSelect = new(FurnishingList, "i:1 i:{index}", false, "Refurnish, Run 1");
+    /// <summary>
+    /// Pick the n-th row of the list: opens its menu and shows a preview of the piece in the room
+    /// (mode stays Rotate). [Recording 2: HousingGoods [i:1, u:3] — the row is unsigned, close true]
+    /// </summary>
+    public static readonly UiCall ListSelect = new(FurnishingList, "i:1 u:{index}", true, "Recording 2");
 
-    /// <summary>Choose a menu entry ("Place" was entry 0 for a storeroom row). [Recording 1]</summary>
+    /// <summary>Leave the editor: the furnishing list's close (sent with the bar's [-2]). [Recording 2]</summary>
+    public static readonly UiCall ListClose = new(FurnishingList, "i:-2", false, "Recording 2");
+
+    // ---------- the dye mode's list ----------
+
+    /// <summary>Pick the n-th piece in Furnishing Color's list (the editor's active item becomes it). [Recording 2: HousingGoodsStain [i:0, u:1]]</summary>
+    public static readonly UiCall DyeListSelect = new(DyeList, "i:0 u:{index}", true, "Recording 2");
+
+    /// <summary>Open the n-th piece's menu in Furnishing Color's list (its entry 0 is "Paint"). [Recording 2: HousingGoodsStain [i:1, u:1]]</summary>
+    public static readonly UiCall DyeListMenu = new(DyeList, "i:1 u:{index}", true, "Recording 2");
+
+    /// <summary>Close the Housing menu. [Recording 2: HousingMenu [i:-32]]</summary>
+    public static readonly UiCall MenuClose = new(HousingMenu, "i:-32", true, "Recording 2");
+
+    /// <summary>Choose a menu entry ("Place" is entry 0 for a storeroom row and a bag item, "Paint" for a dye-list row). [Recordings 1 and 2]</summary>
     public static readonly UiCall MenuChoose = new(ContextMenu, "i:0 i:{entry} u:0 empty empty", true, "Recording 1");
 
     /// <summary>Close a menu without choosing. [Refurnish's learned cancel]</summary>
@@ -146,9 +167,19 @@ public static class UiTable
         _ => new[] { "Place" },
     };
 
+    /// <summary>The words of the "Paint" entry in a Furnishing Color list row's menu. English confirmed (Recording 2).</summary>
+    public static IReadOnlyList<string> PaintLabels(ClientLanguage language) => language switch
+    {
+        ClientLanguage.Japanese => new[] { "染色する", "染色" },
+        ClientLanguage.German => new[] { "Färben" },
+        ClientLanguage.French => new[] { "Teindre" },
+        _ => new[] { "Paint" },
+    };
+
     public static IEnumerable<UiCall> All() => new[]
     {
-        MenuFurnishings, MenuDye, LayoutMove, LayoutRotate, LayoutClose, DyeListClose, ListStoreroomTab, ListSelect,
+        MenuFurnishings, MenuDye, MenuClose, LayoutMove, LayoutRotate, LayoutClose, ListClose, DyeListClose, ListStoreroomTab, ListSelect,
+        DyeListSelect, DyeListMenu,
         MenuChoose, MenuCancel, YesNoYes, DyeShade, DyePick, DyeApply, DyeClose, DyeConfirmYes, DyeConfirmNo,
     };
 }

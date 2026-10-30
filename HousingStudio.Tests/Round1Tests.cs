@@ -132,11 +132,19 @@ public class ModeRouteTests
     }
 
     [Fact]
-    public void NoWayWhileAPieceIsHeldOrNothingIsOpen()
+    public void NoWayWhileAPieceIsHeld()
     {
         Assert.Null(ModeRoute.Plan(EditorMode.Place, EditorMode.Rotate, true));
-        Assert.Null(ModeRoute.Plan(EditorMode.None, EditorMode.Rotate, false));
-        Assert.Null(ModeRoute.Plan(EditorMode.None, EditorMode.Dye, false));
+        Assert.Null(ModeRoute.Plan(EditorMode.Place, EditorMode.Dye, false));
+    }
+
+    [Fact]
+    public void FromNothingOpensTheHousingMenuFirst()
+    {
+        Assert.Equal(new[] { ModeClick.OpenHousingMenu, ModeClick.OpenFurnishings }, ModeRoute.Plan(EditorMode.None, EditorMode.Rotate, false));
+        Assert.Equal(new[] { ModeClick.OpenHousingMenu, ModeClick.OpenDye }, ModeRoute.Plan(EditorMode.None, EditorMode.Dye, false));
+        Assert.True(ModeRoute.LeadsToHousingMenu(ModeClick.OpenHousingMenu));
+        Assert.False(ModeRoute.LeadsToHousingMenu(ModeClick.OpenDye));
     }
 
     [Fact]

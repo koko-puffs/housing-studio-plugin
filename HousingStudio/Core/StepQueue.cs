@@ -19,12 +19,12 @@ public enum StepStatus
     Stop,
 }
 
-public readonly record struct StepOutcome(StepStatus Status, string? Message = null)
+public readonly record struct StepOutcome(StepStatus Status, string? Message = null, ProblemKind Problem = ProblemKind.Other)
 {
     public static StepOutcome Done => new(StepStatus.Done);
     public static StepOutcome Waiting => new(StepStatus.Waiting);
-    public static StepOutcome Skip(string why) => new(StepStatus.SkipJob, why);
-    public static StepOutcome Halt(string why) => new(StepStatus.Stop, why);
+    public static StepOutcome Skip(string why, ProblemKind problem = ProblemKind.Other) => new(StepStatus.SkipJob, why, problem);
+    public static StepOutcome Halt(string why, ProblemKind problem = ProblemKind.Other) => new(StepStatus.Stop, why, problem);
 }
 
 /// <summary>
@@ -39,11 +39,17 @@ public sealed class Step
     public bool IsAction { get; init; }
     public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(3);
 
-    /// <summary>What a timeout means: by default the whole run stops ("an expected window didn't appear").</summary>
+    /// <summary>
+    /// What a timeout means: by default the whole run stops ("an expected window didn't appear");
+    /// SkipJob skips the piece; Done just goes on to the next step (a wait that may run out).
+    /// </summary>
     public StepStatus OnTimeout { get; init; } = StepStatus.Stop;
 
     /// <summary>What to say when it times out (default: "Timed out: label").</summary>
     public string? TimeoutMessage { get; init; }
+
+    /// <summary>What kind of problem a timeout is, for the problems list.</summary>
+    public ProblemKind TimeoutProblem { get; init; } = ProblemKind.Other;
 
     /// <summary>A short wait before the step first runs (the game needs a moment after a click).</summary>
     public TimeSpan Delay { get; init; }
@@ -101,6 +107,9 @@ public sealed class StepQueue
     /// <summary>Why the piece was skipped or the run stopped.</summary>
     public string? Message { get; private set; }
 
+    /// <summary>What kind of problem ended the piece, when one did.</summary>
+    public ProblemKind Problem { get; private set; }
+
     public Step? Current => index < steps.Count ? steps[index] : null;
     public int Index => index;
     public int Count => steps.Count;
@@ -121,6 +130,7 @@ public sealed class StepQueue
         approved = false;
         finishEarly = false;
         Message = null;
+        Problem = ProblemKind.None;
         State = steps.Count == 0 ? QueueState.Finished : QueueState.Running;
     }
 
@@ -138,7 +148,7 @@ public sealed class StepQueue
     }
 
     /// <summary>Ends the piece now (Stop pressed), running the clean-up.</summary>
-    public void Abort(string why) => End(QueueState.Stopped, why);
+    public void Abort(string why) => End(QueueState.Stopped, why, ProblemKind.Skipped);
 
     /// <summary>Run once per frame.</summary>
     public void Tick()
@@ -186,25 +196,35 @@ public sealed class StepQueue
                 if (index >= steps.Count) State = QueueState.Finished;
                 break;
             case StepStatus.Waiting:
-                if (t - stepStarted - step.Delay >= step.Timeout)
+                if (t - stepStarted - step.Delay >= step.Timeout && step.OnTimeout == StepStatus.Done)
+                {
+                    // A wait that's allowed to run out: go on to the next step.
+                    Trace?.Invoke(step, "done");
+                    index++;
+                    started = false;
+                    approved = false;
+                    if (index >= steps.Count) State = QueueState.Finished;
+                }
+                else if (t - stepStarted - step.Delay >= step.Timeout)
                 {
                     var why = step.TimeoutMessage ?? $"Timed out: {step.Label} (waited {step.Timeout.TotalSeconds:0.#} s).";
-                    End(step.OnTimeout == StepStatus.SkipJob ? QueueState.Skipped : QueueState.Stopped, why);
+                    End(step.OnTimeout == StepStatus.SkipJob ? QueueState.Skipped : QueueState.Stopped, why, step.TimeoutProblem);
                 }
                 break;
             case StepStatus.SkipJob:
-                End(QueueState.Skipped, outcome.Message ?? step.Label);
+                End(QueueState.Skipped, outcome.Message ?? step.Label, outcome.Problem);
                 break;
             default:
-                End(QueueState.Stopped, outcome.Message ?? step.Label);
+                End(QueueState.Stopped, outcome.Message ?? step.Label, outcome.Problem);
                 break;
         }
     }
 
-    private void End(QueueState state, string why)
+    private void End(QueueState state, string why, ProblemKind problem = ProblemKind.Other)
     {
         if (State is QueueState.Stopped or QueueState.Skipped) return;
         Message = why;
+        Problem = problem;
         Trace?.Invoke(steps.Count > 0 && index < steps.Count ? steps[index] : new Step { Label = "end", Run = () => StepOutcome.Done }, why);
         foreach (var c in cleanup)
         {

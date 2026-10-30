@@ -25,6 +25,26 @@ public static class Menus
         return -1;
     }
 
+    /// <summary>
+    /// A dye's row in the dye window's list, from the window's text values by index: the list's names
+    /// start at <paramref name="first"/> with "No Color" (row 0), so Snow White, at first + 1, is row 1
+    /// (recordings: Snow White [5, 1, 1, 0], Soot Black [5, 6, 6, 0]). The first match counts: the
+    /// window repeats the chosen dyes further down. Null when the dye isn't listed.
+    /// </summary>
+    public static int? DyeRow(IReadOnlyDictionary<int, string> values, string dyeName, int first)
+    {
+        // The list ends where its first entry's words ("No Color") come round again: after it the
+        // window shows the dyes chosen (Recording 2: [426] No Color … [432] Soot Black).
+        values.TryGetValue(first, out var head);
+        foreach (var (index, text) in values.OrderBy(kv => kv.Key))
+        {
+            if (index <= first) continue;
+            if (head != null && string.Equals(Clean(text), Clean(head), StringComparison.OrdinalIgnoreCase)) break;
+            if (string.Equals(Clean(text), Clean(dyeName), StringComparison.OrdinalIgnoreCase)) return index - first;
+        }
+        return null;
+    }
+
     public static string Clean(string s) =>
         new string(s.Where(c => !char.IsControl(c) && c != '�' && !(c >= '' && c <= '')).ToArray()).Trim();
 }

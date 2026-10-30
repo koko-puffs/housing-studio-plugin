@@ -34,6 +34,9 @@ public enum ModeClick
 
     /// <summary>Housing menu → Furnishing Color (the dye mode).</summary>
     OpenDye,
+
+    /// <summary>Open the Housing menu itself (when nothing housing is open).</summary>
+    OpenHousingMenu,
 }
 
 /// <summary>
@@ -45,11 +48,19 @@ public enum ModeClick
 public static class ModeRoute
 {
     /// <returns>The clicks, in order (empty when it's already there), or null when there's no known way
-    /// (the editor isn't open and neither is the Housing menu, or a piece is being placed).</returns>
+    /// (a piece is being placed, or the mode isn't one of the editor's).</returns>
     public static List<ModeClick>? Plan(EditorMode current, EditorMode want, bool housingMenuOpen)
     {
         if (current == want) return new List<ModeClick>();
         if (current == EditorMode.Place) return null; // mid-placing: wait for it to finish, never interrupt
+        if (current == EditorMode.None && !housingMenuOpen)
+        {
+            // Nothing housing is open: open the Housing menu first, then go on from there.
+            var rest = Plan(EditorMode.None, want, true);
+            if (rest == null) return null;
+            rest.Insert(0, ModeClick.OpenHousingMenu);
+            return rest;
+        }
         var layout = current is EditorMode.Move or EditorMode.Rotate or EditorMode.Store or EditorMode.Remove;
 
         if (want is EditorMode.Rotate or EditorMode.Move)
@@ -83,4 +94,7 @@ public static class ModeRoute
         ModeClick.OpenDye => EditorMode.Dye,
         _ => EditorMode.None,
     };
+
+    /// <summary>Does this click bring the Housing menu up (rather than an editor mode)?</summary>
+    public static bool LeadsToHousingMenu(ModeClick click) => click is ModeClick.CloseEditor or ModeClick.CloseDyeList or ModeClick.OpenHousingMenu;
 }

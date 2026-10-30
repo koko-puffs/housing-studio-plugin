@@ -63,6 +63,12 @@ public sealed class Configuration : IPluginConfiguration
 
     public bool ChatMessages { get; set; } = true;
 
+    /// <summary>
+    /// The furnishing list's storeroom rows learnt in each house (by house id), kept while the
+    /// storeroom holds the same pieces, so a later run doesn't pick its way down the list again.
+    /// </summary>
+    public Dictionary<string, SavedRows> StoreroomRows { get; set; } = new();
+
     public void AddRecent(string path)
     {
         RecentFiles.RemoveAll(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase));
