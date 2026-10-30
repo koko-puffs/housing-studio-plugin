@@ -10,10 +10,10 @@ Paths are under `HousingStudio/UI/`.
 | --- | --- | --- |
 | Routing | `MainWindow.cs` → `Draw` | Picks the view: Settings or Pieces when opened from a header, else `ViewModel.View` (Start → Ready → Running → Done). Pieces and Settings are hidden while a run goes. |
 | View state | `ViewModel.cs` | The run's figure and piece count, whether Done is waiting, the step in words, missing dyes (cached per plan), the Recent list. |
-| Game-free logic | `Model/*.cs` | Words (counts, home sizes, "about 25 minutes"), `PaceSetting`, `When` ("today 05.24"), `PieceRows` (stacking, chip counts), `StartSummary`, `FixtureTicks`, `StepWords`, `SvgPath`. Tested in `HousingStudio.Tests/UiModelTests.cs`. |
+| Game-free logic | `Model/*.cs` | Words (counts, home sizes, "about 25 minutes"), `PaceSetting`, `When` ("today 05.24"), `PieceRows` (stacking, chip counts), `StartSummary`, `FixtureTicks`, `StepWords`, `SvgPath`, `Dashes` (the dashed edge, with bounded loops). Tested in `HousingStudio.Tests/UiModelTests.cs`. |
 | Tokens | `Kit/Palette.cs` | Every `hs-*` colour from tokens.json, radii, control heights. Translucent tokens keep their alpha; panel glass is flattened over ink (ImGui can't blur). |
 | Fonts | `Kit/Fonts.cs` | Geist 400 (15/14/13/12), 500 (15/14/13), 600 (15/14); Geist Mono (13/12/11); Cormorant Garamond 500 (56/32/28/26/22) and 400 italic (32), through Dalamud's font atlas. CSS sizes are converted to ImGui's line-based sizes (Geist ×1.3, Cormorant ×1.211) so 14px is 14px. |
-| Window frame | `Kit/Theme.cs` → `PushFrame` | Dalamud's title bar in walnut, 32px, 13px Geist in ivory; 10px window radius; the 0.2 ivory edge. |
+| Window frame | `Kit/Theme.cs` → `PushFrame` | Dalamud's title bar in walnut with ivory words, a 10px window radius and the 0.2 ivory edge. Only colours and the frame are pushed before `ImGui.Begin`: the title bar's font, height and ☰ ▼ × buttons are Dalamud's own, so they sit and hit as in every Dalamud window. |
 | Layout | `Kit/Frame.cs` | Header (fixed), body (scrolls), footer (walnut, pinned, faint top line); `BeginBottom` is the mockups' `flex:1` spacer; toasts. |
 | Text | `Kit/Txt.cs` | CSS line boxes (half-leading), letter-spacing glyph by glyph, ellipses, wrapped runs of mixed styles with inline links and dye swatches. |
 | Icons | `Kit/Icons.cs` | Lucide icons parsed from the mockups' SVG path data, stroked at 1.8 in the 24-unit grid (1.6 at 24px), round caps. |
@@ -102,6 +102,8 @@ Paths are under `HousingStudio/UI/`.
   every problem (the runner's `RetryProblems`); the mockup's numbers are illustrative.
 - Panels are solid glass over ink (no blur); the glass's lit top edge is a 1px line.
 - Icons are stroked at Lucide's 1.8 in the 24-unit grid, as the mockups' SVG renders them.
+- The title bar is Dalamud's own (its font and height), in the mockup's walnut; the mockup's 32px bar
+  with 13px Geist would mean changing its frame padding, which moves the title bar buttons' hit boxes.
 - Paused is neutral, waiting for you is brass-picked, running is brass-wash with a breathing dot.
 - The step-by-step callout, the empty and not-at-home states, toasts and the confirmation dialog
   aren't in the mockups; they're built from the same tokens.

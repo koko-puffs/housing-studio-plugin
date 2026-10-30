@@ -80,7 +80,7 @@ public sealed partial class MainWindow : Window
         IsOpen = true;
     }
 
-    public override void PreDraw() => Theme.PushFrame(fonts);
+    public override void PreDraw() => Theme.PushFrame();
 
     public override void PostDraw()
     {

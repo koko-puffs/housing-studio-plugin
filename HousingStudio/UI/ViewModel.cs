@@ -144,7 +144,28 @@ public sealed class ViewModel
     private readonly ConcurrentDictionary<string, (DateTime Stamp, Layout? Layout)> parsed = new();
     private readonly HashSet<string> parsing = new();
 
+    private List<RecentRow>? recentRows;
+    private DateTime recentUntil;
+    private string recentKey = string.Empty;
+
+    /// <summary>
+    /// The Recent list, read from the disk at most every two seconds (or when the list of files
+    /// changes): the window draws every frame, and listing a folder each time would be wasted work on
+    /// the game's thread.
+    /// </summary>
     public List<RecentRow> Recent(int max = 6)
+    {
+        var key = string.Join("|", config.RecentFiles);
+        bool pending;
+        lock (parsing) pending = parsing.Count > 0;
+        if (recentRows != null && DateTime.UtcNow < recentUntil && key == recentKey && !pending) return recentRows;
+        recentRows = ReadRecent(max);
+        recentKey = key;
+        recentUntil = DateTime.UtcNow + TimeSpan.FromSeconds(pending ? 0.25 : 2);
+        return recentRows;
+    }
+
+    private List<RecentRow> ReadRecent(int max)
     {
         var rows = new List<(string Path, bool Backup, DateTime At)>();
         foreach (var path in config.RecentFiles)
