@@ -5,13 +5,13 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.2.2, partly tested in the game.** Moving placed pieces works in game. Placing from
-> the storeroom now follows a recording of it done by hand (pick the row, the game shows a preview,
-> move the preview to the spot, choose Place). Still unverified: reading the storeroom list's rows
-> without clicking them, setting a bag piece down without a click, and opening the Housing menu from
-> nothing (see [docs/AUTOMATION.md](docs/AUTOMATION.md)). Use **Step by step** (Place page) for your
-> first run, keep the **backup** on, and if anything stops, send a **recording**
-> (see [Sending diagnostics](#sending-diagnostics)).
+> **Status: 0.2.3, partly tested in the game.** Moving placed pieces works in game. In 0.2.2 no
+> storeroom piece was placed, most likely because the plugin moved the game's preview before choosing Place; 0.2.3
+> leaves the preview alone (as you do by hand), lets the game place the piece, then moves it to its
+> spot with the move that works. Still unverified: that combination, reading the storeroom list past its
+> first 200 rows, setting a bag piece down without a click, and opening the Housing menu from nothing
+> (see [docs/AUTOMATION.md](docs/AUTOMATION.md)). Use **Step by step** for your first run, keep the
+> **backup** on, and if anything stops, send a **recording** (see [Sending diagnostics](#sending-diagnostics)).
 
 ## What it does
 
@@ -24,9 +24,9 @@ its exact spot, then dyes everything to match.
 - **Start placing** runs three phases, one piece at a time at the pace you set (default
   1.5 s ± 25 %, never under 0.6 s, at least 0.3 s between any two clicks):
   1. **Move**: placed pieces are picked up and set at their spot with the editor's own functions.
-  2. **Place**: storeroom pieces are picked in the furnishing list, the game's preview is aimed at
-     the spot, and Place is chosen; pieces from your bags are placed from the item's menu, the held
-     piece is aimed and set down. Each is then checked and nudged to its exact spot.
+  2. **Place**: storeroom pieces are picked in the furnishing list and placed where the game puts
+     them, then moved to their exact spot; pieces from your bags are placed from the item's menu, the
+     held piece is aimed and set down. Each is checked to sit exactly at its spot.
   3. **Dye**: every piece whose dye differs is dyed in the editor's dye mode with the game's dye
      window, using dyes from your bags. Pieces whose dye you don't have are skipped and listed.
 

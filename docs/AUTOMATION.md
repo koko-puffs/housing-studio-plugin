@@ -1,4 +1,4 @@
-# How the automation works (0.2.2)
+# How the automation works (0.2.3)
 
 "Start placing" drives the game's own windows the way established automation plugins do: by firing
 the callbacks a window fires when you click in it (`AtkUnitBase.FireCallback`, what ECommons'
@@ -38,29 +38,37 @@ skipped; a few of those in a row stop the run.
 **Move** (already placed): the editor's pick-up, set the transform, the editor's set-down, check it
 landed. **Works in game.**
 
-**From the storeroom**, as Recording 2 showed it done by hand:
-1. Rotate; the furnishing list `HousingGoods`; its Storeroom tab `HousingGoods ← [i:11]`.
-2. Find the piece's row (below), and pick it: `HousingGoods ← [i:1, u:row]` (the row is unsigned).
-   The game opens the row's menu, shows a **preview** of the piece in the room, and stays in Rotate.
-   The plugin reads which storeroom slot the game picked; if it's another piece, it closes the menu
-   and tries the next row.
-3. Move the preview to the piece's exact spot and turn (Refurnish's technique); check it stays there.
-4. Choose "Place": `ContextMenu ← [i:0, i:0, u:0, empty, empty]`. The piece is placed where the preview
-   is (Recording 2: placed 33 → 34, no Place mode, no click).
-5. The new piece appears; if it isn't exactly at its spot, it's moved there.
+**From the storeroom**, using only what has been seen to work:
+1. Rotate; the furnishing list `HousingGoods`; its Storeroom tab `HousingGoods ← [i:11]` (clicked only
+   when it isn't already showing).
+2. Find the piece's row (below), and pick it: `HousingGoods ← [i:1, u:row]`. The game opens the
+   row's menu and shows a **preview** of the piece in the room, in front of you. The plugin reads
+   which storeroom slot the game picked; if it's another piece, it closes the menu and tries the next row.
+3. Choose "Place": `ContextMenu ← [i:0, i:0, u:0, empty, empty]`, **without touching the preview**:
+   Recording 2 placed the piece where the game's preview was. (0.2.2 moved the preview to the spot
+   first, and the game then didn't place anything; that's now an off-by-default option,
+   `MovePreviewBeforePlace`.)
+4. Watch the furniture list for a new piece of that item (a furniture slot that wasn't there before,
+   nearest the preview; the preview itself is never in that list). A yes/no that comes up is answered.
+5. Move the new piece to its exact spot with the move that works in game (pick up, set the transform,
+   set down, check).
+6. If nothing appears in 6 s, it tries once more (logging how many pieces were placed before and after,
+   and the game's red error message if there was one); then the piece is skipped as "didn't land".
+   Stand somewhere open: the game puts a storeroom piece in front of you.
 
 **Finding a storeroom row quickly** (`Core/StoreroomRows.cs`). The list isn't in storeroom order but
 it's grouped by item.
-- First, the list's own row texts are read without clicking (`Automation/ListReader.cs`: the list
-  components' rows, a tree list's items or a list's labels). If the furnishing list has as many rows
-  as the storeroom has pieces, rows are found by the piece's name: usually one pick.
+- The list's own row names are read once per run without clicking (`Automation/ListReader.cs`). In
+  0.2.2 the furnishing list's tree list held the names of 200 of its 445 rows; those are used, and for
+  a piece not among them the list is scrolled (the list component's `ScrollToItem`, **unconfirmed**)
+  and read again, the new names lined up with the known ones by their overlap
+  (`Core/PlacingHelpers.cs` `ListWindows.Align`). Rows are found by the piece's name and checked by
+  picking: usually one pick.
 - Rows already picked are known (this run, and saved per house between runs while the storeroom holds
-  exactly the same pieces; a fingerprint of the storeroom decides).
-- Otherwise rows are picked from the top, and when a row starts a group, the storeroom's count of that
-  piece says how long the group is, so the rest of it is skipped: about one pick per different piece.
-- When a piece leaves the list, the rows below move up.
-- The log says what was read from the list ("The furnishing list's own rows: node …") and every row
-  picked ("row 31 → storeroom 27008/49: …").
+  exactly the same pieces).
+- Otherwise rows are picked, skipping rows whose names are known to be other pieces and the rest of
+  each group (the storeroom's count of a piece says how long its group is).
+- When a piece leaves the list, the rows below (and their names) move up.
 
 **From your bags**, as Recording 2: the item's menu (opened with `AgentInventoryContext`,
 **unconfirmed**), "Place" `[i:0, i:0, u:0, empty, empty]`; the editor then holds the piece (mode Place).
@@ -88,12 +96,12 @@ is skipped as "dye missing".
 
 ## What's most likely to need fixing next
 
-1. **Reading the list's rows**: if the log says the rows couldn't be read, the scan (one pick per
-   different piece) is used. A recording with "Write down the windows' values" while the Storeroom tab
-   is open shows where the names are.
-2. **Setting a held bag piece down.**
-3. **Opening the Housing menu** from nothing.
-4. **Picking another dye shade**, and closing Furnishing Color.
+1. **Placing a storeroom piece where the game puts it**, then moving it: both halves have been seen
+   to work separately (Recording 2; moves in 0.2.2), not yet together.
+2. **Reading rows past the first 200** by scrolling the list.
+3. **Setting a held bag piece down.**
+4. **Opening the Housing menu** from nothing.
+5. **Picking another dye shade**, and closing Furnishing Color.
 
 ## For the window (the run's state)
 
