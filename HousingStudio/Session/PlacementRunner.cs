@@ -987,7 +987,7 @@ public sealed unsafe class PlacementRunner : IDisposable
                 return editor.Place(held) ? StepOutcome.Done : StepOutcome.Halt("Couldn't set the held piece down.");
             }, TimeSpan.FromMilliseconds(150)),
             NewPiece(job, LandWait, StepStatus.Stop,
-                "The held piece wasn't set down automatically. Click to put it down (or press Escape); then send a recording (Settings → Diagnostics). "
+                "The held piece wasn't set down automatically. Click to put it down (or press Escape); then send a recording (Settings → Something not working?). "
                 + "Until it's fixed, switch \"Place pieces from my bags for me\" off in Settings: you put each piece down anywhere, the plugin sets it at its spot.",
                 null),
         };
@@ -1357,7 +1357,7 @@ public sealed unsafe class PlacementRunner : IDisposable
         var entry = Menus.FindEntry(menu, labels);
         log.Info($"  menu entries: {string.Join(" | ", menu.Select((e, i) => $"{i}:{e}"))}");
         if (entry < 0)
-            return StepOutcome.Halt($"The menu has no entry like \"{string.Join("\" / \"", labels)}\" (it has: {string.Join(", ", menu)}). Type the right words in Settings → Diagnostics.");
+            return StepOutcome.Halt($"The menu has no entry like \"{string.Join("\" / \"", labels)}\" (it has: {string.Join(", ", menu)}). Type the right words in Settings → Something not working?.");
         var blanks = UiCallValues.Of(("entry", entry));
         log.Info($"  → {UiTable.MenuChoose.Describe(blanks)}");
         return GameUi.Fire(UiTable.MenuChoose, blanks) ? StepOutcome.Done : StepOutcome.Halt("The menu closed.");

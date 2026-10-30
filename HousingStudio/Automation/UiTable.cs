@@ -6,7 +6,7 @@ namespace HousingStudio.Automation;
 
 /// <summary>
 /// Every game window and click the automation uses, in one place, with where each came from.
-/// When the game changes (or a guess is wrong), a recording from Settings → Diagnostics shows the
+/// When the game changes (or a guess is wrong), a recording from Settings → Something not working? shows the
 /// real names and values: fix them here.
 ///
 /// Sources:
@@ -165,7 +165,7 @@ public static class UiTable
 
     /// <summary>
     /// The words of the "place" entry in an item's menu, by client language. English "Place" is
-    /// confirmed (Recording 1: "0:Place | 1:Store | 2:Dye | …"); Settings → Diagnostics takes others.
+    /// confirmed (Recording 1: "0:Place | 1:Store | 2:Dye | …"); Settings → Something not working? takes others.
     /// </summary>
     public static IReadOnlyList<string> PlaceLabels(ClientLanguage language) => language switch
     {
