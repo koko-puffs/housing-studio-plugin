@@ -126,6 +126,20 @@ once a run, how many known rows the order predicts.
 A pick that turns out to be another piece (a probe) closes its menu in the same step: only the next
 pick waits the gap between actions (0.3.1 spent 0.6 s a row, closing with a second paced click).
 
+**0.3.5: every pick counts.** Within a group of one item in several dyes, the list's order changes
+after each placement (0.3.4's log: a slot moved from row 27 to 28 as row 28's piece left), so a
+particular dye has to be looked for. A row that turns out to hold another dye is placed for a piece
+later in the run, of the same item and in the same pass, that wants that very dye (`RunJob.SwapTargets`:
+the two swap where they go and which copy), and the first piece comes later. Rows known to hold the
+piece in another dye are passed over by the order search as well.
+
+**0.3.5: putting things back.** A restore's run moves the backup's pieces back, places what's
+missing, dyes, and then puts away what's placed now and isn't in the backup (`Plan.Extras`): the
+editor's Store button (`HousingLayout [i:2]`, from 0.3.3's recording), each piece picked with the
+editor's own pick, a yes/no answered, and the piece watched leaving the furniture list (4 s, else
+it's skipped to be put away by hand). Last, because whether storing renumbers the furniture slots
+the other steps use isn't known; the editor is put back in Rotate when the run ends.
+
 **0.3.4: making the list again.** The furnishing list doesn't show a piece that came into the
 storeroom while it was open (0.3.3's log: a bag piece stored, then 170 rows searched for it one by
 one). So after a bag piece is stored, and whenever neither a piece's name nor the list's order puts

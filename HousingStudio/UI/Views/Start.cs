@@ -35,7 +35,9 @@ public sealed partial class MainWindow
         var right = Kit.Right;
         var titleH = Title(at, "Housing", "Studio", Kit.Width - S(56));
         var (where, tone) = WherePill();
-        Kit.StatusPill(at + new Vector2(0, titleH + S(10)), where, tone, maxWidth: Kit.Width - S(56));
+        // Below the Settings button (40 tall), the pill has the whole width.
+        var pillY = titleH + S(10);
+        Kit.StatusPill(at + new Vector2(0, pillY), where, tone, maxWidth: pillY >= S(40) + S(4) ? Kit.Width : Kit.Width - S(56));
         SettingsButton(new Vector2(right - S(40), at.Y));
         Kit.Reserve(at, Kit.Width, titleH + S(10) + S(28));
         Frame.EndHeader();

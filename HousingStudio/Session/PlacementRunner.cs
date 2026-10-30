@@ -123,6 +123,14 @@ public sealed unsafe class PlacementRunner : IDisposable
     /// </summary>
     private bool listMissesStored;
 
+    /// <summary>A restore's pieces to put away (placed since its backup), planned once the rest is done.</summary>
+    private List<PlacedPiece> toPutAway = new();
+
+    private bool putAwayPlanned = true;
+
+    /// <summary>The run put the editor in Store mode: it's put back in Rotate when the run ends, so a click doesn't put a piece away.</summary>
+    private bool storeModeUsed;
+
     /// <summary>
     /// Rows whose pieces were just placed while the storeroom still showed them (its count lags the new
     /// piece by up to 1.5 s): each taken out of the rows once its slot is empty (0.3.2 kept them, and
@@ -244,7 +252,7 @@ public sealed unsafe class PlacementRunner : IDisposable
 
     public void Start(bool dryRun, IEnumerable<PlanEntry> shown) => Start(dryRun, shown, forceDyes: false);
 
-    private void Start(bool dryRun, IEnumerable<PlanEntry> shown, bool forceDyes)
+    private void Start(bool dryRun, IEnumerable<PlanEntry> shown, bool forceDyes, IReadOnlyList<PlacedPiece>? putAway = null)
     {
         var problem = CanStart(dryRun);
         if (problem != null)
@@ -261,7 +269,10 @@ public sealed unsafe class PlacementRunner : IDisposable
         // The same calculation as the dye phase's (PlanDyes), predicting what placing will leave.
         dyesExpected = dyes ? DyeCounts.ToApply(entries) : 0;
         var dyedInDesign = DyeCounts.Dyed(entries);
-        if (jobs.Count == 0 && dyesExpected == 0)
+        toPutAway = putAway?.ToList() ?? new List<PlacedPiece>();
+        storeModeUsed = false;
+        putAwayPlanned = toPutAway.Count == 0;
+        if (jobs.Count == 0 && dyesExpected == 0 && toPutAway.Count == 0)
         {
             StopReason = "Nothing to do: every piece shown is in place, in its dye (or missing).";
             log.Info(StopReason);
@@ -344,7 +355,8 @@ public sealed unsafe class PlacementRunner : IDisposable
         if (session.FilePath != restorePath) { restorePath = null; return; }
         if (session.Plan == null || session.PlanSide == null) return;
         restorePath = null;
-        Start(false, session.Plan.Entries, forceDyes: true);
+        // The backup is what was there: what's placed now and isn't in it (placed since) goes back to the storeroom.
+        Start(false, session.Plan.Entries, forceDyes: true, putAway: session.Plan.Extras);
     }
 
     public void Pause(string why)
@@ -382,6 +394,7 @@ public sealed unsafe class PlacementRunner : IDisposable
         State = RunState.Stopped;
         StopReason = reason;
         StatusText = reason;
+        LeaveStoreMode();
         anywhereForOne = false;
         anywhere.Disable();
         SaveRows(force: true);
@@ -514,6 +527,17 @@ public sealed unsafe class PlacementRunner : IDisposable
                     return;
                 }
             }
+            if (!putAwayPlanned)
+            {
+                putAwayPlanned = true;
+                PlanPutAway();
+                if (index < jobs.Count)
+                {
+                    index--;
+                    nextJobAt = DateTime.UtcNow;
+                    return;
+                }
+            }
             Finish();
             return;
         }
@@ -522,7 +546,7 @@ public sealed unsafe class PlacementRunner : IDisposable
         var job = jobs[index];
         job.Outcome = JobOutcome.Working;
         job.StartedAt = DateTime.UtcNow;
-        log.Info($"{PhaseWord(job.Phase)}: {Name(job)}{(job.Target.Stain != 0 ? $" ({data.DyeName(job.Target.Stain)})" : string.Empty)}");
+        log.Info($"{(job.Kind == JobKind.Store ? "Putting away" : PhaseWord(job.Phase))}: {Name(job)}{(job.Target.Stain != 0 ? $" ({data.DyeName(job.Target.Stain)})" : string.Empty)}");
         if (DryRun)
         {
             queue.Begin(new[] { Step.Act($"Would {DryWords(job)}", () => StepOutcome.Done) });
@@ -571,6 +595,7 @@ public sealed unsafe class PlacementRunner : IDisposable
         JobKind.PlaceFromStoreroom when side == Side.Interior && config.StoreroomAutomatic => (StoreroomSteps(job), MenuCleanup()),
         JobKind.PlaceFromBags when config.BagsAutomatic => (BagSteps(job), MenuCleanup()),
         JobKind.Dye => (DyeSteps(job), DyeCleanup()),
+        JobKind.Store => (StoreSteps(job), new List<Step>()),
         _ => (ByHandSteps(job), new List<Step>()),
     };
 
@@ -1217,10 +1242,13 @@ public sealed unsafe class PlacementRunner : IDisposable
         if (known is { } kr && !tried.Contains(kr) && NameFits(kr) && !OtherDye(kr)) return kr;
         foreach (var r in rows.ByName(Name(job), item))
             if (!tried.Contains(r) && !OtherDye(r)) return r;
+        // Rows known to hold it in another dye are passed over by the order search too (0.3.4 went back to them).
+        var skip = new HashSet<int>(tried);
+        foreach (var (r, _) in rows.Known) if (OtherDye(r)) skip.Add(r);
         var searched = searchPicks.GetValueOrDefault(job);
         if (searched < SearchPicks)
         {
-            if (SearchByOrder(job, tried, searched) is { } probe)
+            if (SearchByOrder(job, skip, searched) is { } probe)
             {
                 searchPicks[job] = searched + 1;
                 return probe;
@@ -1235,11 +1263,26 @@ public sealed unsafe class PlacementRunner : IDisposable
         inTurn = true;
         var scanned = inTurnPicks.GetValueOrDefault(job);
         if (scanned >= MaxRowsInTurn) return null;
-        var skip = new HashSet<int>(tried);
-        foreach (var (r, _) in rows.Known) if (OtherDye(r)) skip.Add(r);
         var next = rows.NextCandidate(Name(job), item, skip);
         if (next != null) inTurnPicks[job] = scanned + 1;
         return next;
+    }
+
+    /// <summary>
+    /// A piece still to place from the storeroom, later in the run, of the same item and in the same pass
+    /// (floor, and floor pieces before what sits on them) as <paramref name="job"/>, wanting a copy in
+    /// <paramref name="stain"/>; or null.
+    /// </summary>
+    private RunJob? TakerOf(RunJob job, byte stain)
+    {
+        for (var i = index + 1; i < jobs.Count; i++)
+        {
+            var j = jobs[i];
+            if (j.Outcome == JobOutcome.Pending && j.Kind == JobKind.PlaceFromStoreroom && j.Target.ItemId == job.Target.ItemId
+                && j.Target.Floor == job.Target.Floor && j.Target.Late == job.Target.Late && DyeWanted(j) == stain)
+                return j;
+        }
+        return null;
     }
 
     /// <summary>The dye of the copy the plan chose (the design's, or one it will dye), the dye a storeroom row is checked for.</summary>
@@ -1350,6 +1393,15 @@ public sealed unsafe class PlacementRunner : IDisposable
                              + $"{(right ? " (this one)" : sameItem ? $" in {DyeWord(held.Stain)}; the storeroom has one in {DyeWord(dye)}" : string.Empty)}");
                     if (right)
                     {
+                        chosen[0] = row;
+                        return StepOutcome.Done;
+                    }
+                    // Another of this item still to place wants this very dye: it's placed for that one now (no pick
+                    // wasted), and this one's comes later (0.3.4 passed over dozens of copies in a mixed-dye group).
+                    if (sameItem && TakerOf(job, held.Stain) is { } other)
+                    {
+                        log.Info($"  That's the copy another {name} needs ({DyeWord(held.Stain)}): it's placed for that one now; this one ({DyeWord(dye)}) comes later.");
+                        job.SwapTargets(other);
                         chosen[0] = row;
                         return StepOutcome.Done;
                     }
@@ -2132,6 +2184,97 @@ public sealed unsafe class PlacementRunner : IDisposable
             log.Info($"{data.ItemName(n.Target.ItemId)} is dyed {data.DyeName(n.Has)} but the design has it undyed; removing a dye is left to you.");
     }
 
+    /// <summary>
+    /// A restore's last phase: each piece placed now that isn't in the backup (and was placed when the
+    /// restore started), to be put away in the storeroom. Last, after the moves, placements and dyes:
+    /// whether storing a piece renumbers the others' furniture slots, which those use, isn't known.
+    /// </summary>
+    private void PlanPutAway()
+    {
+        var live = ReadLive();
+        if (live == null) return;
+        foreach (var p in toPutAway)
+        {
+            if (!live.TryGetValue(p.Key, out var now) || now.ItemId != p.ItemId) continue;
+            var target = new Target(-1 - p.Key, p.ItemId, p.Position, p.Yaw, p.Stain, Floor.Ground, false);
+            jobs.Add(new RunJob { Kind = JobKind.Store, Target = target, Key = p.Key });
+        }
+        log.Info($"Putting away: {Words(jobs.Count(j => j.Kind == JobKind.Store))} placed since the backup, not in it.");
+
+        static string Words(int n) => n == 1 ? "1 piece" : $"{n} pieces";
+    }
+
+    /// <summary>
+    /// Puts a placed piece in the storeroom as you would: the editor's Store mode (its Store button), and
+    /// the piece picked with the editor's own pick (in Store mode, picking a piece stores it, as 0.3.3's
+    /// recording showed); a yes/no is answered. Not yet seen to work from the plugin: if the piece doesn't
+    /// go, it's skipped, to be put away by hand.
+    /// </summary>
+    private List<Step> StoreSteps(RunJob job)
+    {
+        var name = Name(job);
+        var key = job.Key!.Value;
+        return new List<Step>
+        {
+            EnsureMode(EditorMode.Rotate),
+            new Step
+            {
+                Label = "The editor is in Store mode",
+                Run = () =>
+                {
+                    if (HousingEditor.Mode == EditorMode.Store) return StepOutcome.Done;
+                    queue.InsertNext(new[]
+                    {
+                        Step.Act($"Press Store: {UiTable.LayoutStore.Describe()}", () =>
+                        {
+                            editorMayCloseUntil = DateTime.UtcNow + ModeSwitchGrace;
+                            storeModeUsed = true;
+                            return Fire(UiTable.LayoutStore);
+                        }),
+                        Step.Wait("The editor is in Store mode", () => HousingEditor.Mode == EditorMode.Store, ClickWait),
+                    });
+                    return StepOutcome.Done;
+                },
+            },
+            new Step
+            {
+                Label = $"Put {name} away (picked in Store mode)",
+                Key = "store pick",
+                IsAction = true,
+                Run = () =>
+                {
+                    var live = ReadLive();
+                    if (live == null || !live.TryGetValue(key, out var piece) || piece.ItemId != job.Target.ItemId)
+                        return StepOutcome.Skip("It's no longer where it was (moved or put away already).", ProblemKind.NotFound);
+                    if (piece.Instance == 0) return StepOutcome.Skip("The game hasn't loaded it (walk closer to it).", ProblemKind.NotLoaded);
+                    return editor.Select(piece.Instance) ? StepOutcome.Done : StepOutcome.Halt("Couldn't pick the piece (the editor closed?).");
+                },
+            },
+            new Step
+            {
+                Label = "It goes to the storeroom",
+                Key = "stored away",
+                Timeout = TimeSpan.FromSeconds(4),
+                OnTimeout = StepStatus.SkipJob,
+                TimeoutProblem = ProblemKind.Other,
+                TimeoutMessage = "It wasn't put away (Store mode didn't take it from the plugin). Put it in the storeroom by hand.",
+                Run = () =>
+                {
+                    if (GameUi.YesNoText() is { } question)
+                    {
+                        log.Info($"  The game asks: \"{question}\" → {UiTable.YesNoYes.Describe()}");
+                        GameUi.Fire(UiTable.YesNoYes);
+                        return StepOutcome.Waiting;
+                    }
+                    var live = ReadLive();
+                    if (live == null || live.TryGetValue(key, out var piece) && piece.ItemId == job.Target.ItemId) return StepOutcome.Waiting;
+                    job.Note = "Put away in the storeroom.";
+                    return StepOutcome.Done;
+                },
+            },
+        };
+    }
+
     private void LogRows()
     {
         if (!rowsReady || rows.Known.Count == 0) return;
@@ -2175,9 +2318,18 @@ public sealed unsafe class PlacementRunner : IDisposable
         return list?.GroupBy(p => p.Key).ToDictionary(g => g.Key, g => g.First());
     }
 
+    /// <summary>Back to Rotate if the run left the editor in Store mode.</summary>
+    private void LeaveStoreMode()
+    {
+        if (!storeModeUsed) return;
+        storeModeUsed = false;
+        if (HousingEditor.Mode == EditorMode.Store && GameUi.Fire(UiTable.LayoutRotate)) log.Info("Back to Rotate (out of Store mode).");
+    }
+
     private void Finish()
     {
         State = RunState.Finished;
+        LeaveStoreMode();
         anywhere.Disable();
         SaveRows(force: true);
         LogRows();
@@ -2204,6 +2356,7 @@ public sealed unsafe class PlacementRunner : IDisposable
 
     private string DryWords(RunJob job) => job.Kind switch
     {
+        JobKind.Store => $"put {Name(job)} away in the storeroom",
         JobKind.Move => $"move {Name(job)} to its spot",
         JobKind.PlaceFromStoreroom => $"place {Name(job)} from the storeroom at its spot",
         JobKind.PlaceFromBags => $"place {Name(job)} from {(job.Entry?.Stock is { } s ? InventoryReader.Describe(s) : "your bags")} at its spot",

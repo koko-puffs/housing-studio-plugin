@@ -214,8 +214,8 @@ public sealed partial class MainWindow
         if (Kit.Button("##putback-btn", new Vector2(at.X + w - bw, mid - S(17)), label, Btn.Quiet, BtnSize.Sm))
         {
             Ask("Put them back?",
-                $"This loads the backup saved at {Clock(savedAt)} as the design and starts a run that moves the {pieces} you had back to where they were. " +
-                "Pieces this run placed that weren't there before stay where they are; put them away by hand if you don't want them.",
+                $"This loads the backup saved at {Clock(savedAt)} as the design and starts a run that moves the {pieces} you had back to where they were, " +
+                "then puts the pieces placed since (not in the backup) away in the storeroom.",
                 "Put them back", "Keep it as it is", () =>
                 {
                     vm.Dismiss();

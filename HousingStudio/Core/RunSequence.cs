@@ -17,6 +17,12 @@ public enum JobKind
 
     /// <summary>Placed, in the wrong dye: dyed in the furnishing dye mode.</summary>
     Dye,
+
+    /// <summary>
+    /// Placed but not in the design (a restore: placed after the backup was saved): put in the storeroom
+    /// with the editor's Store mode. Counted with the moves, as putting things back.
+    /// </summary>
+    Store,
 }
 
 public enum RunPhase
@@ -30,10 +36,10 @@ public enum RunPhase
 public sealed class RunJob
 {
     public required JobKind Kind { get; init; }
-    public required Target Target { get; init; }
+    public required Target Target { get; set; }
 
     /// <summary>The matched entry (for moves and placing), or null for a dye job.</summary>
-    public PlanEntry? Entry { get; init; }
+    public PlanEntry? Entry { get; set; }
 
     /// <summary>The placed piece's furniture slot: known for moves and dyes, found once a new piece lands.</summary>
     public int? Key { get; set; }
@@ -51,9 +57,20 @@ public sealed class RunJob
     public DateTime? StartedAt { get; set; }
     public DateTime? EndedAt { get; set; }
 
+    /// <summary>
+    /// Two pieces of one item to place swap what they're placed as (where, and the copy and dye the plan
+    /// chose): a storeroom row picked for one turned out to be the copy the other needs, so it's placed
+    /// for that one now, and this one's comes later. The steps read the target as they run.
+    /// </summary>
+    public void SwapTargets(RunJob other)
+    {
+        (Target, other.Target) = (other.Target, Target);
+        (Entry, other.Entry) = (other.Entry, Entry);
+    }
+
     public RunPhase Phase => Kind switch
     {
-        JobKind.Move => RunPhase.Move,
+        JobKind.Move or JobKind.Store => RunPhase.Move,
         JobKind.Dye => RunPhase.Dye,
         _ => RunPhase.Place,
     };

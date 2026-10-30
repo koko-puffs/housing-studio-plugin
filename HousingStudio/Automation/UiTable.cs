@@ -73,6 +73,12 @@ public static class UiTable
     /// <summary>The editor's Rotate button. [Recording 1]</summary>
     public static readonly UiCall LayoutRotate = new(LayoutBar, "i:1", true, "Recording 1");
 
+    /// <summary>
+    /// The editor's Store button ("Place selected item into your storeroom"): in Store mode, the piece
+    /// picked goes to the storeroom. [0.3.3's recording: HousingLayout [i:2], then mode Store]
+    /// </summary>
+    public static readonly UiCall LayoutStore = new(LayoutBar, "i:2", true, "0.3.3 recording");
+
     /// <summary>Close the editor (back to the Housing menu). [Recording 1]</summary>
     public static readonly UiCall LayoutClose = new(LayoutBar, "i:-2", false, "Recording 1");
 
@@ -199,7 +205,7 @@ public static class UiTable
 
     public static IEnumerable<UiCall> All() => new[]
     {
-        MenuFurnishings, MenuDye, MenuClose, LayoutMove, LayoutRotate, LayoutClose, ListClose, DyeListClose, ListStoreroomTab, ListSelect,
+        MenuFurnishings, MenuDye, MenuClose, LayoutMove, LayoutRotate, LayoutStore, LayoutClose, ListClose, DyeListClose, ListStoreroomTab, ListSelect,
         DyeListSelect, DyeListMenu,
         MenuChoose, MenuCancel, YesNoYes, DyeShade, DyePick, DyeApply, DyeClose, DyeConfirmYes, DyeConfirmNo,
     };

@@ -5,7 +5,10 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.3.4, working in the game.** 0.3.4 turns **Place anywhere** on by default, makes the
+> **Status: 0.3.5, working in the game.** 0.3.5: a storeroom row that holds the copy (the dye)
+> another piece of the same item needs is placed for that piece instead of passed over, so mixed-dye
+> groups (a dozen partitions in three dyes) take far fewer picks; **Put them back** also puts away
+> the pieces placed since the backup; and the header's "you can decorate" pill isn't cut short. 0.3.4 turns **Place anywhere** on by default, makes the
 > furnishing list again when a piece isn't in it (a bag piece just stored wasn't), never re-picks a
 > storeroom row already seen to hold the piece in another dye, and gives up on a piece the list won't
 > show after 60 rows instead of 600. **Save this house as a build** is on the Start view, and works
@@ -50,7 +53,10 @@ its exact spot, then dyes everything to match.
   list when it can read the list, else picks rows (one per different piece, skipping the rest of
   each group); every row it learns is kept for the house until the storeroom changes.
 - **When it's done**: what didn't work and why (with "Show where" lighting its spot), the dyes
-  you're short of, "Try the N again", and "Put them back" to restore the backup the run saved.
+  you're short of, "Try the N again", and "Put them back" to restore the backup the run saved: the
+  pieces you had go back to their spots, then the pieces placed since (not in the backup) are put
+  away in the storeroom with the editor's Store mode (new in 0.3.5, not yet seen in the game: a piece
+  Store mode won't take is listed, to put away by hand).
 - **Safety**: only in a home you may decorate, with the furnishing editor open; it stops on leaving,
   a zone change, combat or a cutscene, losing permission, a window that doesn't appear in time, the
   furniture list changing under it, or a few pieces in a row failing; whatever a piece opened is

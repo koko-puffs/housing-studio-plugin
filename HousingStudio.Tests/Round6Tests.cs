@@ -339,3 +339,20 @@ public class StoreroomOrderTests
         Assert.Null(StoreroomOrder.FirstReadable(new[] { "Hingan Bookshelf", "Steel Locker" }, names));
     }
 }
+
+public class SwapTargetsTests
+{
+    [Fact]
+    public void TwoPiecesOfOneItemSwapWhereAndWhichCopy()
+    {
+        var black = new Target(1, 7, new System.Numerics.Vector3(1, 0, 0), 0, 5, Floor.Ground, false);
+        var grey = new Target(2, 7, new System.Numerics.Vector3(2, 0, 0), 0, 9, Floor.Ground, false);
+        var a = new RunJob { Kind = JobKind.PlaceFromStoreroom, Target = black, Entry = new PlanEntry { Target = black, State = PieceState.FromStoreroom } };
+        var b = new RunJob { Kind = JobKind.PlaceFromStoreroom, Target = grey, Entry = new PlanEntry { Target = grey, State = PieceState.FromStoreroom } };
+        a.SwapTargets(b);
+        Assert.Equal(grey, a.Target);
+        Assert.Equal(black, b.Target);
+        Assert.Same(grey, a.Entry!.Target);
+        Assert.Same(black, b.Entry!.Target);
+    }
+}

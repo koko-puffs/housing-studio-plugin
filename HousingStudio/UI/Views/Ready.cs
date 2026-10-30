@@ -75,7 +75,9 @@ public sealed partial class MainWindow
         var titleH = Title(new Vector2(at.X, y), session.Title, null, leftW);
         y += titleH + S(8);
         var (pill, tone) = ReadyPill();
-        Kit.StatusPill(new Vector2(at.X, y), pill, tone, maxWidth: leftW);
+        // Below the buttons (40 tall, at the header's top), the pill has the whole width (0.3.4 kept it to the
+        // width beside them, and cut "you can decorate" short).
+        Kit.StatusPill(new Vector2(at.X, y), pill, tone, maxWidth: y >= at.Y + S(40) + S(4) ? w : leftW);
         y += S(28);
         var bx = at.X + w - buttonsW;
         if (Kit.Button("##pieces", new Vector2(bx, at.Y), piecesLabel, Btn.Glass, BtnSize.Md, Icon.List)) sub = Sub.Pieces;
