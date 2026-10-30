@@ -131,14 +131,26 @@ public static class Backups
     private static bool Write(string path, Func<string> json, out string why)
     {
         why = string.Empty;
+        // Written beside it first, then moved over it: a write that fails partway (a full disk)
+        // leaves the file that was there whole, rather than cut short.
+        var temp = path + ".saving";
         try
         {
-            File.WriteAllText(path, json());
+            File.WriteAllText(temp, json());
+            File.Move(temp, path, overwrite: true);
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
             why = $"Couldn't write the file: {ex.Message}";
+            try
+            {
+                if (File.Exists(temp)) File.Delete(temp);
+            }
+            catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException)
+            {
+                // Left for the next save to replace.
+            }
             return false;
         }
     }

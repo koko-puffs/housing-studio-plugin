@@ -25,8 +25,8 @@ public sealed unsafe class FixtureReader
     private readonly Dictionary<PlotKey, List<SavedFixture>> seenOutside = new();
     private DateTime nextLook;
 
-    /// <summary>A plot in a ward: the ward's territory, the ward (0-based) and the plot (0-based).</summary>
-    private readonly record struct PlotKey(uint Territory, int Ward, int Plot);
+    /// <summary>A plot: its world, the ward's territory, the ward (0-based) and the plot (0-based).</summary>
+    private readonly record struct PlotKey(ushort World, uint Territory, int Ward, int Plot);
 
     public FixtureReader(GameData data) => this.data = data;
 
@@ -162,8 +162,9 @@ public sealed unsafe class FixtureReader
         if (ward < 0) return;
         var area = OutdoorArea();
         if (area == null) return;
+        var world = hm->OutdoorTerritory->HouseId.WorldId;
         for (var plot = 1; plot <= area->Plots.Length; plot++)
-            if (ReadExterior(plot) is { } parts) seenOutside[new PlotKey(ctx.TerritoryId, ward, plot - 1)] = parts;
+            if (ReadExterior(plot) is { } parts) seenOutside[new PlotKey(world, ctx.TerritoryId, ward, plot - 1)] = parts;
     }
 
     /// <summary>Which plot the home is (its ward's territory, ward, plot), inside or out; null for an apartment.</summary>
@@ -176,10 +177,10 @@ public sealed unsafe class FixtureReader
             var id = hm->IndoorTerritory->HouseId;
             if (id.IsApartment || hm->GetCurrentWard() is var ward && ward < 0) return null;
             // The ward the house is in (you're in its interior's territory now).
-            return new PlotKey(HousingManager.GetOriginalHouseTerritoryTypeId(), ward, id.PlotIndex);
+            return new PlotKey(id.WorldId, HousingManager.GetOriginalHouseTerritoryTypeId(), ward, id.PlotIndex);
         }
         if (ctx.Kind == PlaceKind.Ward && hm->OutdoorTerritory != null && ctx.Plot is { } plot && hm->GetCurrentWard() is var w && w >= 0)
-            return new PlotKey(ctx.TerritoryId, w, plot - 1);
+            return new PlotKey(hm->OutdoorTerritory->HouseId.WorldId, ctx.TerritoryId, w, plot - 1);
         return null;
     }
 

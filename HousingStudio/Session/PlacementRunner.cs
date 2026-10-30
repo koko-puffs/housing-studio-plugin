@@ -358,7 +358,7 @@ public sealed unsafe class PlacementRunner : IDisposable
             {
                 LastBackupPath = saved;
                 var c = session.Context;
-                backupOf = (c.Kind, c.TerritoryId, c.HouseId);
+                backupOf = (c.Kind, c.TerritoryId, c.HouseId, c.Plot);
             }
             else log.Warn("No backup was saved for this run (see why above): Put them back won't be offered for it.");
         }
@@ -375,6 +375,13 @@ public sealed unsafe class PlacementRunner : IDisposable
     public void RetryProblems()
     {
         if (Active || session.Plan == null) return;
+        // Its pieces are the last run's home's (its put-away pieces by their slots there).
+        var here = session.Context;
+        if (here.Kind != startKind || here.TerritoryId != startTerritory || here.HouseId != startHouse)
+        {
+            StopReason = "Go back to the home the run was in to try those again.";
+            return;
+        }
         var problems = Problems;
         var wanted = problems.Select(p => (p.Job.Target.Key, p.Job.Target.ItemId)).ToHashSet();
         if (wanted.Count == 0) return;
@@ -412,7 +419,7 @@ public sealed unsafe class PlacementRunner : IDisposable
     }
 
     /// <summary>Where the last backup was taken: a restore only runs there (another home's, or the garden's inside, would store everything).</summary>
-    private (PlaceKind Kind, uint Territory, ulong House)? backupOf;
+    private (PlaceKind Kind, uint Territory, ulong House, int? Plot)? backupOf;
 
     /// <summary>Why the last backup can't be put back here and now, or null.</summary>
     public string? CanRestore()
@@ -421,7 +428,8 @@ public sealed unsafe class PlacementRunner : IDisposable
         if (LastBackupPath == null || backupOf == null) return "There's no backup from this session.";
         if (!System.IO.File.Exists(LastBackupPath)) return "The backup isn't there any more.";
         var c = session.Context;
-        if ((c.Kind, c.TerritoryId, c.HouseId) != backupOf.Value)
+        // (A garden's plot too: the ward's other plots have the same territory and may share its id.)
+        if ((c.Kind, c.TerritoryId, c.HouseId, c.Plot) != backupOf.Value)
             return backupOf.Value.Kind == PlaceKind.Ward ? "The backup is of your garden: go back to it to put things back." : "The backup is of a home's inside: go back in to put things back.";
         return CanStart(false);
     }
@@ -713,6 +721,14 @@ public sealed unsafe class PlacementRunner : IDisposable
     /// can't be let go of from here, so you're told (Esc puts it back), else the next piece would
     /// wait 30 s for the editor and stop.
     /// </summary>
+    /// <summary>Still in the home the run started in (its territory, with a housing territory loaded).</summary>
+    private unsafe bool StillInStartHome()
+    {
+        var hm = FFXIVClientStructs.FFXIV.Client.Game.HousingManager.Instance();
+        if (hm == null || (hm->IndoorTerritory == null && hm->OutdoorTerritory == null)) return false;
+        return Services.ClientState.TerritoryType == startTerritory;
+    }
+
     private List<Step> HeldCleanup() => new()
     {
         new Step
@@ -720,6 +736,9 @@ public sealed unsafe class PlacementRunner : IDisposable
             Label = "Let go of what the editor holds",
             Run = () =>
             {
+                // Gone from the home (a zone change, a logout, kicked): the editor's state may be
+                // half torn down, so nothing is read or called.
+                if (!StillInStartHome()) return StepOutcome.Done;
                 var held = HousingEditor.ActiveItem;
                 if (held == 0) return StepOutcome.Done;
                 var mode = HousingEditor.Mode;
@@ -1987,7 +2006,11 @@ public sealed unsafe class PlacementRunner : IDisposable
             return new List<Step>
             {
                 Step.Act("Open the dye window on the picked piece (the game's \"interact\" function)", () =>
-                    actions.OpenDyeWindow() ? StepOutcome.Done : StepOutcome.Skip(actions.DyeError ?? "The game didn't say which piece is picked.", ProblemKind.DyeFailed)),
+                    // Only on this piece: the window opens on whatever's picked, and dyeing
+                    // another piece would use up the dye on it.
+                    HousingEditor.ActiveItem != instance
+                        ? StepOutcome.Skip("The piece to dye wasn't the one picked.", ProblemKind.DyeFailed)
+                        : actions.OpenDyeWindow() ? StepOutcome.Done : StepOutcome.Skip(actions.DyeError ?? "The game didn't say which piece is picked.", ProblemKind.DyeFailed)),
             };
         }
         return DyeListTry(job, instance, candidates, 0);

@@ -8,7 +8,14 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.4.0, working in the game.** 0.4.0: **Save this house as a build** saves the whole
+> **Status: 0.4.1, working in the game.** 0.4.1: a scan's fixes. A piece the editor holds when
+> a run stops is only set down while you're still in that home (not after a zone change or a
+> logout); the dye window's fallback only opens on the piece being dyed; Put them back for a
+> garden is tied to its plot; Try again only runs in the home the run was in; the outside kept
+> for saving is told apart by world too; a save writes beside the file and then replaces it, so
+> a failed write never leaves it cut short; the release workflow takes the typed version through
+> the environment, and the build workflow's token only reads.
+> 0.4.0: **Save this house as a build** saves the whole
 > home: its size and style (Minimalist II too), every floor's walls, flooring and light, the house's
 > window and door, its outside with dyes (an all-in-one house as one), partition wallpapers and framed
 > paintings, and the plot; the file always ends in `.build`. A deep scan fixed: Put them back only

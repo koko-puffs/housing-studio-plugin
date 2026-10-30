@@ -45,9 +45,13 @@ jobs:
       - name: Work out the version
         id: version
         shell: bash
+        # The typed version comes in through the environment, never pasted into the script
+        # (where a version like 1.0.0"; cmd; " would run cmd).
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            raw="${{ github.event.inputs.version }}"
+            raw="$INPUT_VERSION"
           else
             raw="${GITHUB_REF_NAME}"
           fi
