@@ -59,14 +59,18 @@ public static class Backups
         }
     }
 
-    /// <summary>Writes what's placed where you are (inside, or your garden) to a file.</summary>
-    public static bool SaveTo(string path, LayoutSession session, GameData data, string title)
+    /// <summary>
+    /// Writes what's placed where you are (inside, or your garden) to a file, read as it is now (no
+    /// design needed, nor the editor). False, with why, when it can't be read.
+    /// </summary>
+    public static bool SaveTo(string path, LayoutSession session, GameData data, string title) => SaveTo(path, session, data, title, out _);
+
+    public static bool SaveTo(string path, LayoutSession session, GameData data, string title, out string why)
     {
         var ctx = session.Context;
-        if (ctx.Side == null) return false;
+        if (!session.ReadPlacedNow(out var pieces, out var readPlot, out why)) return false;
         string? Hex(byte stain) => stain == 0 ? null : data.DyeRgb(stain) is { } rgb ? Dyes.HexOfRgb(rgb) : null;
 
-        var pieces = session.Live.Values.OrderBy(p => p.Key).ToList();
         if (ctx.Side == Side.Interior)
         {
             var inside = pieces.Select(p => new SavedPiece(p.ItemId, data.ItemName(p.ItemId), p.Position, p.Yaw, Hex(p.Stain))).ToList();
@@ -74,7 +78,11 @@ public static class Backups
             return true;
         }
 
-        if (session.Plot is not { } plot) return false;
+        if ((readPlot ?? session.Plot) is not { } plot)
+        {
+            why = "Couldn't tell which plot you're on.";
+            return false;
+        }
         var garden = pieces.Select(p =>
         {
             var (local, yaw) = Transforms.WardToPlot(p.Position, p.Yaw, plot);

@@ -42,6 +42,7 @@ public sealed partial class MainWindow
 
         Frame.BeginBody("##start", null, 24, 24);
         DrawDropZone();
+        DrawSaveHome();
         if (session.LoadError != null && session.Layout == null)
         {
             Kit.Gap(12);
@@ -54,6 +55,33 @@ public sealed partial class MainWindow
         Frame.EndBody();
         // The whole body takes a dropped file too.
         DropTarget();
+    }
+
+    /// <summary>
+    /// In a home you can decorate: "Save this house as a build" (or garden), what's placed there as a
+    /// .build you can load here, open in MakePlace or upload to Housing Studio. No design or editor needed.
+    /// </summary>
+    private void DrawSaveHome()
+    {
+        var ctx = session.Context;
+        if (ctx.Side == null || !ctx.HasPermission) return;
+        Kit.Gap(12);
+        var at = Kit.At;
+        var w = Kit.Width;
+        var home = ctx.Side == Side.Garden ? "garden" : ctx.HouseSize switch
+        {
+            "Small" => "cottage",
+            "Medium" => "house",
+            "Large" => "mansion",
+            "Apartment" => "apartment",
+            _ => "home",
+        };
+        var label = $"Save this {home} as a build";
+        var bw = Kit.ButtonWidth(label, BtnSize.Md, Icon.House, Btn.Glass);
+        if (Kit.Button("##save-home", new Vector2(at.X + (w - bw) / 2, at.Y), label, Btn.Glass, BtnSize.Md, Icon.House, 0, false,
+                "What's placed here, as a .build you can load again, open in MakePlace, or upload to Housing Studio"))
+            SaveDialog();
+        Kit.Reserve(at, w, S(40));
     }
 
     /// <summary>A note with an icon before it (info in dim, alert in danger), as the mockups' notes with an "i".</summary>

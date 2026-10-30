@@ -8,7 +8,8 @@ its exact spot, then dyes everything to match.
 > **Status: 0.3.4, working in the game.** 0.3.4 turns **Place anywhere** on by default, makes the
 > furnishing list again when a piece isn't in it (a bag piece just stored wasn't), never re-picks a
 > storeroom row already seen to hold the piece in another dye, and gives up on a piece the list won't
-> show after 60 rows instead of 600. 0.3.3 made Quick (0.3.2's pace) the default, with Steady
+> show after 60 rows instead of 600. **Save this house as a build** is on the Start view, and works
+> in any home you may decorate without the editor open. 0.3.3 made Quick (0.3.2's pace) the default, with Steady
 > for a slow connection and Daring for the impatient, and fixes the storeroom picking a piece in the
 > wrong dye, a garden or house whose placed furniture couldn't be read being planned as empty (every
 > piece placed again), and a few slow spots in the window (see [Pace](#pace)). 0.3.2 also fixes a freeze on closing a
@@ -76,7 +77,9 @@ its exact spot, then dyes everything to match.
 One window, no tabs: what it shows follows what you're doing.
 
 - **Start** (nothing loaded): where you are ("In your house (medium) · you can decorate"), a drop
-  zone with **Choose a file**, **Recent** (your files and the backups runs saved; right-click a file
+  zone with **Choose a file**; in a home you may decorate, **Save this house as a build** (what's
+  placed there, read as it is: no design, and no need for the furnishing editor or Rotate; a garden
+  needs Outdoor Furnishings opened once, as the game loads its list only then); **Recent** (your files and the backups runs saved; right-click a file
   to take it off the list) and **Browse designs** (opens Housing Studio's Browse page).
 - **Ready** (a design loaded): whether it fits your home, **What Start does** (how many pieces it
   moves, places from your storeroom and bags, and dyes, with the dyes you're missing under

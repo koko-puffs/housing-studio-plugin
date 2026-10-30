@@ -257,8 +257,9 @@ public sealed partial class MainWindow
         SetRow(i++, "Save what's placed as a build", "A .build you can load here, open in MakePlace, or upload to Housing Studio",
             Kit.ButtonWidth(save, BtnSize.Sm), S(34), p =>
             {
-                if (Kit.Button("##save-build", p, save, Btn.Glass, BtnSize.Sm, null, 0, session.Context.Side == null,
-                        session.Context.Side == null ? "Go to your home first" : null))
+                var cant = session.Context.Side == null ? "Go to your home first"
+                    : !session.Context.HasPermission ? "You can save a home you're allowed to decorate" : null;
+                if (Kit.Button("##save-build", p, save, Btn.Glass, BtnSize.Sm, null, 0, cant != null, cant))
                     SaveDialog();
             });
 

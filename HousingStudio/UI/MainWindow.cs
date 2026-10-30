@@ -251,10 +251,19 @@ public sealed partial class MainWindow : Window
         }, 1, start, true);
     }
 
+    /// <summary>
+    /// Saves what's placed in the home you're in as a .build (or a MakePlace .json): any home you may
+    /// decorate, with or without a design loaded, the editor open or not.
+    /// </summary>
     private void SaveDialog()
     {
         var ctx = session.Context;
-        if (ctx.Side == null || session.Live.Count == 0)
+        if (!session.ReadPlacedNow(out var pieces, out _, out var why))
+        {
+            Notify(why);
+            return;
+        }
+        if (pieces.Count == 0)
         {
             Notify("Nothing placed here to save");
             return;
@@ -265,11 +274,12 @@ public sealed partial class MainWindow : Window
             if (!ok) return;
             OnFramework(() =>
             {
-                if (Backups.SaveTo(path, session, data, Path.GetFileNameWithoutExtension(path)))
+                if (Backups.SaveTo(path, session, data, Path.GetFileNameWithoutExtension(path), out var failed))
                 {
                     log.Done($"Saved what's placed to {path}.");
-                    Notify("Saved");
+                    Notify($"Saved {Path.GetFileName(path)}");
                 }
+                else Notify(failed.Length > 0 ? failed : "Couldn't save it");
             });
         }, Backups.Folder, true);
     }

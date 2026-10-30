@@ -153,6 +153,49 @@ public sealed class LayoutSession
     }
 
     /// <summary>
+    /// What's placed where you are, read now, with or without a design loaded and whatever the editor's
+    /// mode (or with no editor open: the furniture is in memory while you're inside): the pieces, and for
+    /// a garden the plot they're on. False, with why, when it can't be read.
+    /// </summary>
+    public bool ReadPlacedNow(out List<LivePiece> pieces, out PlotSpot? plot, out string why)
+    {
+        pieces = new List<LivePiece>();
+        plot = null;
+        why = string.Empty;
+        var ctx = Context;
+        if (ctx.Side == null)
+        {
+            why = "Go to your house (inside) or your plot (for the garden) first.";
+            return false;
+        }
+        if (!ctx.HasPermission)
+        {
+            why = "You can save a home you're allowed to decorate.";
+            return false;
+        }
+        List<LivePiece>? live;
+        if (ctx.Side == Side.Interior) live = furniture.ReadInterior();
+        else
+        {
+            if (ctx.District == null || ctx.Plot == null || !plots.TryGet(ctx.District, ctx.Plot.Value, out var spot))
+            {
+                why = "Couldn't tell which plot you're on. Stand on your plot and open Housing → Outdoor Furnishings.";
+                return false;
+            }
+            plot = spot;
+            live = furniture.ReadGarden(out var gardenWhy);
+            if (live == null) why = gardenWhy ?? string.Empty;
+        }
+        if (live == null)
+        {
+            if (why.Length == 0) why = "Couldn't read what's placed here yet. Wait a moment and try again.";
+            return false;
+        }
+        pieces = live.GroupBy(p => p.Key).Select(g => g.First()).OrderBy(p => p.Key).ToList();
+        return true;
+    }
+
+    /// <summary>
     /// The layout's pieces for a side, where they go in this house or on this plot. Away from the plot,
     /// a garden has none, unless <paramref name="toList"/>: then its pieces come as the design has them
     /// (for listing; their positions are the design's own, not a spot in this ward).
