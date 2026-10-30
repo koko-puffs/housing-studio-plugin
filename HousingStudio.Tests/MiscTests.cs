@@ -122,6 +122,16 @@ public class ShoppingListAndWriterTests
     }
 
     [Fact]
+    public void ListsDyesToBuyWhenItKnowsWhatYouHave()
+    {
+        var targets = new[] { new Target(0, 10, Vector3.Zero, 0, 3, Floor.Ground, false), new Target(1, 10, Vector3.One, 0, 3, Floor.Ground, false) };
+        var plan = Matcher.Build(targets, Array.Empty<PlacedPiece>(), new[] { new StockSlot(StockSource.Inventory, 0, 0, 10, 0, 2) });
+        var text = ShoppingList.Build(plan, _ => "Oak Table", _ => "Snow White", dyesOwned: _ => 1);
+        Assert.Contains("Dyes to buy", text);
+        Assert.Contains("1 × Snow White", text.Split("Dyes to buy")[1]);
+    }
+
+    [Fact]
     public void SaysSoWhenNothingIsMissing()
     {
         var plan = Matcher.Build(Array.Empty<Target>(), Array.Empty<PlacedPiece>(), Array.Empty<StockSlot>());

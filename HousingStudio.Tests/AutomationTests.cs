@@ -117,6 +117,43 @@ public class StepQueueTests
     }
 
     [Fact]
+    public void KeepsAGapBetweenClicks()
+    {
+        var clicks = 0;
+        var q = Queue();
+        q.ActionGap = TimeSpan.FromMilliseconds(300);
+        q.Begin(new[]
+        {
+            Step.Act("one", () => { clicks++; return StepOutcome.Done; }),
+            Step.Wait("quick wait", () => true, TimeSpan.FromSeconds(1)),
+            Step.Act("two", () => { clicks++; return StepOutcome.Done; }),
+        });
+        q.Tick();
+        q.Tick();
+        q.Tick();
+        Assert.Equal(1, clicks);
+        Advance(310);
+        q.Tick();
+        Assert.Equal(2, clicks);
+    }
+
+    [Fact]
+    public void AStepCanFinishThePieceEarly()
+    {
+        var ran = new List<string>();
+        var q = Queue();
+        q.Begin(new[]
+        {
+            Step.Act("check", () => { ran.Add("check"); q.FinishAfterThis(); return StepOutcome.Done; }),
+            Step.Act("never", () => { ran.Add("never"); return StepOutcome.Done; }),
+        });
+        q.Tick();
+        q.Tick();
+        Assert.Equal(new[] { "check" }, ran);
+        Assert.Equal(QueueState.Finished, q.State);
+    }
+
+    [Fact]
     public void StepsCanAddMoreAfterThemselves()
     {
         var log = new List<string>();

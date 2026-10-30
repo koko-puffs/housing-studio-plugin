@@ -11,7 +11,7 @@ namespace HousingStudio.Core;
 /// </summary>
 public static class ShoppingList
 {
-    public static string Build(Plan plan, Func<uint, string> itemName, Func<byte, string> dyeName, string? title = null)
+    public static string Build(Plan plan, Func<uint, string> itemName, Func<byte, string> dyeName, string? title = null, Func<byte, int>? dyesOwned = null)
     {
         var missing = plan.Entries.Where(e => e.State == PieceState.Missing).ToList();
         var sb = new StringBuilder();
@@ -19,6 +19,7 @@ public static class ShoppingList
         if (missing.Count == 0)
         {
             sb.AppendLine("Nothing missing: you have every piece.");
+            AppendDyesToBuy(sb, plan, dyeName, dyesOwned);
             return sb.ToString().TrimEnd();
         }
         var groups = missing.GroupBy(e => e.Target.ItemId)
@@ -42,6 +43,19 @@ public static class ShoppingList
             sb.AppendLine().AppendLine("Dyes to apply");
             foreach (var d in dyeing) sb.Append(d.Count()).Append(" × ").AppendLine(dyeName(d.Key));
         }
+        AppendDyesToBuy(sb, plan, dyeName, dyesOwned);
         return sb.ToString().TrimEnd();
+    }
+
+    /// <summary>The dyes to buy: what the design needs less what's in your bags (when known).</summary>
+    private static void AppendDyesToBuy(StringBuilder sb, Plan plan, Func<byte, string> dyeName, Func<byte, int>? dyesOwned)
+    {
+        if (dyesOwned == null) return;
+        var stains = plan.Entries.Select(e => e.Target.Stain).Where(s => s != 0).Distinct();
+        var owned = stains.ToDictionary(s => s, dyesOwned);
+        var buy = DyePlanner.ToBuy(plan, owned);
+        if (buy.Count == 0) return;
+        sb.AppendLine().AppendLine("Dyes to buy (beyond what's in your bags)");
+        foreach (var (stain, count) in buy) sb.Append(count).Append(" × ").AppendLine(dyeName(stain));
     }
 }

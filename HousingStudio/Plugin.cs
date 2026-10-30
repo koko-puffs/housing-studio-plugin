@@ -23,6 +23,8 @@ public sealed class Plugin : IDalamudPlugin
     private readonly GameData data;
     private readonly ActivityLog log = new();
     private readonly HousingEditor editor;
+    private readonly HousingActions actions;
+    private readonly Automation.UiRecorder recorder;
     private readonly FurnitureReader furniture;
     private readonly PlaceAnywhere anywhere = new();
     private readonly LayoutSession session;
@@ -41,23 +43,26 @@ public sealed class Plugin : IDalamudPlugin
         Plots = PlotTable.LoadEmbedded();
         data = new GameData();
         editor = new HousingEditor();
+        actions = new HousingActions();
+        recorder = new Automation.UiRecorder();
         furniture = new FurnitureReader(data);
         if (editor.Error != null) log.Warn(editor.Error);
         if (furniture.GardenError != null) log.Warn(furniture.GardenError);
+        if (actions.DyeError != null) log.Warn(actions.DyeError);
 
         session = new LayoutSession(data, furniture, Plots, log);
-        runner = new PlacementRunner(config, session, editor, furniture, anywhere, data, log);
+        runner = new PlacementRunner(config, session, editor, actions, furniture, anywhere, data, log);
 
         fonts = new Fonts();
         Widgets.Fonts = fonts;
         var theme = new Theme(fonts);
-        window = new MainWindow(config, session, runner, data, log, theme);
+        window = new MainWindow(config, session, runner, data, log, theme, recorder);
         windows.AddWindow(window);
         overlay = new Overlay(config, session, runner, data);
 
         Services.Commands.AddHandler(Command, new CommandInfo(OnCommand)
         {
-            HelpMessage = "Open Housing Studio. /hstudio pause, /hstudio resume or /hstudio stop control a run.",
+            HelpMessage = "Open Housing Studio. /hstudio pause, resume, stop, or continue (step-by-step mode) control a run.",
         });
 
         Services.PluginInterface.UiBuilder.Draw += Draw;
@@ -87,6 +92,7 @@ public sealed class Plugin : IDalamudPlugin
         {
             var ctx = HousingContext.Read(Plots);
             runner.Tick(ctx);
+            recorder.Tick();
             if (DateTime.UtcNow >= nextRefresh)
             {
                 nextRefresh = DateTime.UtcNow + (runner.Active ? RefreshWhileRunning : RefreshEvery);
@@ -121,6 +127,10 @@ public sealed class Plugin : IDalamudPlugin
             case "resume":
                 runner.Resume();
                 break;
+            case "continue":
+            case "next":
+                runner.Continue();
+                break;
             case "settings":
             case "config":
                 OpenSettings();
@@ -143,6 +153,7 @@ public sealed class Plugin : IDalamudPlugin
         Services.Commands.RemoveHandler(Command);
         windows.RemoveAllWindows();
         runner.Dispose();
+        recorder.Dispose();
         anywhere.Dispose();
         fonts.Dispose();
     }

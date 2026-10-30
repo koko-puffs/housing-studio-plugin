@@ -65,7 +65,7 @@ public sealed partial class MainWindow
         Widgets.Gap(4);
         if (Widgets.Button("Copy shopping list", ButtonStyle.Brass, small: true))
         {
-            ImGui.SetClipboardText(ShoppingList.Build(plan, data.ItemName, data.DyeName, session.Title));
+            ImGui.SetClipboardText(ShoppingList.Build(plan, data.ItemName, data.DyeName, session.Title, s => HousingActions.DyesOwned(data, s)));
             Notify("Shopping list copied");
         }
         ImGui.SameLine();

@@ -76,6 +76,46 @@ public static unsafe class InventoryReader
         return $"bag {bag}, row {s.Slot / 5 + 1}, slot {s.Slot % 5 + 1}";
     }
 
+    /// <summary>Every occupied storeroom slot on a side, in container and slot order (the list's order).</summary>
+    public static List<(int Container, int Slot, uint ItemId, byte Stain)> StoreroomOccupied(Side side)
+    {
+        var list = new List<(int, int, uint, byte)>();
+        var mgr = InventoryManager.Instance();
+        if (mgr == null) return list;
+        foreach (var t in side == Side.Interior ? InteriorStoreroom : ExteriorStoreroom)
+        {
+            var c = mgr->GetInventoryContainer(t);
+            if (c == null || !c->IsLoaded) continue;
+            for (var i = 0; i < c->Size; i++)
+            {
+                var item = c->GetInventorySlot(i);
+                if (item == null || item->IsEmpty()) continue;
+                list.Add(((int)t, i, item->GetBaseItemId(), item->GetStain(0)));
+            }
+        }
+        return list;
+    }
+
+    /// <summary>Has the game sent this side's storeroom yet?</summary>
+    public static bool StoreroomLoaded(Side side)
+    {
+        var mgr = InventoryManager.Instance();
+        if (mgr == null) return false;
+        foreach (var t in side == Side.Interior ? InteriorStoreroom : ExteriorStoreroom)
+        {
+            var c = mgr->GetInventoryContainer(t);
+            if (c != null && c->IsLoaded) return true;
+        }
+        return false;
+    }
+
+    /// <summary>Is the furnishing window showing its Storeroom tab?</summary>
+    public static bool StoreroomTabShown()
+    {
+        var hm = HousingManager.Instance();
+        return hm != null && hm->IndoorTerritory != null && hm->IndoorTerritory->ShowStoreroomTab;
+    }
+
     /// <summary>Which storeroom slot the furnishing window has picked right now, or null.</summary>
     public static (int Container, int Slot)? StoreroomSelection()
     {

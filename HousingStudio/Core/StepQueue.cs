@@ -42,6 +42,9 @@ public sealed class Step
     /// <summary>What a timeout means: by default the whole run stops ("an expected window didn't appear").</summary>
     public StepStatus OnTimeout { get; init; } = StepStatus.Stop;
 
+    /// <summary>What to say when it times out (default: "Timed out: label").</summary>
+    public string? TimeoutMessage { get; init; }
+
     /// <summary>A short wait before the step first runs (the game needs a moment after a click).</summary>
     public TimeSpan Delay { get; init; }
 
@@ -82,10 +85,15 @@ public sealed class StepQueue
     private DateTime stepStarted;
     private bool started;
     private bool approved;
+    private bool finishEarly;
+    private DateTime lastAction = DateTime.MinValue;
 
     public StepQueue(Func<DateTime> now) => this.now = now;
 
     public QueueState State { get; private set; } = QueueState.Idle;
+
+    /// <summary>The least time between two actions (clicks), however quickly the waits between them finish.</summary>
+    public TimeSpan ActionGap { get; set; }
 
     /// <summary>Pause before each action until <see cref="Continue"/> is pressed.</summary>
     public bool StepByStep { get; set; }
@@ -111,12 +119,16 @@ public sealed class StepQueue
         index = 0;
         started = false;
         approved = false;
+        finishEarly = false;
         Message = null;
         State = steps.Count == 0 ? QueueState.Finished : QueueState.Running;
     }
 
     /// <summary>Adds steps right after the current one (a step that finds out more to do).</summary>
     public void InsertNext(IEnumerable<Step> more) => steps.InsertRange(Math.Min(index + 1, steps.Count), more);
+
+    /// <summary>Ends the piece successfully once the current step is done (it found there's nothing left to do).</summary>
+    public void FinishAfterThis() => finishEarly = true;
 
     public void Continue()
     {
@@ -141,6 +153,7 @@ public sealed class StepQueue
         var t = now();
         if (!started)
         {
+            if (step.IsAction && t - lastAction < ActionGap) return;
             if (step.IsAction && StepByStep && !approved)
             {
                 State = QueueState.AwaitingContinue;
@@ -165,8 +178,9 @@ public sealed class StepQueue
         switch (outcome.Status)
         {
             case StepStatus.Done:
+                if (step.IsAction) lastAction = t;
                 Trace?.Invoke(step, "done");
-                index++;
+                index = finishEarly ? steps.Count : index + 1;
                 started = false;
                 approved = false;
                 if (index >= steps.Count) State = QueueState.Finished;
@@ -174,7 +188,7 @@ public sealed class StepQueue
             case StepStatus.Waiting:
                 if (t - stepStarted - step.Delay >= step.Timeout)
                 {
-                    var why = $"Timed out: {step.Label} (waited {step.Timeout.TotalSeconds:0.#} s).";
+                    var why = step.TimeoutMessage ?? $"Timed out: {step.Label} (waited {step.Timeout.TotalSeconds:0.#} s).";
                     End(step.OnTimeout == StepStatus.SkipJob ? QueueState.Skipped : QueueState.Stopped, why);
                 }
                 break;

@@ -140,6 +140,20 @@ public sealed unsafe class FurnitureReader
         return (new Vector3(f.Position.X, f.Position.Y, f.Position.Z), f.Rotation);
     }
 
+    /// <summary>The dye a placed piece has now, by its furniture slot (0 undyed), or null.</summary>
+    public static byte? StoredStain(bool garden, int key)
+    {
+        var hm = HousingManager.Instance();
+        if (hm == null) return null;
+        HousingFurnitureManager* fm = garden
+            ? (hm->OutdoorTerritory == null ? null : &hm->OutdoorTerritory->FurnitureManager)
+            : (hm->IndoorTerritory == null ? null : &hm->IndoorTerritory->FurnitureManager);
+        if (fm == null) return null;
+        var memory = fm->FurnitureMemory;
+        if (key < 0 || key >= memory.Length) return null;
+        return memory[key].Stain;
+    }
+
     /// <summary>The preview the game shows while a piece is being picked from the storeroom or bags, or null.</summary>
     public static GameObject* Preview()
     {

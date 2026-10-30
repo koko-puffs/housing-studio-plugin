@@ -24,12 +24,13 @@ public sealed partial class MainWindow : Window
     private readonly GameData data;
     private readonly ActivityLog log;
     private readonly Theme theme;
+    private readonly Automation.UiRecorder recorder;
     private readonly FileDialogManager dialogs = new();
     private int tab;
     private string? notice;
     private DateTime noticeUntil;
 
-    public MainWindow(Configuration config, LayoutSession session, PlacementRunner runner, GameData data, ActivityLog log, Theme theme)
+    public MainWindow(Configuration config, LayoutSession session, PlacementRunner runner, GameData data, ActivityLog log, Theme theme, Automation.UiRecorder recorder)
         : base("Housing Studio###HousingStudioMain")
     {
         this.config = config;
@@ -38,6 +39,7 @@ public sealed partial class MainWindow : Window
         this.data = data;
         this.log = log;
         this.theme = theme;
+        this.recorder = recorder;
         Size = new Vector2(660, 720);
         SizeCondition = ImGuiCond.FirstUseEver;
         SizeConstraints = new WindowSizeConstraints { MinimumSize = new Vector2(520, 460), MaximumSize = new Vector2(1600, 2000) };

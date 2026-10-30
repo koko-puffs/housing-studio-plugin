@@ -47,7 +47,7 @@ public sealed class Overlay
 
         var dl = ImGui.GetBackgroundDrawList();
         var mouse = ImGui.GetMousePos();
-        var current = runner.Current?.Entry;
+        var current = runner.Current?.Target;
         var range = config.MarkerRange <= 0 ? float.MaxValue : config.MarkerRange;
         string? hoverLabel = null;
         Vector2 hoverAt = default;
@@ -55,7 +55,7 @@ public sealed class Overlay
 
         foreach (var e in plan.Entries)
         {
-            var isCurrent = current != null && current.Target.Key == e.Target.Key && current.Target.ItemId == e.Target.ItemId;
+            var isCurrent = current != null && current.Key == e.Target.Key && current.ItemId == e.Target.ItemId;
             if (!isCurrent)
             {
                 if (e.State == PieceState.InPlace && !config.ShowPlacedMarkers) continue;

@@ -9,7 +9,7 @@ namespace HousingStudio;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
-    public int Version { get; set; } = 1;
+    public int Version { get; set; } = 2;
 
     /// <summary>Layouts opened lately, newest first.</summary>
     public List<string> RecentFiles { get; set; } = new();
@@ -26,11 +26,20 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>Save what's placed now to a .build in the plugin's folder before placing starts.</summary>
     public bool BackupBeforePlacing { get; set; } = true;
 
-    /// <summary>
-    /// While a storeroom piece's menu is open, move the game's preview of it to its spot in the
-    /// design, so choosing "Place" puts it there.
-    /// </summary>
-    public bool AimStoreroomPreview { get; set; } = true;
+    /// <summary>Place pieces from the storeroom through the furnishing list's menus (else you put them down).</summary>
+    public bool StoreroomAutomatic { get; set; } = true;
+
+    /// <summary>Place pieces from your bags through the item's menu (else you put them down).</summary>
+    public bool BagsAutomatic { get; set; } = true;
+
+    /// <summary>After placing, dye every piece whose dye differs from the design.</summary>
+    public bool DyeAfterPlacing { get; set; } = true;
+
+    /// <summary>Diagnostics: hold before every click until Continue is pressed.</summary>
+    public bool StepByStep { get; set; }
+
+    /// <summary>The words of the "place" entry in an item's menu, comma-separated; empty uses the built-in ones.</summary>
+    public string PlaceMenuWords { get; set; } = string.Empty;
 
     /// <summary>
     /// Temporarily switch off the game's "floating / sunk / overlapping" placement check while

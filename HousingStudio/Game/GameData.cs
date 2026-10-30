@@ -16,6 +16,7 @@ public sealed class GameData
     private readonly Dictionary<uint, uint> indoorFurnitureToItem = new();
     private readonly Dictionary<uint, uint> yardObjectToItem = new();
     private readonly Dictionary<byte, DyeColor> dyesById = new();
+    private readonly Dictionary<byte, (byte Shade, byte SubOrder, uint[] Items)> dyeUi = new();
 
     public IReadOnlyList<DyeColor> HousingDyes { get; }
 
@@ -38,6 +39,10 @@ public sealed class GameData
             if (stain.RowId == 0 || stain.RowId > byte.MaxValue) continue;
             var dye = new DyeColor((byte)stain.RowId, stain.Color & 0xFFFFFF, stain.Name.ExtractText());
             dyesById[dye.StainId] = dye;
+            var dyeItems = new List<uint>();
+            foreach (var item in stain.Item)
+                if (item.RowId != 0) dyeItems.Add(item.RowId);
+            dyeUi[dye.StainId] = (stain.Shade, stain.SubOrder, dyeItems.ToArray());
             if (stain.IsHousingApplicable && !string.IsNullOrEmpty(dye.Name)) dyes.Add(dye);
         }
         HousingDyes = dyes;
@@ -61,6 +66,12 @@ public sealed class GameData
 
     public string DyeName(byte stainId) =>
         stainId == 0 ? "Undyed" : dyesById.TryGetValue(stainId, out var d) && d.Name.Length > 0 ? d.Name : $"Dye {stainId}";
+
+    /// <summary>The items that apply a dye (from the Stain sheet).</summary>
+    public IReadOnlyList<uint> DyeItems(byte stainId) => dyeUi.TryGetValue(stainId, out var d) ? d.Items : System.Array.Empty<uint>();
+
+    /// <summary>Where a dye sits in the dye window: its shade (the row of circles) and its place in it.</summary>
+    public (byte Shade, byte SubOrder)? DyeSlot(byte stainId) => dyeUi.TryGetValue(stainId, out var d) ? (d.Shade, d.SubOrder) : null;
 
     public uint? DyeRgb(byte stainId) => dyesById.TryGetValue(stainId, out var d) ? d.Rgb : null;
 
