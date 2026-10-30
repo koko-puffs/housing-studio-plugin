@@ -133,6 +133,25 @@ later in the run, of the same item and in the same pass, that wants that very dy
 the two swap where they go and which copy), and the first piece comes later. Rows known to hold the
 piece in another dye are passed over by the order search as well.
 
+**0.4.0: saving a whole home.** Saving reads, besides the furniture (`FurnitureReader`): the
+interior's fixtures from `LayoutWorld.ActiveLayout->IndoorAreaData` (the interior territory's own
+copy when that's missing): `Floor0` ground, `Floor1` upper, `Floor2` basement and `Exterior`, the
+house's own walls, window and door ("Main", as MakePlace writes it), each with parts wall, window,
+door, floor, light. A part's key is an Item's `AdditionalData` row (items of ItemUICategory 65-75,
+the fixtures). The outside, from `OutdoorAreaData->Plots[plot].Fixture[0..7]` (roof, walls, window,
+door, roof decoration, wall decoration, placard, fence: each a `FixtureId` and `StainId`), only in
+the ward: every plot with a house is read there every 5 s and kept for the session, so a home saved
+from inside has it too (its plot is the interior's `HouseId`, its ward `GetCurrentWard()`, in
+`GetOriginalHouseTerritoryTypeId()`). A themed house is one whose roof or walls key belongs to a
+`HousingUnitedExterior` row; it's written as one "Walls" entry with that item, dyed as its walls,
+plus any part of the outside that isn't its own. A piece's material (a partition's wallpaper, a
+frame's painting, an angler's canvas's fish print) is the ushort at +0xCC of its
+`SharedGroupLayoutInstance.StainInfo` (MakePlace's `MaterialSlot1`), a VaseFlower number (rows
+2001-2999 wallpapers, 1001-1999 paintings, 3001-6999 the four sizes of fish print), written as
+`properties.material` {name, itemId}. The style comes from the interior's territory name: s1, f1,
+w1, e1, r1 the districts, h1 "Minimalist", h2 "Minimalist II". Unverified in game: all of it, the
++0xCC offset and the outside's table most of all.
+
 **0.3.5: putting things back.** A restore's run moves the backup's pieces back, places what's
 missing, dyes, and then puts away what's placed now and isn't in the backup (`Plan.Extras`): the
 editor's Store button (`HousingLayout [i:2]`, from 0.3.3's recording), each piece picked with the

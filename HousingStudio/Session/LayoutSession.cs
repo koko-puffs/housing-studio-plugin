@@ -25,7 +25,11 @@ public sealed class LayoutSession
         this.furniture = furniture;
         this.plots = plots;
         this.log = log;
+        Fixtures = new FixtureReader(data);
     }
+
+    /// <summary>What the home is put up with (its fixtures, inside and out), for saving it.</summary>
+    public FixtureReader Fixtures { get; }
 
     public Layout? Layout { get; private set; }
     public string? FilePath { get; private set; }
@@ -97,6 +101,7 @@ public sealed class LayoutSession
     {
         Context = context;
         ReadAt = DateTime.UtcNow;
+        Fixtures.Look(context);
         Warnings.Clear();
         Live.Clear();
         Plot = null;

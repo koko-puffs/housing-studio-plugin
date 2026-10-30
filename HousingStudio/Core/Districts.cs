@@ -30,6 +30,30 @@ public static class Districts
     };
 
     /// <summary>
+    /// The style an interior is built in, from its TerritoryType name, as a file's District line
+    /// names it: "s1i2" → "Mist", "h1i2" → "Minimalist", "h2i2" → "Minimalist II"; null when it
+    /// isn't a home's interior or the style is one this doesn't know.
+    /// </summary>
+    public static string? StyleOfInterior(string territoryName)
+    {
+        var n = territoryName.ToLowerInvariant();
+        if (n.Length < 4 || n[2] != 'i') return null;
+        return n[..2] switch
+        {
+            "s1" => "Mist",
+            "f1" => "The Lavender Beds",
+            "w1" => "The Goblet",
+            "e1" => "Shirogane",
+            "r1" => "Empyreum",
+            "h1" => "Minimalist",
+            ['h', var k] when char.IsDigit(k) => $"Minimalist {Roman(k - '0')}",
+            _ => null,
+        };
+    }
+
+    private static string Roman(int n) => n switch { 2 => "II", 3 => "III", 4 => "IV", 5 => "V", 6 => "VI", _ => n.ToString() };
+
+    /// <summary>
     /// The size of a house from its interior's TerritoryType name ("s1i2" is a medium house in
     /// Mist): "Small", "Medium", "Large" or "Apartment", or null when it isn't a home's interior.
     /// </summary>

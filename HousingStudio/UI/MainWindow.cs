@@ -272,6 +272,8 @@ public sealed partial class MainWindow : Window
         dialogs.SaveFileDialog("Save what's placed as a build", "Build{.build},MakePlace layout{.json}", name, ".build", (ok, path) =>
         {
             if (!ok) return;
+            // The dialog leaves the extension off when it's typed without one; the site only opens a .build.
+            path = LayoutWriter.WithExtension(path);
             OnFramework(() =>
             {
                 if (Backups.SaveTo(path, session, data, Path.GetFileNameWithoutExtension(path), out var failed))

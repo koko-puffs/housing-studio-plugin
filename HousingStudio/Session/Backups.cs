@@ -70,12 +70,21 @@ public static class Backups
         var ctx = session.Context;
         if (!session.ReadPlacedNow(out var pieces, out var readPlot, out why)) return false;
         string? Hex(byte stain) => stain == 0 ? null : data.DyeRgb(stain) is { } rgb ? Dyes.HexOfRgb(rgb) : null;
+        SavedPiece Saved(LivePiece p, System.Numerics.Vector3 at, float yaw)
+        {
+            var material = data.MaterialItem(p.ItemId, FurnitureReader.Material(p.Instance));
+            return new SavedPiece(p.ItemId, data.ItemName(p.ItemId), at, yaw, Hex(p.Stain),
+                material == 0 ? null : new SavedItem(material, data.AnyItemName(material)));
+        }
+        var fixtures = session.Fixtures;
 
         if (ctx.Side == Side.Interior)
         {
-            var inside = pieces.Select(p => new SavedPiece(p.ItemId, data.ItemName(p.ItemId), p.Position, p.Yaw, Hex(p.Stain))).ToList();
-            File.WriteAllText(path, LayoutWriter.Write(ctx.HouseSize, Districts.Display(ctx.District), inside, Array.Empty<SavedPiece>(), title));
-            return true;
+            var size = ctx.HouseSize;
+            var home = new SavedHome(size, Districts.StyleOfInterior(ctx.TerritoryName) ?? StyleOf(ctx.District),
+                fixtures.ReadInterior(size), size == "Apartment" ? [] : fixtures.ExteriorOfHome(ctx), FixtureReader.PlotOfInterior());
+            var inside = pieces.Select(p => Saved(p, p.Position, p.Yaw)).ToList();
+            return Write(path, LayoutWriter.Write(home, inside, [], title), out why);
         }
 
         if ((readPlot ?? session.Plot) is not { } plot)
@@ -86,9 +95,26 @@ public static class Backups
         var garden = pieces.Select(p =>
         {
             var (local, yaw) = Transforms.WardToPlot(p.Position, p.Yaw, plot);
-            return new SavedPiece(p.ItemId, data.ItemName(p.ItemId), local, yaw, Hex(p.Stain));
+            return Saved(p, local, yaw);
         }).ToList();
-        File.WriteAllText(path, LayoutWriter.Write(ctx.HouseSize, Districts.Display(ctx.District), Array.Empty<SavedPiece>(), garden, title, plot.Number));
-        return true;
+        var outside = new SavedHome(ctx.HouseSize, StyleOf(ctx.District), [], fixtures.ExteriorOfHome(ctx), plot.Number);
+        return Write(path, LayoutWriter.Write(outside, [], garden, title), out why);
     }
+
+    private static bool Write(string path, string json, out string why)
+    {
+        why = string.Empty;
+        try
+        {
+            File.WriteAllText(path, json);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            why = $"Couldn't write the file: {ex.Message}";
+            return false;
+        }
+    }
+
+    private static string? StyleOf(string? district) => district == null ? null : Districts.Display(district);
 }

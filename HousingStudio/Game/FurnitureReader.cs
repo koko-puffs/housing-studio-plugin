@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Numerics;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
+using FFXIVClientStructs.FFXIV.Client.LayoutEngine.Group;
 
 namespace HousingStudio.Game;
 
@@ -174,6 +175,20 @@ public sealed unsafe class FurnitureReader
         if (hm->OutdoorTerritory != null) return hm->OutdoorTerritory->FurnitureManager.ObjectManager.ObjectArray.TempObject;
         return null;
     }
+
+    /// <summary>
+    /// The material on a placed piece (a partition's wallpaper, a frame's painting: a VaseFlower
+    /// number, <see cref="GameData.MaterialItem"/>), 0 for none or when it isn't loaded. Read where
+    /// MakePlace reads it: the slot after its stain info's flags. Framework thread only.
+    /// </summary>
+    public static ushort Material(nint instance)
+    {
+        if (instance == 0) return 0;
+        var stainInfo = ((SharedGroupLayoutInstance*)instance)->StainInfo;
+        return stainInfo == null ? (ushort)0 : *(ushort*)((byte*)stainInfo + MaterialOffset);
+    }
+
+    private const int MaterialOffset = 0xCC;
 
     private static Vector3 Pos(GameObject* o) => new(o->Position.X, o->Position.Y, o->Position.Z);
 }

@@ -83,9 +83,14 @@ its exact spot, then dyes everything to match.
 One window, no tabs: what it shows follows what you're doing.
 
 - **Start** (nothing loaded): where you are ("In your house (medium) · you can decorate"), a drop
-  zone with **Choose a file**; in a home you may decorate, **Save this house as a build** (what's
-  placed there, read as it is: no design, and no need for the furnishing editor or Rotate; a garden
-  needs Outdoor Furnishings opened once, as the game loads its list only then); **Recent** (your files and the backups runs saved; right-click a file
+  zone with **Choose a file**; in a home you may decorate, **Save this house as a build**: the whole
+  home as it is (no design, and no need for the furnishing editor or Rotate), the same file the site
+  and MakePlace open. It holds the house's size and style (a district's, Minimalist or Minimalist II),
+  every floor's walls, flooring and light, the house's window and door, its outside (roof, walls or
+  an all-in-one house, window, door, decorations, placard and fence, with their dyes; seen in the
+  ward, so walk past your house once before saving from inside), every piece with its dye, the
+  wallpaper on partitions and the paintings in frames, and the plot. A garden needs Outdoor
+  Furnishings opened once, as the game loads its list only then. The name you type gets `.build`; **Recent** (your files and the backups runs saved; right-click a file
   to take it off the list) and **Browse designs** (opens Housing Studio's Browse page).
 - **Ready** (a design loaded): whether it fits your home, **What Start does** (how many pieces it
   moves, places from your storeroom and bags, and dyes, with the dyes you're missing under
@@ -197,7 +202,7 @@ HousingStudio/
                windows), UiRecorder (diagnostics recording).
   Game/        GameData (Lumina sheets), HousingContext (where you are), HousingEditor (the
                editor's state, pick up / set down), HousingActions (item menus, the dye window,
-               aiming the held piece), FurnitureReader, InventoryReader, PlaceAnywhere.
+               aiming the held piece), FurnitureReader, FixtureReader (the home's fixtures, inside and out, for saving it), InventoryReader, PlaceAnywhere.
   Session/     LayoutSession (the design matched to the game), PlacementRunner (the run: each
                piece's steps), Backups, ActivityLog.
   UI/          the window: Kit/ (the design system's tokens, fonts, icons and controls drawn with
