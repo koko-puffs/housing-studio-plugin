@@ -1,0 +1,311 @@
+using System;
+using System.Linq;
+using System.Numerics;
+using Dalamud.Bindings.ImGui;
+using HousingStudio.Core;
+using HousingStudio.Session;
+using HousingStudio.UI.Model;
+using static HousingStudio.UI.Theme;
+
+namespace HousingStudio.UI;
+
+/// <summary>
+/// Running (mockup 3): a run or a preview going, paused, or waiting for you. The figure and bar, the
+/// three phases, the piece in hand, the step-by-step callout, the log, and Pause / Stop.
+/// </summary>
+public sealed partial class MainWindow
+{
+    private bool logOpen = true;
+
+    private void DrawRunning()
+    {
+        var preview = runner.DryRun;
+        var waiting = runner.AwaitingContinue || runner.WaitingForYou;
+
+        Frame.BeginHeader(24);
+        var at = Kit.At;
+        var eyebrowH = Kit.Eyebrow(at, $"{(preview ? "Previewing" : "Placing")} {vm.RunTitle}", null, Kit.Width);
+        var left = Words.About(runner.TimeLeft);
+        var (pill, tone) = waiting ? ("Waiting for you", Tone.Waiting)
+            : runner.State == RunState.Paused ? ("Paused", Tone.Neutral)
+            : preview ? ($"Previewing · nothing is moved · {left} left", Tone.Live)
+            : ($"Running · {left} left", Tone.Live);
+        Kit.StatusPill(at + new Vector2(0, eyebrowH + S(8)), pill, tone, tone == Tone.Live, Kit.Width);
+        Kit.Reserve(at, Kit.Width, eyebrowH + S(8) + S(28));
+        Frame.EndHeader();
+
+        Frame.BeginBody("##running", "running-foot", 22, 22);
+        DrawFigure(preview);
+        Kit.Gap(18);
+        DrawPhases();
+        if (runner.Current is { } job)
+        {
+            Kit.Gap(18);
+            DrawCurrent(job);
+        }
+        var problems = runner.Failed + runner.Skipped;
+        if (problems > 0)
+        {
+            Kit.Gap(18);
+            var at2 = Kit.At;
+            var textX = S(16 + 10);
+            var runs = new[] { Run.Note($"{problems} skipped so far.", Palette.Danger), Run.Note(" The run carries on; you'll see what happened at the end.") };
+            var h = Txt.Flow(at2 + new Vector2(textX, 0), Kit.Width - textX, runs, 19.5f, out _);
+            Icons.Draw(Kit.Dl, Icon.Alert, at2 + new Vector2(0, S(2)), S(16), Palette.Danger);
+            Kit.Reserve(at2, Kit.Width, h);
+        }
+        if (waiting)
+        {
+            Kit.Gap(18);
+            DrawCallout();
+        }
+        Kit.Gap(18);
+        DrawLog();
+
+        Frame.BeginBottom("running-bottom");
+        var stay = session.Context.Side == Side.Garden
+            ? "Stay on your plot and leave the furnishing editor open. You can move the camera."
+            : "Stay in the house and leave the furnishing editor open. You can move the camera.";
+        Txt.Note(preview ? "Nothing is moved: each spot is marked in your home in turn. You can move the camera." : stay, center: true);
+        Frame.EndBottom();
+        Frame.EndBody();
+
+        DrawRunningFooter();
+    }
+
+    /// <summary>"131 of 447 pieces done": the 56px serif figure on the words' baseline, and the 8px bar.</summary>
+    private void DrawFigure(bool preview)
+    {
+        var at = Kit.At;
+        var w = Kit.Width;
+        var figure = vm.Figure.ToString();
+        var words = preview ? $"of {vm.RunPieces} pieces marked" : $"of {vm.RunPieces} pieces done";
+        var dl = Kit.Dl;
+        // line-height 1 for the figure; the words share its baseline (align-items: baseline).
+        var bigBox = S(56);
+        var bigTop = at.Y + (bigBox - Txt.Natural(Face.Serif, 56)) / 2;
+        var baseline = bigTop + Txt.Ascent(Face.Serif, 56);
+        var fw = Txt.Draw(dl, new Vector2(at.X, bigTop), figure, Face.Serif, 56, Palette.Ivory);
+        Txt.Draw(dl, new Vector2(at.X + fw + S(14), baseline - Txt.Ascent(Face.Sans, 15)), words, Face.Sans, 15, Palette.Ash);
+        Kit.Reserve(at, w, bigBox);
+        Kit.Gap(14);
+        var bar = Kit.At;
+        Kit.Progress(bar, w, vm.RunPieces == 0 ? 0 : vm.Figure / (float)vm.RunPieces);
+        Kit.Reserve(bar, w, S(8));
+    }
+
+    /// <summary>The three phases in a grid: done (a green tick), now (brass edge and wash), next (dim).</summary>
+    private void DrawPhases()
+    {
+        var at = Kit.At;
+        var w = Kit.Width;
+        var gap = S(10);
+        var cw = (w - gap * 2) / 3;
+        var nameH = Txt.Natural(Face.Sans, 13);
+        var figH = Txt.Natural(Face.Mono, 13);
+        var h = S(14) * 2 + MathF.Max(S(16), nameH) + S(6) + figH;
+        var current = runner.Phase;
+        var phases = new[] { (RunPhase.Move, "Move", Icon.Move), (RunPhase.Place, "Place", Icon.Package), (RunPhase.Dye, "Dye", Icon.Droplet) };
+        var dl = Kit.Dl;
+        for (var i = 0; i < 3; i++)
+        {
+            var (phase, name, icon) = phases[i];
+            var (done, problems, total) = runner.PhaseProgress(phase);
+            var unplanned = phase == RunPhase.Dye && !runner.DyesPlanned;
+            var now = current == phase;
+            var before = current != null && phase < current.Value;
+            var finished = !now && !unplanned && (before || (total > 0 && done + problems >= total));
+            var p = new Vector2(at.X + i * (cw + gap), at.Y);
+            var max = p + new Vector2(cw, h);
+            var r = S(Palette.RadiusCard);
+            if (now) dl.AddRectFilled(p, max, Palette.U32(Palette.BrassNow), r);
+            dl.AddRect(p + new Vector2(0.5f), max - new Vector2(0.5f), Palette.U32(now ? Palette.BrassEdge : Palette.Line), r, ImDrawFlags.None, 1f);
+            var ink = finished ? Palette.Success : now ? Palette.BrassSoft : Palette.Ash;
+            var y = p.Y + S(14);
+            var lineH = MathF.Max(S(16), nameH);
+            Icons.Draw(dl, finished ? Icon.Check : icon, new Vector2(p.X + S(16), y + (lineH - S(16)) / 2), S(16), ink);
+            Txt.Line(dl, new Vector2(p.X + S(16 + 16 + 8), y + (lineH - nameH) / 2), name, Face.Sans, 13, ink);
+            y += lineH + S(6);
+            string figure;
+            var dim = false;
+            if (unplanned)
+            {
+                figure = config.DyeAfterPlacing ? "next" : "off";
+                dim = true;
+            }
+            else if (total == 0)
+            {
+                figure = finished || before ? "none" : "next";
+                dim = true;
+            }
+            else if (!now && !finished)
+            {
+                figure = "next";
+                dim = true;
+            }
+            else
+            {
+                figure = $"{done} of {total}";
+            }
+            Txt.Line(dl, new Vector2(p.X + S(16), y), Txt.Fit(figure, Face.Mono, 13, cw - S(32)), Face.Mono, 13, dim ? Palette.Dim : Palette.Ivory);
+        }
+        Kit.Reserve(at, w, h);
+    }
+
+    /// <summary>The piece in hand: its icon, name, dye (the stain's own colour) and floor, and the step in words.</summary>
+    private void DrawCurrent(RunJob job)
+    {
+        Kit.BeginPanel("##current", 18, 20, 18);
+        var at = Kit.At;
+        var w = Kit.Width;
+        var dl = Kit.Dl;
+        var x = at.X + S(52) + S(16);
+        var tw = at.X + w - x;
+        var nameH = Txt.Natural(Face.SansMedium, 15);
+        var note = new System.Collections.Generic.List<Run>();
+        if (job.Target.Stain != 0)
+        {
+            note.Add(Run.Dot(data.DyeRgb(job.Target.Stain)));
+            note.Add(Run.Note($"{data.DyeName(job.Target.Stain)} · "));
+        }
+        note.Add(Run.Note(Floors.Name(job.Target.Floor)));
+        var step = vm.StepText;
+        var stepRuns = step != null ? new[] { Run.Note(step, Palette.Text) } : Array.Empty<Run>();
+        var noteH = Txt.Flow(Vector2.Zero, tw, note, 19.5f, out _, draw: false);
+        var stepH = step != null ? Txt.Flow(Vector2.Zero, tw, stepRuns, 19.5f, out _, draw: false) : 0;
+        var wordsH = nameH + S(4) + noteH + (step != null ? S(4) + stepH : 0);
+        var h = MathF.Max(S(52), wordsH);
+        Kit.Thumb(new Vector2(at.X, at.Y + (h - S(52)) / 2), S(52), S(Palette.RadiusMd), data.ItemIcon(job.Target.ItemId), S(22));
+        var y = at.Y + (h - wordsH) / 2;
+        Txt.Line(dl, new Vector2(x, y), Txt.Fit(data.ItemName(job.Target.ItemId), Face.SansMedium, 15, tw), Face.SansMedium, 15, Palette.Ivory);
+        y += nameH + S(4);
+        Txt.Flow(new Vector2(x, y), tw, note, 19.5f, out _);
+        y += noteH + S(4);
+        if (step != null) Txt.Flow(new Vector2(x, y), tw, stepRuns, 19.5f, out _);
+        Kit.Reserve(at, w, h);
+        Kit.EndPanel();
+    }
+
+    /// <summary>
+    /// Step by step (no mockup frame): a brass callout saying what the next click does, with Continue
+    /// as the screen's one brass button. Waiting for you uses the same callout without Continue.
+    /// </summary>
+    private void DrawCallout()
+    {
+        var step = runner.AwaitingContinue;
+        var name = runner.Current is { } j ? data.ItemName(j.Target.ItemId) : null;
+        Kit.BeginPanel("##callout", 16, 20, 16, Palette.Over(Palette.BrassNow, Palette.Ink), Palette.BrassEdge);
+        Kit.EyebrowRow(step ? "Step by step · next" : "Waiting for you");
+        Kit.Gap(6);
+        var line = StepWords.Friendly(runner.StepLabel, name) ?? (step ? "The next click" : "Something only you can do");
+        Txt.Para(new[] { new Run(line, Face.Sans, 15, Palette.Ivory) }, 15 * 1.4f);
+        Kit.Gap(4);
+        if (step)
+        {
+            // The click itself, window and values, as the log has it.
+            Txt.Para(new[] { new Run(runner.StepLabel ?? string.Empty, Face.Mono, 12, Palette.Dim) }, 12 * 1.6f);
+            Kit.Gap(4);
+            Txt.Para(new[] { Run.Note("Nothing is clicked until you continue. "), Run.Note("/hstudio continue", Palette.Dim), Run.Note(" works too.") });
+        }
+        else
+        {
+            Txt.Note("It carries on by itself once that's done.");
+        }
+        Kit.Gap(14);
+        var row = Kit.At;
+        var w = Kit.Width;
+        const string cont = "Continue";
+        const string skip = "Skip this piece";
+        var cw = step ? Kit.ButtonWidth(cont, BtnSize.Md, Icon.Play, Btn.Primary) : 0;
+        var sw = Kit.ButtonWidth(skip, BtnSize.Md, null, Btn.Quiet);
+        if (step && Kit.Button("##continue", new Vector2(row.X + w - cw, row.Y), cont, Btn.Primary, BtnSize.Md, Icon.Play))
+            OnFramework(runner.Continue);
+        if (runner.Current != null && Kit.Button("##skip", new Vector2(row.X + w - cw - (step ? S(8) : 0) - sw, row.Y), skip, Btn.Quiet, BtnSize.Md, null, 0, false,
+                "Leaves this piece for now (it's listed at the end) and goes on to the next."))
+            OnFramework(runner.SkipCurrent);
+        Kit.Reserve(row, w, S(40));
+        Kit.EndPanel();
+    }
+
+    /// <summary>"What it's doing": a disclosure with Copy, and the last three lines of the log (older ones dim).</summary>
+    private void DrawLog()
+    {
+        Kit.BeginPanel("##log", 0, 0, 0);
+        const string copy = "Copy";
+        var copyW = Kit.ButtonWidth(copy, BtnSize.Tiny, null, Btn.Quiet);
+        Disclosure("##log-row", ref logOpen, "What it's doing", null, 14, copyW, S(30), (p, _) =>
+        {
+            if (Kit.Button("##copy-log", p, copy, Btn.Quiet, BtnSize.Tiny, null, 0, false, "Copies the whole log, for a report"))
+            {
+                ImGui.SetClipboardText(log.AsText());
+                Notify("Log copied");
+            }
+        }, true);
+        if (logOpen)
+        {
+            var lines = log.Lines.Skip(Math.Max(0, log.Lines.Count - 3)).ToList();
+            var at = Kit.At;
+            var x = at.X + S(20);
+            var w = Kit.Width - S(40);
+            var lineBox = S(12 * 1.6f);
+            var y = at.Y;
+            var dl = Kit.Dl;
+            if (lines.Count == 0)
+            {
+                Txt.Line(dl, new Vector2(x, y), "Nothing yet.", Face.Sans, 12, Palette.Dim, 12 * 1.6f);
+                y += lineBox;
+            }
+            for (var i = 0; i < lines.Count; i++)
+            {
+                var l = lines[i];
+                var time = l.At.ToString("HH:mm:ss");
+                var tw = Txt.Line(dl, new Vector2(x, y), time, Face.Mono, 12, Palette.Dim, 12 * 1.6f);
+                var text = LogWords(l.Text);
+                var color = i < lines.Count - 1 ? Palette.Dim : l.Kind switch
+                {
+                    LogKind.Error => Palette.Danger,
+                    LogKind.Warn => Palette.BrassSoft,
+                    _ => Palette.Text,
+                };
+                var tx = x + tw + S(12);
+                Txt.Line(dl, new Vector2(tx, y), Txt.Fit(text, Face.Sans, 12, x + w - tx), Face.Sans, 12, color, 12 * 1.6f);
+                y += lineBox + (i < lines.Count - 1 ? S(2) : 0);
+            }
+            Kit.Reserve(at, Kit.Width, y - at.Y + S(16));
+        }
+        Kit.EndPanel();
+    }
+
+    /// <summary>A log line without the step markers it's indented with ("  → ", "  … ", "  ✕ ").</summary>
+    private static string LogWords(string text) => text.TrimStart().TrimStart('→', '…', '✕', '?').TrimStart();
+
+    private void DrawRunningFooter()
+    {
+        Frame.BeginFooter("running-foot", 18, 22);
+        var at = Kit.At;
+        var w = Kit.Width;
+        const string stop = "Stop";
+        var sw = Kit.ButtonWidth(stop, BtnSize.Lg, Icon.Square, Btn.Danger);
+        var paused = runner.State == RunState.Paused;
+        var bw = w - sw - S(10);
+        if (paused)
+        {
+            if (Kit.Button("##resume", at, "Resume", Btn.Primary, BtnSize.Lg, Icon.Play, bw)) OnFramework(runner.Resume);
+        }
+        else if (Kit.Button("##pause", at, "Pause", Btn.Glass, BtnSize.Lg, Icon.Pause, bw))
+        {
+            OnFramework(() => runner.Pause("Paused by you."));
+        }
+        if (Kit.Button("##stop", new Vector2(at.X + w - sw, at.Y), stop, Btn.Danger, BtnSize.Lg, Icon.Square))
+            OnFramework(() => runner.Stop("Stopped by you."));
+        Kit.Reserve(at, w, S(46));
+        Kit.Gap(12);
+        var runs = paused
+            ? new[] { Run.Note("Resume carries on from the step it held at. "), Run.Note("/hstudio resume", Palette.Dim), Run.Note(" works too.") }
+            // The mockup says "Pause finishes the piece in hand first"; the runner holds before its next
+            // step instead, so the words say that. TODO(runner): pause between pieces, then use the mockup's line.
+            : new[] { Run.Note("Pause holds before its next step. "), Run.Note("/hstudio pause", Palette.Dim), Run.Note(" works too.") };
+        Txt.Para(runs, 19.5f, center: true);
+        Frame.EndFooter();
+    }
+}

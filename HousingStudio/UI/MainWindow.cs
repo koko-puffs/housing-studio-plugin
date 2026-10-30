@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Numerics;
@@ -12,25 +13,38 @@ using static HousingStudio.UI.Theme;
 
 namespace HousingStudio.UI;
 
-/// <summary>The plugin's one window: a header with where you are, then Design, Pieces, Place and Settings.</summary>
+/// <summary>
+/// The plugin's one window. No tabs: the main view follows the session (Start with nothing loaded,
+/// Ready, Running while a run or preview goes, Done until you close its result), and Pieces and
+/// Settings open from the header with a back arrow. While a run goes they're hidden (the header
+/// has no buttons then), so nothing that steers the run changes under it.
+/// </summary>
 public sealed partial class MainWindow : Window
 {
-    private static readonly string[] Tabs = { "Design", "Pieces", "Place", "Settings" };
     private const string DropLabel = "HousingStudioLayoutDrop";
+
+    private enum Sub
+    {
+        None,
+        Pieces,
+        Settings,
+    }
 
     private readonly Configuration config;
     private readonly LayoutSession session;
     private readonly PlacementRunner runner;
     private readonly GameData data;
     private readonly ActivityLog log;
-    private readonly Theme theme;
+    private readonly Fonts fonts;
     private readonly Automation.UiRecorder recorder;
+    private readonly Overlay overlay;
+    private readonly ViewModel vm;
     private readonly FileDialogManager dialogs = new();
-    private int tab;
-    private string? notice;
-    private DateTime noticeUntil;
+    private readonly List<Action> later = new();
+    private Sub sub;
 
-    public MainWindow(Configuration config, LayoutSession session, PlacementRunner runner, GameData data, ActivityLog log, Theme theme, Automation.UiRecorder recorder)
+    public MainWindow(Configuration config, LayoutSession session, PlacementRunner runner, GameData data, ActivityLog log, Fonts fonts,
+        Automation.UiRecorder recorder, Overlay overlay)
         : base("Housing Studio###HousingStudioMain")
     {
         this.config = config;
@@ -38,62 +52,87 @@ public sealed partial class MainWindow : Window
         this.runner = runner;
         this.data = data;
         this.log = log;
-        this.theme = theme;
+        this.fonts = fonts;
         this.recorder = recorder;
-        Size = new Vector2(660, 720);
+        this.overlay = overlay;
+        vm = new ViewModel(config, session, runner, data);
+        Txt.Fonts = fonts;
+        if (config.Migrate()) config.Save();
+
+        Size = new Vector2(640, 980);
         SizeCondition = ImGuiCond.FirstUseEver;
-        SizeConstraints = new WindowSizeConstraints { MinimumSize = new Vector2(520, 460), MaximumSize = new Vector2(1600, 2000) };
+        SizeConstraints = new WindowSizeConstraints { MinimumSize = new Vector2(520, 600), MaximumSize = new Vector2(1600, 2400) };
         Flags = ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse;
         dialogs.AddedWindowFlags = ImGuiWindowFlags.NoCollapse;
     }
 
-    public void ShowTab(int index)
+    /// <summary>Opens the window on its main view.</summary>
+    public void ShowMain()
     {
-        tab = Math.Clamp(index, 0, Tabs.Length - 1);
+        sub = Sub.None;
         IsOpen = true;
     }
 
-    public override void PreDraw() => theme.Push();
+    /// <summary>Opens Settings (Dalamud's cog, /hstudio settings); during a run, the run.</summary>
+    public void ShowSettings()
+    {
+        sub = runner.Active ? Sub.None : Sub.Settings;
+        IsOpen = true;
+    }
 
-    public override void PostDraw() => theme.Pop();
+    public override void PreDraw() => Theme.PushFrame(fonts);
+
+    public override void PostDraw()
+    {
+        Theme.Pop();
+        // The file dialog is its own window, in ImGui's usual style.
+        dialogs.Draw();
+    }
 
     public override void Draw()
     {
-        using var body = theme.Fonts.Body.Push();
-        DrawHeader();
-        Widgets.Gap(4);
-        Widgets.Segmented("##tabs", Tabs, ref tab);
-        Widgets.Gap(8);
-
-        ImGui.BeginChild("##page", new Vector2(0, 0), false, ImGuiWindowFlags.None);
-        switch (tab)
+        Theme.PushInside();
+        vm.Observe();
+        using (fonts.Push(Face.Sans, 14))
         {
-            case 0:
-                DrawDesign();
-                break;
-            case 1:
-                DrawPieces();
-                break;
-            case 2:
-                DrawPlace();
-                break;
-            default:
+            if (runner.Active) sub = Sub.None;
+            if (sub == Sub.Settings)
+            {
                 DrawSettings();
-                break;
+            }
+            else
+            {
+                switch (vm.View)
+                {
+                    case MainView.Start:
+                        sub = Sub.None;
+                        DrawStart();
+                        break;
+                    case MainView.Running:
+                        DrawRunning();
+                        break;
+                    case MainView.Done:
+                        DrawDone();
+                        break;
+                    default:
+                        if (sub == Sub.Pieces) DrawPieces();
+                        else DrawReady();
+                        break;
+                }
+            }
+            DrawConfirm();
+            Frame.DrawToast();
         }
-        ImGui.EndChild();
 
-        // External drag & drop (from Explorer): the drop zone on the Design page is the target.
+        // Dragging a file in from outside the game: the drop zone (Start) and the body (Ready) take it.
         Services.DragDrop.CreateImGuiSource(DropLabel, m => m.Files.Any(IsLayoutFile), m =>
         {
             ImGui.TextUnformatted($"Load {Path.GetFileName(m.Files.First(IsLayoutFile))}");
             return true;
         });
+        Theme.Pop();
 
-        dialogs.Draw();
-
-        // Whatever changes what the page shows (opening, closing a layout) waits until the frame is
-        // drawn, so nothing changes under the code drawing it.
+        // Whatever changes what a view shows (opening, closing a design) waits until the frame is drawn.
         if (later.Count > 0)
         {
             var actions = later.ToArray();
@@ -102,10 +141,54 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private readonly System.Collections.Generic.List<Action> later = new();
-
     /// <summary>Runs after this frame's drawing is finished.</summary>
     private void Later(Action action) => later.Add(action);
+
+    /// <summary>On the framework thread (the runner and the game are read there).</summary>
+    private static void OnFramework(Action action) => Services.Framework.RunOnFrameworkThread(action);
+
+    private static void Notify(string text) => Frame.Toast(text);
+
+    // ---------------------------------------------------------------------------------------------
+    // The pieces a run works on: the plan, less the floors switched off and what "Near me" leaves out.
+
+    private IEnumerable<PlanEntry> Filtered()
+    {
+        var plan = session.Plan;
+        if (plan == null) return Enumerable.Empty<PlanEntry>();
+        var me = Services.Objects.LocalPlayer?.Position;
+        return plan.Entries.Where(e =>
+            config.FloorShown(e.Target.Floor)
+            && (!config.NearMe || config.NearMeRadius <= 0 || me == null || Vector3.Distance(me.Value, e.Target.Position) <= config.NearMeRadius));
+    }
+
+    /// <summary>Do the floor switches or "Near me" leave pieces out?</summary>
+    private bool Narrowed => config.NearMe || !config.ShowBasement || !config.ShowGround || !config.ShowUpper;
+
+    private void StartRun(bool dryRun, List<PlanEntry>? entries = null)
+    {
+        entries ??= Filtered().ToList();
+        vm.Starting(entries);
+        OnFramework(() =>
+        {
+            runner.Start(dryRun, entries);
+            if (!runner.Active && runner.StopReason != null) Notify(runner.StopReason);
+        });
+    }
+
+    private void ShowWhere(IEnumerable<Target> targets)
+    {
+        var list = targets.Select(t => (t, data.ItemName(t.ItemId))).ToList();
+        if (list.Count == 0) return;
+        overlay.Highlight(list);
+        Notify(list.Count == 1 ? "Its spot is lit in your home" : $"{list.Count} spots are lit in your home");
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Files.
+
+    private static bool IsLayoutFile(string path) =>
+        path.EndsWith(".build", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Makes the last item a drop target for layout files dragged in from outside the game.</summary>
     private void DropTarget()
@@ -115,46 +198,7 @@ public sealed partial class MainWindow : Window
         if (file != null) Open(file);
     }
 
-    private static bool IsLayoutFile(string path) =>
-        path.EndsWith(".build", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
-
-    private void DrawHeader()
-    {
-        using (theme.Fonts.Title.Push())
-            ImGui.TextColored(Palette.Ivory, "Housing Studio");
-        var ctx = session.Context;
-        var where = ctx.Kind switch
-        {
-            PlaceKind.Interior => $"Inside · {ctx.HouseSize?.ToLowerInvariant() ?? "home"}{(ctx.HouseSize is null or "Apartment" ? "" : " house")} · {Districts.Display(ctx.District)}",
-            PlaceKind.Ward => ctx.Plot is { } p ? $"Garden · plot {p} · {Districts.Display(ctx.District)}" : $"Ward · {Districts.Display(ctx.District)}",
-            _ => "Not at a home",
-        };
-        var mode = ctx.EditorOpen ? $" · editor: {ModeWord(ctx.Mode)}" : string.Empty;
-        Widgets.Eyebrow(where + mode, ctx.Kind == PlaceKind.Elsewhere ? Palette.Dim : Palette.Ash);
-
-        if (notice != null && DateTime.UtcNow < noticeUntil)
-        {
-            ImGui.SameLine();
-            Widgets.Chip(notice, Palette.BrassSoft, Palette.BrassWash);
-        }
-    }
-
-    private static string ModeWord(EditorMode m) => m switch
-    {
-        EditorMode.Move => "Move",
-        EditorMode.Rotate => "Rotate",
-        EditorMode.Store => "Store",
-        EditorMode.Place => "placing",
-        EditorMode.Dye => "Dye",
-        EditorMode.Remove => "Remove",
-        _ => "open",
-    };
-
-    private void Notify(string text)
-    {
-        notice = text;
-        noticeUntil = DateTime.UtcNow + TimeSpan.FromSeconds(4);
-    }
+    private bool DraggingLayout => Services.DragDrop.IsDragging && Services.DragDrop.Files.Any(IsLayoutFile);
 
     /// <summary>Opens a layout once this frame is drawn.</summary>
     private void Open(string path) => Later(() => OpenNow(path));
@@ -169,9 +213,14 @@ public sealed partial class MainWindow : Window
         if (session.Load(path))
         {
             config.AddRecent(path);
-            Notify("Loaded");
-            Services.Framework.RunOnFrameworkThread(() => session.Refresh(HousingContext.Read(Plugin.Plots)));
-            tab = 0;
+            vm.Dismiss();
+            sub = Sub.None;
+            Notify($"Loaded {session.Title}");
+            OnFramework(() => session.Refresh(HousingContext.Read(Plugin.Plots)));
+        }
+        else
+        {
+            Notify("Couldn't load that file");
         }
     }
 
@@ -179,7 +228,7 @@ public sealed partial class MainWindow : Window
     {
         var start = config.RecentFiles.Select(Path.GetDirectoryName).FirstOrDefault(Directory.Exists)
                     ?? Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-        dialogs.OpenFileDialog("Open a build or MakePlace layout", "Layouts{.build,.json},.build,.json", (ok, paths) =>
+        dialogs.OpenFileDialog("Choose a build or MakePlace layout", "Layouts{.build,.json},.build,.json", (ok, paths) =>
         {
             if (ok && paths.Count > 0) Open(paths[0]);
         }, 1, start, true);
@@ -197,7 +246,7 @@ public sealed partial class MainWindow : Window
         dialogs.SaveFileDialog("Save what's placed as a build", "Build{.build},MakePlace layout{.json}", name, ".build", (ok, path) =>
         {
             if (!ok) return;
-            Services.Framework.RunOnFrameworkThread(() =>
+            OnFramework(() =>
             {
                 if (Backups.SaveTo(path, session, data, Path.GetFileNameWithoutExtension(path)))
                 {
@@ -207,4 +256,105 @@ public sealed partial class MainWindow : Window
             });
         }, Backups.Folder, true);
     }
+
+    // ---------------------------------------------------------------------------------------------
+    // The confirmation dialog: a glass-solid card over the dimmed game, its answers saying what happens.
+
+    private sealed record Confirmation(string Title, string Body, string Yes, string No, Action OnYes);
+
+    private Confirmation? confirm;
+    private bool confirmOpened;
+
+    private void Ask(string title, string body, string yes, string no, Action onYes)
+    {
+        confirm = new Confirmation(title, body, yes, no, onYes);
+        confirmOpened = false;
+    }
+
+    private void DrawConfirm()
+    {
+        if (confirm == null) return;
+        const string id = "##hs-confirm";
+        if (!confirmOpened)
+        {
+            ImGui.OpenPopup(id);
+            confirmOpened = true;
+        }
+        var width = MathF.Min(S(440), ImGui.GetWindowWidth() - S(56));
+        ImGui.SetNextWindowPos(ImGui.GetWindowPos() + ImGui.GetWindowSize() / 2, ImGuiCond.Always, new Vector2(0.5f));
+        ImGui.SetNextWindowSize(new Vector2(width, 0));
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(S(28)));
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, S(Palette.Radius2Xl));
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 1f);
+        ImGui.PushStyleColor(ImGuiCol.PopupBg, Palette.GlassSolid);
+        ImGui.PushStyleColor(ImGuiCol.Border, Palette.Line);
+        var open = ImGui.BeginPopupModal(id, ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoSavedSettings);
+        ImGui.PopStyleColor(2);
+        ImGui.PopStyleVar(3);
+        if (!open)
+        {
+            confirm = null;
+            return;
+        }
+
+        var c = confirm;
+        var at = ImGui.GetCursorScreenPos();
+        var inner = width - S(56);
+        Kit.PushBox(at.X, inner);
+        var titleH = Txt.LineBox(Face.Serif, 26, 26 * 1.1f);
+        Txt.Line(Kit.Dl, at, c.Title, Face.Serif, 26, Palette.Ivory, 26 * 1.1f);
+        Kit.Reserve(at, inner, titleH);
+        Kit.Gap(12);
+        Txt.Para(new[] { new Run(c.Body, Face.Sans, 15, Palette.Text) }, 24);
+        Kit.Gap(24);
+        var row = Kit.At;
+        var yesW = Kit.ButtonWidth(c.Yes, BtnSize.Md, null, Btn.Primary);
+        var noW = Kit.ButtonWidth(c.No);
+        var close = false;
+        if (Kit.Button("##no", new Vector2(row.X + inner - yesW - S(8) - noW, row.Y), c.No)) close = true;
+        if (Kit.Button("##yes", new Vector2(row.X + inner - yesW, row.Y), c.Yes, Btn.Primary))
+        {
+            close = true;
+            c.OnYes();
+        }
+        if (ImGui.IsKeyPressed(ImGuiKey.Escape)) close = true;
+        Kit.Reserve(row, inner, Kit.ButtonHeight(BtnSize.Md));
+        Kit.PopBox();
+        if (close)
+        {
+            confirm = null;
+            ImGui.CloseCurrentPopup();
+        }
+        ImGui.EndPopup();
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Pieces shared by the views.
+
+    /// <summary>A header's back arrow (Pieces, Settings).</summary>
+    private static bool BackButton(Vector2 pos, string tip) => Kit.IconButton("##back", pos, Icon.ArrowLeft, tip);
+
+    /// <summary>The header's Settings button.</summary>
+    private void SettingsButton(Vector2 pos)
+    {
+        if (Kit.IconButton("##settings", pos, Icon.Sliders, "Settings")) sub = Sub.Settings;
+    }
+
+    /// <summary>
+    /// A serif title on one line ("kokomed2", "Housing <em>Studio</em>"), line-height 1.1, cut with an
+    /// ellipsis to fit; the italic part in brass-soft at weight 400. Returns its line's height.
+    /// </summary>
+    private static float Title(Vector2 pos, string plain, string? italic, float maxWidth, int px = 32)
+    {
+        var dl = Kit.Dl;
+        var line = px * 1.1f;
+        var italicW = italic != null ? Txt.Measure(" " + italic, Face.SerifItalic, px).X : 0;
+        var text = Txt.Fit(plain, Face.Serif, px, MathF.Max(S(40), maxWidth - italicW));
+        var w = Txt.Line(dl, pos, text, Face.Serif, px, Palette.Ivory, line);
+        // Both cuts share their vertical metrics, so the same line box keeps them on one baseline.
+        if (italic != null) Txt.Line(dl, pos + new Vector2(w, 0), " " + italic, Face.SerifItalic, px, Palette.BrassSoft, line);
+        return S(line);
+    }
+
+    private static string Clock(DateTime t) => t.ToString("HH:mm");
 }

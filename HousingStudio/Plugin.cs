@@ -54,11 +54,10 @@ public sealed class Plugin : IDalamudPlugin
         runner = new PlacementRunner(config, session, editor, actions, furniture, anywhere, data, log);
 
         fonts = new Fonts();
-        Widgets.Fonts = fonts;
-        var theme = new Theme(fonts);
-        window = new MainWindow(config, session, runner, data, log, theme, recorder);
-        windows.AddWindow(window);
+        Txt.Fonts = fonts;
         overlay = new Overlay(config, session, runner, data);
+        window = new MainWindow(config, session, runner, data, log, fonts, recorder, overlay);
+        windows.AddWindow(window);
 
         Services.Commands.AddHandler(Command, new CommandInfo(OnCommand)
         {
@@ -82,9 +81,9 @@ public sealed class Plugin : IDalamudPlugin
         windows.Draw();
     }
 
-    private void OpenMain() => window.ShowTab(0);
+    private void OpenMain() => window.ShowMain();
 
-    private void OpenSettings() => window.ShowTab(3);
+    private void OpenSettings() => window.ShowSettings();
 
     private void OnUpdate(IFramework framework)
     {

@@ -9,7 +9,7 @@ namespace HousingStudio;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
-    public int Version { get; set; } = 2;
+    public int Version { get; set; } = 3;
 
     /// <summary>Layouts opened lately, newest first.</summary>
     public List<string> RecentFiles { get; set; } = new();
@@ -65,8 +65,17 @@ public sealed class Configuration : IPluginConfiguration
     public bool ShowGround { get; set; } = true;
     public bool ShowUpper { get; set; } = true;
 
-    /// <summary>Only pieces within this many yalms of you (0: everywhere), a stand-in for "this room".</summary>
-    public float NearMeRadius { get; set; }
+    /// <summary>"Near me" (Pieces): only pieces within <see cref="NearMeRadius"/> yalms of you, a stand-in for "this room". Placing follows it.</summary>
+    public bool NearMe { get; set; }
+
+    /// <summary>How far "Near me" reaches, in yalms (Settings → More options).</summary>
+    public float NearMeRadius { get; set; } = 8f;
+
+    /// <summary>When each recent file was last opened (for the Recent list's "today 05.24").</summary>
+    public Dictionary<string, DateTime> RecentOpened { get; set; } = new();
+
+    /// <summary>The fixtures ticked as set, per design (see UI/Model/FixtureTicks.cs).</summary>
+    public Dictionary<string, List<string>> FixturesDone { get; set; } = new();
 
     public bool ChatMessages { get; set; } = true;
 
@@ -81,7 +90,22 @@ public sealed class Configuration : IPluginConfiguration
         RecentFiles.RemoveAll(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase));
         RecentFiles.Insert(0, path);
         if (RecentFiles.Count > 8) RecentFiles = RecentFiles.Take(8).ToList();
+        foreach (var gone in RecentOpened.Keys.Where(k => !RecentFiles.Contains(k)).ToList()) RecentOpened.Remove(gone);
+        RecentOpened[path] = DateTime.Now;
         Save();
+    }
+
+    /// <summary>
+    /// Version 3 (0.3.0): "Near me" became an on/off button with its reach in Settings; before, a
+    /// reach of 0 meant off. Returns true when something changed.
+    /// </summary>
+    public bool Migrate()
+    {
+        if (Version >= 3) return false;
+        NearMe = NearMeRadius > 0;
+        if (NearMeRadius <= 0) NearMeRadius = 8f;
+        Version = 3;
+        return true;
     }
 
     public bool FloorShown(Floor f) => f switch

@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!--
     Tests for the plugin's game-free code (HousingStudio/Core): reading .build/.json files, the
-    axis and turn conversions, gardens and plots, dyes, matching and pacing. Core has no Dalamud
+    axis and turn conversions, gardens and plots, dyes, matching and pacing; and the window's game-free logic (HousingStudio/UI/Model). Core has no Dalamud
     or game references, so this builds and runs anywhere .NET 10 does (Linux and macOS included),
     without XIVLauncher or Dalamud installed.
   -->
@@ -15,6 +15,8 @@
 
   <ItemGroup>
     <Compile Include="..\HousingStudio\Core\**\*.cs" Link="Core\%(RecursiveDir)%(Filename)%(Extension)" />
+    <!-- The window's own game-free logic (words, the Pieces list, fixture ticks, icon paths). -->
+    <Compile Include="..\HousingStudio\UI\Model\**\*.cs" Link="UI\Model\%(RecursiveDir)%(Filename)%(Extension)" />
     <EmbeddedResource Include="..\HousingStudio\Data\plots.json" Link="Data\plots.json" />
     <None Include="Fixtures\**\*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
