@@ -95,7 +95,8 @@ up the dye, as doing it by hand does. This plugin is installed from a custom rep
 goatcorp doesn't review.
 
 Install: see [docs/PUBLISHING.md](docs/PUBLISHING.md#3-install-it-in-the-game) (custom repository URL
-`https://raw.githubusercontent.com/koko-puffs/housing-studio-plugin/main/repo.json`).
+`https://www.kokos-tools.com/dalamud/repo.json`, Koko's repository, which lists every plugin Koko
+makes).
 
 ## Developing
 
