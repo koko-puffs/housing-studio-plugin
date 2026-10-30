@@ -109,6 +109,20 @@ public static unsafe class InventoryReader
         return false;
     }
 
+    /// <summary>How many of a side's storeroom pages (containers) the game has sent so far.</summary>
+    public static int StoreroomPagesLoaded(Side side)
+    {
+        var mgr = InventoryManager.Instance();
+        if (mgr == null) return 0;
+        var n = 0;
+        foreach (var t in side == Side.Interior ? InteriorStoreroom : ExteriorStoreroom)
+        {
+            var c = mgr->GetInventoryContainer(t);
+            if (c != null && c->IsLoaded) n++;
+        }
+        return n;
+    }
+
     /// <summary>Is the furnishing window showing its Storeroom tab?</summary>
     public static bool StoreroomTabShown()
     {

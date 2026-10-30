@@ -84,6 +84,9 @@ public sealed unsafe class PlacementRunner : IDisposable
     private DateTime rowsSavedAt;
     private bool listExhausted;
     private bool namesStale;
+
+    /// <summary>The furnishing list was seen settled (names filled in, counts steady) since it last changed.</summary>
+    private bool listSettled;
     private readonly StepTimings timings = new();
     private uint listNode;
     private string? lastToast;
@@ -237,6 +240,7 @@ public sealed unsafe class PlacementRunner : IDisposable
         queue.StepsPerTick = 8;
         timings.Clear();
         namesStale = false;
+        listSettled = false;
         queue.Begin(Array.Empty<Step>());
         nextJobAt = DateTime.UtcNow;
         editorMayCloseUntil = DateTime.UtcNow + ModeSwitchGrace;
@@ -401,6 +405,7 @@ public sealed unsafe class PlacementRunner : IDisposable
             case QueueState.Skipped:
                 job.Outcome = JobOutcome.Failed;
                 job.EndedAt = DateTime.UtcNow;
+                if (job.StartedAt is { } startedS) timings.AddPiece(job.Phase, job.EndedAt.Value - startedS);
                 job.Note = queue.Message;
                 job.Problem = queue.Problem;
                 log.Warn($"{Name(job)}: {queue.Message}");
@@ -415,6 +420,7 @@ public sealed unsafe class PlacementRunner : IDisposable
             case QueueState.Stopped:
                 job.Outcome = JobOutcome.Failed;
                 job.EndedAt = DateTime.UtcNow;
+                if (job.StartedAt is { } startedT) timings.AddPiece(job.Phase, job.EndedAt.Value - startedT);
                 job.Note = queue.Message;
                 job.Problem = queue.Problem;
                 Stop(queue.Message ?? "A step didn't work.");
@@ -505,14 +511,7 @@ public sealed unsafe class PlacementRunner : IDisposable
                     return editor.Select(instance) ? StepOutcome.Done : StepOutcome.Halt("Couldn't pick the piece up (the editor closed?).");
                 },
             },
-            new Step
-            {
-                Label = "The game picks it up",
-                Key = "picked up",
-                Timeout = TimeSpan.FromSeconds(1.5),
-                OnTimeout = StepStatus.Done, // decided next: try again, or give up
-                Run = () => HousingEditor.ActiveItem == instance ? StepOutcome.Done : StepOutcome.Waiting,
-            },
+            HeldSteady(() => instance),
             new Step
             {
                 Label = "Picked up?",
@@ -588,7 +587,7 @@ public sealed unsafe class PlacementRunner : IDisposable
                 Run = () =>
                 {
                     if (HousingEditor.Mode == EditorMode.Rotate && GameUi.IsOpen(UiTable.FurnishingList)
-                        && InventoryReader.StoreroomTabShown() && InventoryReader.StoreroomLoaded(side)) return StepOutcome.Done;
+                        && InventoryReader.StoreroomTabShown() && InventoryReader.StoreroomLoaded(side) && listSettled) return StepOutcome.Done;
                     queue.InsertNext(new[]
                     {
                         EnsureMode(EditorMode.Rotate),
@@ -608,6 +607,7 @@ public sealed unsafe class PlacementRunner : IDisposable
                             },
                         },
                         Step.Wait("The storeroom is loaded", () => InventoryReader.StoreroomLoaded(side), WindowWait),
+                        ListSettles(),
                     });
                     return StepOutcome.Done;
                 },
@@ -682,7 +682,9 @@ public sealed unsafe class PlacementRunner : IDisposable
                     }
                     // The list shifts (and re-sorts) once a piece leaves it: read its names again before the next piece.
                     namesStale = true;
-                    if (!Landed(key.Value, job.Target)) queue.InsertNext(MoveSteps(job, key.Value));
+                    listSettled = false;
+                    if (!Landed(key.Value, job.Target))
+                        queue.InsertNext(new[] { SettlesAfterPlace() }.Concat(MoveSteps(job, key.Value)));
                     else job.Note = "Placed at its spot.";
                     placed = true;
                     return StepOutcome.Done;
@@ -712,6 +714,88 @@ public sealed unsafe class PlacementRunner : IDisposable
         return steps;
     }
 
+    /// <summary>
+    /// Waits until the furnishing list has filled in and stopped changing: its rows have names (0.2.4 read
+    /// 32 blank rows the moment the tab opened) and the storeroom's count and the list's rows read the
+    /// same for a few frames (0.2.4 read the count while it was still loading). Goes on after 4 s anyway.
+    /// </summary>
+    private Step ListSettles()
+    {
+        var settle = new Settle(5, TimeSpan.FromMilliseconds(250));
+        DateTime? since = null;
+        return new Step
+        {
+            Label = "The furnishing list has filled in",
+            Key = "list settles",
+            Timeout = TimeSpan.FromSeconds(10),
+            Run = () =>
+            {
+                since ??= DateTime.UtcNow;
+                var count = InventoryReader.StoreroomOccupied(side).Count;
+                var list = ListReader.Read(UiTable.FurnishingList).OrderByDescending(l => l.Rows.Count).FirstOrDefault();
+                // How many storeroom pages have loaded goes into the state too: the count climbs as they do.
+                var state = ListReady.State(list?.Rows, count);
+                if (state != null) state += $"|{InventoryReader.StoreroomPagesLoaded(side)}";
+                if (settle.Update(state, DateTime.UtcNow))
+                {
+                    listSettled = true;
+                    return StepOutcome.Done;
+                }
+                if (DateTime.UtcNow - since > TimeSpan.FromSeconds(4))
+                {
+                    // Go on with what's there (the names are checked by picking anyway).
+                    log.Info($"  The list didn't settle in 4 s ({count} pieces in the storeroom, {list?.Rows.Count ?? 0} rows read, {list?.Rows.Count(r => r.Length > 0) ?? 0} with names); going on.");
+                    listSettled = true;
+                    return StepOutcome.Done;
+                }
+                return StepOutcome.Waiting;
+            },
+        };
+    }
+
+    /// <summary>
+    /// After Place: waits until the game has finished with the new piece (no active item, the placed
+    /// count steady for a few frames, at least 0.3 s) before picking it up. In 0.2.4 the pick-up came
+    /// at once and the game dropped the piece again while settling the placement.
+    /// </summary>
+    private Step SettlesAfterPlace()
+    {
+        var settle = new Settle(5, TimeSpan.FromMilliseconds(300));
+        return new Step
+        {
+            Label = "The game has finished placing it",
+            Key = "settle after place",
+            Timeout = TimeSpan.FromSeconds(3),
+            OnTimeout = StepStatus.Done,
+            Run = () =>
+            {
+                var state = HousingEditor.ActiveItem == 0 && HousingEditor.Mode == EditorMode.Rotate
+                    ? $"{FurnitureReader.PlacedCount(side == Side.Garden)}"
+                    : null;
+                return settle.Update(state, DateTime.UtcNow) ? StepOutcome.Done : StepOutcome.Waiting;
+            },
+        };
+    }
+
+    /// <summary>The editor holds this piece, and has for three frames running (not just the frame of the click).</summary>
+    private static Step HeldSteady(Func<nint> instance)
+    {
+        var settle = new Settle(3, TimeSpan.FromMilliseconds(50));
+        return new Step
+        {
+            Label = "The game picks it up",
+            Key = "picked up",
+            Timeout = TimeSpan.FromSeconds(1.5),
+            OnTimeout = StepStatus.Done, // decided next: try again, or give up
+            Run = () =>
+            {
+                var target = instance();
+                var held = target != 0 && HousingEditor.ActiveItem == target ? $"0x{target:X}" : null;
+                return settle.Update(held, DateTime.UtcNow) ? StepOutcome.Done : StepOutcome.Waiting;
+            },
+        };
+    }
+
     private Step FindRowStep(RunJob job, HashSet<int> tried, int[] chosen)
     {
         var name = Name(job);
@@ -723,6 +807,12 @@ public sealed unsafe class PlacementRunner : IDisposable
             {
                 if (!InventoryReader.StoreroomOccupied(side).Any(o => o.ItemId == job.Target.ItemId))
                     return StepOutcome.Skip("It's not in the storeroom any more.", ProblemKind.NotFound);
+                if (!listSettled)
+                {
+                    // The list changes after a placement (and fills in after the tab opens): wait for it to settle, then look.
+                    queue.InsertNext(new[] { ListSettles(), FindRowStep(job, tried, chosen) });
+                    return StepOutcome.Done;
+                }
                 PrepareRows();
                 if (namesStale) RefreshListNames();
                 // Not among the names read yet, and the list has rows past them: read further first.
@@ -852,8 +942,8 @@ public sealed unsafe class PlacementRunner : IDisposable
         if (known != null && !tried.Contains(known.Value) && NameFits(known.Value)) return known;
         foreach (var r in rows.ByName(Name(job), job.Target.ItemId))
             if (!tried.Contains(r)) return r;
-        // Never a row read to hold another piece: only rows whose names weren't read.
-        return rows.NextUnknownFor(Name(job), tried);
+        // Never a row read to hold another piece; rows only guessed to be another piece's are tried before giving up.
+        return rows.NextCandidate(Name(job), job.Target.ItemId, tried);
     }
 
     /// <summary>The new piece of this item that's appeared since the run started (nearest the preview), or null.</summary>

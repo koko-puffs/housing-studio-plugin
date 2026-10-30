@@ -18,8 +18,11 @@ public static class Pacing
 
     public const int DefaultMs = SteadyMs;
 
-    /// <summary>The least time between two clicks in the game's windows, within a piece.</summary>
-    public const int ClickGapMs = 250;
+    /// <summary>
+    /// The least time between two game actions within a piece: window clicks and the editor's own
+    /// pick-up and set-down alike (0.2.4's 0.25 s with no settling raced the game).
+    /// </summary>
+    public const int ClickGapMs = 300;
 
     public static readonly (string Name, int Ms)[] Presets = { ("Quick", QuickMs), ("Steady", SteadyMs), ("Careful", CarefulMs) };
 

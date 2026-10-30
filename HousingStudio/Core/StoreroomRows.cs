@@ -183,6 +183,27 @@ public sealed class StoreroomRows
         return null;
     }
 
+    /// <summary>
+    /// The next row worth picking for a piece when no row is known for it: first rows not read at all,
+    /// then rows only guessed to belong to another piece's group (guesses were never read, so they're
+    /// tried before giving up). Only rows picked, or whose names were read, and found to hold something
+    /// else are ruled out. Null only when every other row has been tried.
+    /// </summary>
+    public int? NextCandidate(string itemName, uint itemId, ICollection<int> tried)
+    {
+        var next = NextUnknownFor(itemName, tried);
+        if (next != null) return next;
+        var wanted = Menus.Clean(itemName);
+        for (var r = 0; r < Count; r++)
+        {
+            if (tried.Contains(r)) continue;
+            if (rows.TryGetValue(r, out var k) && k.ItemId != itemId) continue;
+            if (names.TryGetValue(r, out var n) && !string.Equals(n, wanted, StringComparison.OrdinalIgnoreCase)) continue;
+            return r;
+        }
+        return null;
+    }
+
     /// <summary>The first row neither picked nor inferred, or null when every row is accounted for.</summary>
     public int? NextUnknown()
     {
