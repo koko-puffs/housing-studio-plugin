@@ -9,15 +9,24 @@
     "Description": "Load a .build from Housing Studio (or a MakePlace .json) and see every piece matched to what you have: already placed, in your bags, in the storeroom, or still to buy. It moves placed pieces to their exact spots, and when you put a piece down from your bags or the storeroom it sets it exactly where the design has it. In-world markers, floor filters, a dry run, a copyable shopping list, and backups of your current layout.\n\nUse /hstudio to open it. Only works in a house or apartment you're allowed to decorate, in the game's furnishing mode.",
     "ApplicableVersion": "any",
     "RepoUrl": "https://github.com/koko-puffs/housing-studio-plugin",
-    "Tags": ["housing", "furniture", "makeplace", "layout", "decorating", "housing studio"],
-    "CategoryTags": ["utility"],
+    "Tags": [
+      "housing",
+      "furniture",
+      "makeplace",
+      "layout",
+      "decorating",
+      "housing studio"
+    ],
+    "CategoryTags": [
+      "utility"
+    ],
     "DalamudApiLevel": 15,
     "LoadPriority": 0,
     "IconUrl": "https://raw.githubusercontent.com/koko-puffs/housing-studio-plugin/main/HousingStudio/images/icon.png",
     "AcceptsFeedback": true,
     "IsHide": false,
     "IsTestingExclusive": false,
-    "LastUpdate": 0,
+    "LastUpdate": 1793331859,
     "DownloadLinkInstall": "https://github.com/koko-puffs/housing-studio-plugin/releases/download/v0.1.0/HousingStudio.zip",
     "DownloadLinkUpdate": "https://github.com/koko-puffs/housing-studio-plugin/releases/download/v0.1.0/HousingStudio.zip",
     "DownloadLinkTesting": "https://github.com/koko-puffs/housing-studio-plugin/releases/download/v0.1.0/HousingStudio.zip"
