@@ -9,7 +9,7 @@ namespace HousingStudio;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
-    public int Version { get; set; } = 2;
+    public int Version { get; set; } = 3;
 
     /// <summary>Layouts opened lately, newest first.</summary>
     public List<string> RecentFiles { get; set; } = new();

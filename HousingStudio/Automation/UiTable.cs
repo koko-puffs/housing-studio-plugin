@@ -90,6 +90,14 @@ public static class UiTable
     /// </summary>
     public static readonly UiCall ListSelect = new(FurnishingList, "i:1 u:{index}", true, "Recording 2");
 
+    /// <summary>
+    /// Filter the list to a category (Core.ListCategories): not known yet, so not used. A recording of
+    /// choosing a category in the furnishing list (Display All / Indoor Furnishings / Tables / Tabletop /
+    /// Wall-mounted / Rugs) gives the values; the window's words for them are its values [10]–[15],
+    /// which aren't the callback's values (the Storeroom tab, whose words are [19], is [i:11]).
+    /// </summary>
+    public static readonly UiCall? ListCategory = null;
+
     /// <summary>Leave the editor: the furnishing list's close (sent with the bar's [-2]). [Recording 2]</summary>
     public static readonly UiCall ListClose = new(FurnishingList, "i:-2", false, "Recording 2");
 

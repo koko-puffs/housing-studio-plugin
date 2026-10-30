@@ -83,6 +83,8 @@ public sealed unsafe class PlacementRunner : IDisposable
     private bool rowsDirty;
     private DateTime rowsSavedAt;
     private bool listExhausted;
+    private bool namesStale;
+    private readonly StepTimings timings = new();
     private uint listNode;
     private string? lastToast;
 
@@ -106,8 +108,14 @@ public sealed unsafe class PlacementRunner : IDisposable
         Services.Toasts.ErrorToast += OnErrorToast;
         queue.Trace += (step, what) =>
         {
-            if (what == "start") log.Info($"  {(step.IsAction ? "→" : "…")} {step.Label}");
-            else if (what != "done") log.Warn($"  ✕ {what}");
+            // Steps that wait for you are said as they start; the rest when they end, with how long they took.
+            if (what == "start" && step.Label.StartsWith("You:", StringComparison.Ordinal)) log.Info($"  … {step.Label}");
+            else if (what != "start" && what != "done") log.Warn($"  ✕ {what}");
+        };
+        queue.Timed += (step, took) =>
+        {
+            timings.AddStep(step.Key ?? KeyOf(step.Label), took);
+            log.Info($"  {(step.IsAction ? "→" : "…")} {step.Label} ({took.TotalMilliseconds:0} ms)");
         };
     }
 
@@ -225,7 +233,10 @@ public sealed unsafe class PlacementRunner : IDisposable
         DyeShortfall = Array.Empty<(byte, string, int, int)>();
         knownKeys = session.Live.Keys.ToHashSet();
         queue.StepByStep = config.StepByStep && !dryRun;
-        queue.ActionGap = TimeSpan.FromMilliseconds(dryRun ? 0 : 300);
+        queue.ActionGap = TimeSpan.FromMilliseconds(dryRun ? 0 : Pacing.ClickGapMs);
+        queue.StepsPerTick = 8;
+        timings.Clear();
+        namesStale = false;
         queue.Begin(Array.Empty<Step>());
         nextJobAt = DateTime.UtcNow;
         editorMayCloseUntil = DateTime.UtcNow + ModeSwitchGrace;
@@ -312,6 +323,7 @@ public sealed unsafe class PlacementRunner : IDisposable
         anywhere.Disable();
         SaveRows(force: true);
         LogRows();
+        if (!DryRun) foreach (var line in timings.Summary()) log.Info(line);
         log.Warn($"Stopped: {reason}");
         if (config.ChatMessages) Services.Chat.PrintError($"Stopped: {reason}", "Housing Studio");
     }
@@ -380,6 +392,7 @@ public sealed unsafe class PlacementRunner : IDisposable
             case QueueState.Finished:
                 job.Outcome = JobOutcome.Done;
                 job.EndedAt = DateTime.UtcNow;
+                if (job.StartedAt is { } started) timings.AddPiece(job.Phase, job.EndedAt.Value - started);
                 job.Note ??= DryRun ? "Dry run: nothing touched." : "Done.";
                 if (!DryRun) log.Done($"{Name(job)}: {job.Note}");
                 failuresInARow = 0;
@@ -462,46 +475,94 @@ public sealed unsafe class PlacementRunner : IDisposable
         _ => (ByHandSteps(job), new List<Step>()),
     };
 
-    private List<Step> MoveSteps(RunJob job, int key)
+    private List<Step> MoveSteps(RunJob job, int key, int attempt = 0)
     {
         var name = Name(job);
         nint instance = 0;
         return new List<Step>
         {
             EnsureMode(EditorMode.Rotate),
-            Step.Act($"Pick up {name} (the editor's pick-up function)", () =>
+            new Step
             {
-                var live = ReadLive();
-                if (live == null || !live.TryGetValue(key, out var piece))
-                    return StepOutcome.Skip("It's no longer where the plan saw it (moved, stored, or the list changed).", ProblemKind.NotFound);
-                if (piece.ItemId != job.Target.ItemId)
-                    return StepOutcome.Halt($"The furniture list changed under the plan (slot {key} is now {data.ItemName(piece.ItemId)}). Load the plan again and start over.");
-                if (Landed(key, job.Target))
+                Label = $"Pick up {name} (the editor's pick-up function){(attempt > 0 ? $", try {attempt + 1}" : string.Empty)}",
+                Key = "pick up",
+                IsAction = true,
+                Run = () =>
                 {
-                    job.Note ??= "Already in place.";
-                    queue.FinishAfterThis();
-                    return StepOutcome.Done;
-                }
-                if (piece.Instance == 0) return StepOutcome.Skip("The game hasn't loaded it (walk closer to it).", ProblemKind.NotLoaded);
-                instance = piece.Instance;
-                return editor.Select(instance) ? StepOutcome.Done : StepOutcome.Halt("Couldn't pick the piece up (the editor closed?).");
-            }),
-            Step.Wait("The game picks it up", () => HousingEditor.ActiveItem == instance, TimeSpan.FromSeconds(1.5), StepStatus.SkipJob),
-            Step.Act($"Set {name} at its spot (the editor's set-down function)", () =>
+                    var live = ReadLive();
+                    if (live == null || !live.TryGetValue(key, out var piece))
+                        return StepOutcome.Skip("It's no longer where the plan saw it (moved, stored, or the list changed).", ProblemKind.NotFound);
+                    if (piece.ItemId != job.Target.ItemId)
+                        return StepOutcome.Halt($"The furniture list changed under the plan (slot {key} is now {data.ItemName(piece.ItemId)}). Load the plan again and start over.");
+                    if (Landed(key, job.Target))
+                    {
+                        job.Note ??= "Already in place.";
+                        queue.FinishAfterThis();
+                        return StepOutcome.Done;
+                    }
+                    if (piece.Instance == 0) return StepOutcome.Skip("The game hasn't loaded it (walk closer to it).", ProblemKind.NotLoaded);
+                    instance = piece.Instance;
+                    return editor.Select(instance) ? StepOutcome.Done : StepOutcome.Halt("Couldn't pick the piece up (the editor closed?).");
+                },
+            },
+            new Step
             {
-                if (HousingEditor.ActiveItem != instance) return StepOutcome.Skip("The game dropped the piece before it could be set.", ProblemKind.DidNotLand);
-                var sg = (SharedGroupLayoutInstance*)instance;
-                sg->Transform.Translation = job.Target.Position;
-                sg->Transform.Rotation = Transforms.YawQuaternion(job.Target.Yaw);
-                return editor.Place(instance) ? StepOutcome.Done : StepOutcome.Halt("Couldn't set the piece down (the editor closed?).");
-            }, TimeSpan.FromMilliseconds(150)),
+                Label = "The game picks it up",
+                Key = "picked up",
+                Timeout = TimeSpan.FromSeconds(1.5),
+                OnTimeout = StepStatus.Done, // decided next: try again, or give up
+                Run = () => HousingEditor.ActiveItem == instance ? StepOutcome.Done : StepOutcome.Waiting,
+            },
+            new Step
+            {
+                Label = "Picked up?",
+                Key = "picked up?",
+                Run = () =>
+                {
+                    if (HousingEditor.ActiveItem == instance)
+                    {
+                        queue.InsertNext(SetDownSteps(job, key, instance));
+                        return StepOutcome.Done;
+                    }
+                    // A piece just placed isn't always ready to be picked at once (0.2.3: Simple Hingan Pillar).
+                    if (attempt < 2)
+                    {
+                        log.Info($"  The game didn't pick {name} up (active item {(HousingEditor.ActiveItem == 0 ? "none" : $"0x{HousingEditor.ActiveItem:X}")}, wanted 0x{instance:X}); trying again.");
+                        queue.InsertNext(new[] { Step.Pause("Wait a moment", TimeSpan.FromMilliseconds(300)) }.Concat(MoveSteps(job, key, attempt + 1)));
+                        return StepOutcome.Done;
+                    }
+                    return StepOutcome.Skip("The game wouldn't pick it up (three tries). It's placed; \"Try again\" moves it later.", ProblemKind.DidNotLand);
+                },
+            },
+        };
+    }
+
+    private List<Step> SetDownSteps(RunJob job, int key, nint instance)
+    {
+        var name = Name(job);
+        return new List<Step>
+        {
+            new Step
+            {
+                Label = $"Set {name} at its spot (the editor's set-down function)",
+                Key = "set down",
+                IsAction = true,
+                Run = () =>
+                {
+                    if (HousingEditor.ActiveItem != instance) return StepOutcome.Skip("The game dropped the piece before it could be set.", ProblemKind.DidNotLand);
+                    var sg = (SharedGroupLayoutInstance*)instance;
+                    sg->Transform.Translation = job.Target.Position;
+                    sg->Transform.Rotation = Transforms.YawQuaternion(job.Target.Yaw);
+                    return editor.Place(instance) ? StepOutcome.Done : StepOutcome.Halt("Couldn't set the piece down (the editor closed?).");
+                },
+            },
             new Step
             {
                 Label = "It lands at its spot",
+                Key = "lands",
                 Run = () => Landed(key, job.Target) ? StepOutcome.Done : StepOutcome.Waiting,
                 Timeout = TimeSpan.FromSeconds(3),
                 OnTimeout = StepStatus.SkipJob,
-                Delay = TimeSpan.FromMilliseconds(200),
                 TimeoutProblem = ProblemKind.DidNotLand,
                 TimeoutMessage = "It didn't end up at its spot. The game refuses floating or overlapping pieces; \"Place anywhere\" in Settings allows them.",
             },
@@ -519,24 +580,38 @@ public sealed unsafe class PlacementRunner : IDisposable
     {
         var steps = new List<Step>
         {
-            EnsureMode(EditorMode.Rotate),
-            Step.Wait($"The furnishing list ({UiTable.FurnishingList}) is open", () => GameUi.IsOpen(UiTable.FurnishingList), WindowWait),
             new Step
             {
-                // Only clicks the tab when it isn't showing (0.2.2 logged a click every piece).
-                Label = "The Storeroom tab is showing",
+                // One check (one frame) when everything is as the last piece left it; the details only when not.
+                Label = "Ready for the storeroom",
+                Key = "ready",
                 Run = () =>
                 {
-                    if (InventoryReader.StoreroomTabShown()) return StepOutcome.Done;
+                    if (HousingEditor.Mode == EditorMode.Rotate && GameUi.IsOpen(UiTable.FurnishingList)
+                        && InventoryReader.StoreroomTabShown() && InventoryReader.StoreroomLoaded(side)) return StepOutcome.Done;
                     queue.InsertNext(new[]
                     {
-                        Step.Act($"Open the Storeroom tab: {UiTable.ListStoreroomTab.Describe()}", () => Fire(UiTable.ListStoreroomTab)),
-                        Step.Wait("The Storeroom tab shows", InventoryReader.StoreroomTabShown, WindowWait),
+                        EnsureMode(EditorMode.Rotate),
+                        Step.Wait($"The furnishing list ({UiTable.FurnishingList}) is open", () => GameUi.IsOpen(UiTable.FurnishingList), WindowWait),
+                        new Step
+                        {
+                            Label = "The Storeroom tab is showing",
+                            Run = () =>
+                            {
+                                if (InventoryReader.StoreroomTabShown()) return StepOutcome.Done;
+                                queue.InsertNext(new[]
+                                {
+                                    Step.Act($"Open the Storeroom tab: {UiTable.ListStoreroomTab.Describe()}", () => Fire(UiTable.ListStoreroomTab)),
+                                    Step.Wait("The Storeroom tab shows", InventoryReader.StoreroomTabShown, WindowWait),
+                                });
+                                return StepOutcome.Done;
+                            },
+                        },
+                        Step.Wait("The storeroom is loaded", () => InventoryReader.StoreroomLoaded(side), WindowWait),
                     });
                     return StepOutcome.Done;
                 },
             },
-            Step.Wait("The storeroom is loaded", () => InventoryReader.StoreroomLoaded(side), WindowWait),
         };
         steps.AddRange(StoreroomAttempt(job, 0));
         return steps;
@@ -554,7 +629,7 @@ public sealed unsafe class PlacementRunner : IDisposable
         var steps = new List<Step>
         {
             FindRowStep(job, tried, chosen),
-            Step.Wait("The game shows a preview of it in the room", () => FurnitureReader.Preview() != null, WindowWait),
+            new Step { Label = "The game shows a preview of it in the room", Key = "preview", Timeout = WindowWait, Run = () => FurnitureReader.Preview() != null ? StepOutcome.Done : StepOutcome.Waiting },
         };
         if (config.MovePreviewBeforePlace)
         {
@@ -567,7 +642,7 @@ public sealed unsafe class PlacementRunner : IDisposable
         steps.Add(new Step
         {
             Label = "Note where the game's preview is",
-            Delay = TimeSpan.FromMilliseconds(100),
+            Key = "note preview",
             Run = () =>
             {
                 previewAt = HousingActions.PreviewAt()?.Position;
@@ -582,6 +657,7 @@ public sealed unsafe class PlacementRunner : IDisposable
         {
             // Watches for the new piece straight away (no fixed wait); answers a yes/no if one comes up.
             Label = $"A new {name} is in the furniture list",
+            Key = "placed",
             Timeout = LandWait,
             OnTimeout = StepStatus.Done, // handled below: a second try, then skip with the reason
             Run = () =>
@@ -604,6 +680,8 @@ public sealed unsafe class PlacementRunner : IDisposable
                         rows.Removed(r);
                         rowsDirty = true;
                     }
+                    // The list shifts (and re-sorts) once a piece leaves it: read its names again before the next piece.
+                    namesStale = true;
                     if (!Landed(key.Value, job.Target)) queue.InsertNext(MoveSteps(job, key.Value));
                     else job.Note = "Placed at its spot.";
                     placed = true;
@@ -637,22 +715,56 @@ public sealed unsafe class PlacementRunner : IDisposable
     private Step FindRowStep(RunJob job, HashSet<int> tried, int[] chosen)
     {
         var name = Name(job);
-        return Step.Act($"Find {name}'s row in the list", () =>
+        return new Step
         {
-            if (!InventoryReader.StoreroomOccupied(side).Any(o => o.ItemId == job.Target.ItemId))
-                return StepOutcome.Skip("It's not in the storeroom any more.", ProblemKind.NotFound);
-            PrepareRows();
-            // Not among the names read yet, and the list has rows past them: read further first.
-            if (rows.Find(job.Target.ItemId, job.Target.Stain) == null && rows.ByName(name, job.Target.ItemId).Count == 0 && !listExhausted && NamedUpTo() < rows.Count)
+            Label = $"Find {name}'s row in the list",
+            Key = "find row",
+            Run = () =>
             {
-                queue.InsertNext(new[] { ReadMoreRows(), FindRowStep(job, tried, chosen) });
+                if (!InventoryReader.StoreroomOccupied(side).Any(o => o.ItemId == job.Target.ItemId))
+                    return StepOutcome.Skip("It's not in the storeroom any more.", ProblemKind.NotFound);
+                PrepareRows();
+                if (namesStale) RefreshListNames();
+                // Not among the names read yet, and the list has rows past them: read further first.
+                if (rows.Find(job.Target.ItemId, job.Target.Stain) == null && rows.ByName(name, job.Target.ItemId).Count == 0 && !listExhausted && NamedUpTo() < rows.Count)
+                {
+                    queue.InsertNext(new[] { ReadMoreRows(), FindRowStep(job, tried, chosen) });
+                    return StepOutcome.Done;
+                }
+                var next = NextRow(job, tried);
+                if (next == null) return StepOutcome.Skip("No row of the list held it.", ProblemKind.NotFound);
+                queue.InsertNext(TryRow(job, next.Value, tried, chosen));
                 return StepOutcome.Done;
-            }
-            var next = NextRow(job, tried);
-            if (next == null) return StepOutcome.Skip("No row of the list held it.", ProblemKind.NotFound);
-            queue.InsertNext(TryRow(job, next.Value, tried, chosen));
-            return StepOutcome.Done;
-        });
+            },
+        };
+    }
+
+    /// <summary>Reads the list's names again (cheap: no clicks) after it changed, and forgets picked rows that no longer match.</summary>
+    private void RefreshListNames()
+    {
+        namesStale = false;
+        var occupied = Occupied();
+        var read = ReadNames(occupied);
+        if (read == null) return;
+        var forgotten = rows.RefreshNames(0, read.Value.Names, data.ItemName);
+        listExhausted = false;
+        log.Info($"  Read the list's names again ({read.Value.Names.Count} of {rows.Count} rows, {read.Value.Source}){(forgotten > 0 ? $"; {forgotten} remembered rows had moved and were forgotten" : string.Empty)}.");
+    }
+
+    /// <summary>
+    /// The list's row names: every row's, from the window's own values, when they hold exactly one
+    /// name per storeroom piece; else those the list component holds (200 of 445 in 0.2.3).
+    /// </summary>
+    private (List<string> Names, string Source)? ReadNames(List<StoreroomRow> occupied)
+    {
+        var storeroomNames = occupied.Select(o => Menus.Clean(data.ItemName(o.ItemId))).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var fromValues = ListReader.NamesInValues(UiTable.FurnishingList, storeroomNames);
+        if (fromValues.Count == occupied.Count) return (fromValues, "the window's values: every row");
+        var lists = ListReader.Read(UiTable.FurnishingList);
+        var best = lists.Where(l => l.Rows.Any(r => r.Length > 0)).OrderByDescending(l => l.Rows.Count).FirstOrDefault();
+        if (best == null) return null;
+        listNode = best.NodeId;
+        return (best.Rows, $"{best.Source}, node {best.NodeId}");
     }
 
     private int NamedUpTo() => rows.Names.Count == 0 ? 0 : rows.Names.Keys.Max() + 1;
@@ -675,18 +787,17 @@ public sealed unsafe class PlacementRunner : IDisposable
         }
         rowsReady = true;
         listExhausted = false;
-        var lists = ListReader.Read(UiTable.FurnishingList);
-        log.Info($"  The furnishing list's own rows: {ListReader.Describe(lists)}");
-        var best = lists.Where(l => l.Rows.Any(r => r.Length > 0)).OrderByDescending(l => l.Rows.Count).FirstOrDefault();
-        if (best == null)
+        namesStale = false;
+        log.Info($"  The furnishing list's own rows: {ListReader.Describe(ListReader.Read(UiTable.FurnishingList))}");
+        var read = ReadNames(occupied);
+        if (read == null)
         {
             listExhausted = true;
             log.Info("  Couldn't read the rows' names from the list: rows are found by picking them (once each; groups of the same piece are skipped).");
             return;
         }
-        listNode = best.NodeId;
-        rows.LearnNames(0, best.Rows);
-        log.Info($"  Read the names of rows 0–{best.Rows.Count - 1} of {rows.Count} from the list ({best.Source}, node {best.NodeId}); rows are found by name and checked by picking.");
+        rows.RefreshNames(0, read.Value.Names, data.ItemName);
+        log.Info($"  Read the names of rows 0–{read.Value.Names.Count - 1} of {rows.Count} ({read.Value.Source}); rows are found by name and checked by picking.");
     }
 
     /// <summary>Scrolls the list past the rows whose names are known and reads again, lining the new names up by their overlap.</summary>
@@ -735,10 +846,13 @@ public sealed unsafe class PlacementRunner : IDisposable
     private int? NextRow(RunJob job, HashSet<int> tried)
     {
         if (tried.Count >= MaxRowPicksPerPiece) return null;
+        var name = Menus.Clean(Name(job));
+        bool NameFits(int r) => !rows.Names.TryGetValue(r, out var n) || string.Equals(n, name, StringComparison.OrdinalIgnoreCase);
         var known = rows.Find(job.Target.ItemId, job.Target.Stain);
-        if (known != null && !tried.Contains(known.Value)) return known;
+        if (known != null && !tried.Contains(known.Value) && NameFits(known.Value)) return known;
         foreach (var r in rows.ByName(Name(job), job.Target.ItemId))
             if (!tried.Contains(r)) return r;
+        // Never a row read to hold another piece: only rows whose names weren't read.
         return rows.NextUnknownFor(Name(job), tried);
     }
 
@@ -757,42 +871,72 @@ public sealed unsafe class PlacementRunner : IDisposable
     {
         var name = Name(job);
         var blanks = UiCallValues.Of(("index", row));
+        var expected = rows.Names.TryGetValue(row, out var n) && string.Equals(n, Menus.Clean(name), StringComparison.OrdinalIgnoreCase)
+                       || rows.Known.TryGetValue(row, out var k) && k.ItemId == job.Target.ItemId;
         tried.Add(row);
         return new List<Step>
         {
-            Step.Act($"Pick row {row}: {UiTable.ListSelect.Describe(blanks)}", () =>
-                GameUi.Fire(UiTable.ListSelect, blanks) ? StepOutcome.Done : StepOutcome.Halt("The furnishing list closed.")),
-            Step.Wait("Its menu opens", () => GameUi.IsOpen(UiTable.ContextMenu) && InventoryReader.StoreroomSelection() != null, WindowWait),
-            Step.Act("See which piece the game picked", () =>
+            new Step
             {
-                var (container, slot) = InventoryReader.StoreroomSelection()!.Value;
-                var occupied = Occupied();
-                var held = occupied.FirstOrDefault(o => o.Container == container && o.Slot == slot);
-                var seen = new StoreroomRow(container, slot, held.ItemId, held.Stain);
-                if (rows.Known.ContainsKey(row) && !rows.Matches(row, seen))
+                Label = $"Pick row {row}: {UiTable.ListSelect.Describe(blanks)}",
+                Key = "pick row",
+                IsAction = true,
+                Run = () => GameUi.Fire(UiTable.ListSelect, blanks) ? StepOutcome.Done : StepOutcome.Halt("The furnishing list closed."),
+            },
+            new Step
+            {
+                Label = "Its menu opens",
+                Key = "menu opens",
+                Timeout = WindowWait,
+                Run = () => GameUi.IsOpen(UiTable.ContextMenu) && InventoryReader.StoreroomSelection() != null ? StepOutcome.Done : StepOutcome.Waiting,
+            },
+            new Step
+            {
+                Label = "See which piece the game picked",
+                Key = "check row",
+                Run = () =>
                 {
-                    log.Info($"  Row {row} now picks storeroom {container}/{slot}, not what it did: the list changed, learning it again.");
-                    rows.Reset(occupied.Count);
-                }
-                if (held.ItemId != 0) rows.Learn(row, seen, occupied.Count(o => o.ItemId == held.ItemId));
-                rowsDirty = true;
-                var right = held.ItemId == job.Target.ItemId;
-                log.Info($"  row {row} → storeroom {container}/{slot}: {(held.ItemId == 0 ? "nothing?" : data.ItemName(held.ItemId))}{(right ? " (this one)" : string.Empty)}");
-                if (right)
-                {
-                    chosen[0] = row;
+                    var (container, slot) = InventoryReader.StoreroomSelection()!.Value;
+                    var occupied = Occupied();
+                    var held = occupied.FirstOrDefault(o => o.Container == container && o.Slot == slot);
+                    var seen = new StoreroomRow(container, slot, held.ItemId, held.Stain);
+                    if (held.ItemId != 0) rows.Learn(row, seen, occupied.Count(o => o.ItemId == held.ItemId));
+                    rowsDirty = true;
+                    var right = held.ItemId == job.Target.ItemId;
+                    log.Info($"  row {row} → storeroom {container}/{slot}: {(held.ItemId == 0 ? "nothing?" : data.ItemName(held.ItemId))}{(right ? " (this one)" : string.Empty)}");
+                    if (right)
+                    {
+                        chosen[0] = row;
+                        return StepOutcome.Done;
+                    }
+                    var after = new List<Step>
+                    {
+                        Step.Act($"Close its menu: {UiTable.MenuCancel.Describe()}", () =>
+                        {
+                            if (GameUi.IsOpen(UiTable.ContextMenu)) GameUi.Fire(UiTable.MenuCancel);
+                            return StepOutcome.Done;
+                        }),
+                        Step.Wait("Its menu closes", () => !GameUi.IsOpen(UiTable.ContextMenu), WindowWait),
+                    };
+                    if (expected)
+                    {
+                        // The row was meant to hold it (by its name, or remembered): the list has changed. Read it again, not scan.
+                        log.Info($"  Row {row} was expected to hold {name}; the list has changed, so its names are read again.");
+                        namesStale = true;
+                        after.Add(FindRowStep(job, tried, chosen));
+                    }
+                    else
+                    {
+                        var next = NextRow(job, tried);
+                        if (next == null)
+                            after.Add(Step.Act("Give up looking", () => StepOutcome.Skip($"No row of the list held {name}.", ProblemKind.NotFound)));
+                        else
+                            after.AddRange(TryRow(job, next.Value, tried, chosen));
+                    }
+                    queue.InsertNext(after);
                     return StepOutcome.Done;
-                }
-                GameUi.Fire(UiTable.MenuCancel);
-                var after = new List<Step> { Step.Wait("Its menu closes", () => !GameUi.IsOpen(UiTable.ContextMenu), WindowWait) };
-                var next = NextRow(job, tried);
-                if (next == null)
-                    after.Add(Step.Act("Give up looking", () => StepOutcome.Skip($"No row of the list held {name}.", ProblemKind.NotFound)));
-                else
-                    after.AddRange(TryRow(job, next.Value, tried, chosen));
-                queue.InsertNext(after);
-                return StepOutcome.Done;
-            }),
+                },
+            },
         };
     }
 
@@ -972,8 +1116,8 @@ public sealed unsafe class PlacementRunner : IDisposable
                 var values = UiCallValues.Of(("row", row[0]), ("stain", job.Target.Stain));
                 log.Info($"  → {UiTable.DyePick.Describe(values)}");
                 return Fire(UiTable.DyePick, values);
-            }, TimeSpan.FromMilliseconds(200)),
-            Step.Act($"Press Dye: {UiTable.DyeApply.Describe()}", () => Fire(UiTable.DyeApply), TimeSpan.FromMilliseconds(200)),
+            }),
+            Step.Act($"Press Dye: {UiTable.DyeApply.Describe()}", () => Fire(UiTable.DyeApply)),
             new Step
             {
                 Label = $"Confirm: {UiTable.DyeConfirmYes.Describe()}",
@@ -1217,7 +1361,7 @@ public sealed unsafe class PlacementRunner : IDisposable
         var blanks = UiCallValues.Of(("entry", entry));
         log.Info($"  → {UiTable.MenuChoose.Describe(blanks)}");
         return GameUi.Fire(UiTable.MenuChoose, blanks) ? StepOutcome.Done : StepOutcome.Halt("The menu closed.");
-    }, TimeSpan.FromMilliseconds(250));
+    });
 
     /// <summary>Presses Yes if the game asks a yes/no question within a moment (logging the question); goes on if it doesn't.</summary>
     private Step AnswerYesNo()
@@ -1393,6 +1537,7 @@ public sealed unsafe class PlacementRunner : IDisposable
         anywhere.Disable();
         SaveRows(force: true);
         LogRows();
+        if (!DryRun) foreach (var line in timings.Summary()) log.Info(line);
         var parts = new List<string> { $"{Done} of {Total} done" };
         if (Failed > 0) parts.Add($"{Failed} didn't work");
         if (Skipped > 0) parts.Add($"{Skipped} skipped");
@@ -1403,6 +1548,15 @@ public sealed unsafe class PlacementRunner : IDisposable
     }
 
     public string Name(RunJob job) => data.ItemName(job.Target.ItemId);
+
+    /// <summary>A step's label without its piece's name and numbers, for grouping in the timing summary.</summary>
+    private string KeyOf(string label)
+    {
+        if (Current is { } job) label = label.Replace(Name(job), "…", StringComparison.Ordinal);
+        label = System.Text.RegularExpressions.Regex.Replace(label, @"\d+", "#");
+        var colon = label.IndexOf(':');
+        return (colon > 0 ? label[..colon] : label).Trim();
+    }
 
     private string DryWords(RunJob job) => job.Kind switch
     {

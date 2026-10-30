@@ -39,6 +39,13 @@ public sealed class Plugin : IDalamudPlugin
     {
         pluginInterface.Create<Services>();
         config = Services.PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
+        if (config.Version < 3)
+        {
+            // 0.2.4: the pace presets got much quicker; the old default (1.5 s) becomes the new one (Steady, 0.4 s).
+            if (config.IntervalMs == 1500) config.IntervalMs = Pacing.DefaultMs;
+            config.Version = 3;
+            config.Save();
+        }
 
         Plots = PlotTable.LoadEmbedded();
         data = new GameData();

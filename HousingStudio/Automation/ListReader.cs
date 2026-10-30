@@ -101,6 +101,22 @@ public static unsafe class ListReader
     }
 
     /// <summary>
+    /// The window's own text values that are storeroom pieces' names, in order. Many lists are filled
+    /// from their window's values, one entry per row; when there are exactly as many as the storeroom
+    /// has pieces, that's taken to be every row's name (checked by picking anyway). Unconfirmed.
+    /// </summary>
+    public static List<string> NamesInValues(string addonName, ISet<string> pieceNames)
+    {
+        var list = new List<string>();
+        foreach (var (_, text) in GameUi.TextValues(addonName).OrderBy(kv => kv.Key))
+        {
+            var name = HousingStudio.Core.Menus.Clean(text);
+            if (pieceNames.Contains(name)) list.Add(name);
+        }
+        return list;
+    }
+
+    /// <summary>
     /// Scrolls a list in a window to a row (the list component's own ScrollToItem), so rows it doesn't
     /// hold yet may be read. Unconfirmed: the run checks whether reading again shows new rows.
     /// </summary>
