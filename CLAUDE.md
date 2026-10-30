@@ -17,3 +17,11 @@ force-pushed, so all commit hashes from before that day changed (the files didn'
 or branch made before then still has the old commits: never merge or pull it into the new
 history, and never force-push main from it. Move only your own commits onto the new main
 (`git rebase --onto origin/main <the commit your work started from>`), or clone afresh.
+
+## Docs: a short README, the details in DETAILS.md
+
+- README.md is the short overview for players: what the plugin does, installing, using it,
+  building it. Keep it short and plain; version notes and implementation detail don't go there.
+- DETAILS.md is the full reference (it used to be the README): every view and setting, the
+  pace table, diagnostics, the code's layout, and the release notes for each version. Update
+  it (and docs/) when you change how something works.
