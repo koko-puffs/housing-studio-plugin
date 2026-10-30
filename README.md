@@ -5,13 +5,15 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.3.1, working in the game, being made quicker.** 0.3.0 is a new window (see
-> [The window](#the-window)). Moving placed pieces and placing from the storeroom (the game places the
-> piece, then it's moved to its spot) work in game. 0.2.4 removed too many waits and raced the game;
-> 0.3.1 waits for confirmed state instead (the list filled in, the placement settled, the piece held
-> for a few frames), with 0.3 s between game actions. Still unverified: finding rows past the list's
-> first 200 names, setting a bag piece down without a click, and opening the Housing menu from nothing
-> (see [docs/AUTOMATION.md](docs/AUTOMATION.md)). Keep the **backup** on, and if anything stops or feels
+> **Status: 0.3.2, working in the game, being made quicker.** Moving placed pieces and placing from
+> the storeroom (the game places the piece, then it's moved to its spot) work in game, at about 2.4 s
+> a piece in 0.3.1. 0.3.2 stops scanning the storeroom list row by row: storeroom pieces whose names
+> the list shows go first (each placement brings more rows into view), and a row it can't read is
+> predicted from the list's sort order and found in a pick or a few. Bag pieces are stored first and
+> placed from the storeroom (placing from the bag was refused in 0.3.0). Opening the editor from
+> nothing now accepts it opening in Move. Still unverified: the sort order for categories no log has
+> shown, "Store" from a bag item's menu, and opening the Housing menu from nothing (see
+> [docs/AUTOMATION.md](docs/AUTOMATION.md)). Keep the **backup** on, and if anything stops or feels
 > slow, send the log: it ends with a **Timing** summary.
 
 ## What it does
