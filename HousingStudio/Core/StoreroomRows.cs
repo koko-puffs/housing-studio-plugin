@@ -41,6 +41,7 @@ public sealed class StoreroomRows
 {
     private readonly Dictionary<int, StoreroomRow> rows = new();
     private readonly Dictionary<int, uint> inferred = new();
+    private readonly Dictionary<int, string> names = new();
 
     /// <summary>How many rows the list has (the storeroom's pieces), when last told.</summary>
     public int Count { get; private set; }
@@ -51,11 +52,15 @@ public sealed class StoreroomRows
     /// <summary>Rows not picked yet but taken to hold an item, from its group's size.</summary>
     public IReadOnlyDictionary<int, uint> Inferred => inferred;
 
+    /// <summary>Rows whose name was read from the list itself (without picking them).</summary>
+    public IReadOnlyDictionary<int, string> Names => names;
+
     /// <summary>Starts over (a new house, or the list was found to have changed).</summary>
     public void Reset(int count)
     {
         rows.Clear();
         inferred.Clear();
+        names.Clear();
         Count = Math.Max(0, count);
     }
 
@@ -120,6 +125,46 @@ public sealed class StoreroomRows
         return list;
     }
 
+    /// <summary>
+    /// Takes the names read from the list, the first of them being row <paramref name="offset"/>
+    /// (a list may hold only part of its rows at a time: 0.2.2 read 200 of 445).
+    /// </summary>
+    public void LearnNames(int offset, IReadOnlyList<string> rowNames)
+    {
+        for (var i = 0; i < rowNames.Count; i++)
+        {
+            var name = Menus.Clean(rowNames[i]);
+            if (name.Length > 0 && offset + i >= 0) names[offset + i] = name;
+        }
+    }
+
+    /// <summary>Rows whose read name is this piece's, leaving out rows known (picked) to hold something else.</summary>
+    public List<int> ByName(string itemName, uint itemId)
+    {
+        var wanted = Menus.Clean(itemName);
+        return names.Where(kv => string.Equals(kv.Value, wanted, StringComparison.OrdinalIgnoreCase))
+            .Select(kv => kv.Key)
+            .Where(r => !(rows.TryGetValue(r, out var k) && k.ItemId != itemId))
+            .OrderBy(r => r)
+            .ToList();
+    }
+
+    /// <summary>
+    /// The first row worth picking when looking for a piece by scanning: not picked, not inferred, and
+    /// not read to have another name. Null when there's none left.
+    /// </summary>
+    public int? NextUnknownFor(string itemName, ICollection<int>? skip = null)
+    {
+        var wanted = Menus.Clean(itemName);
+        for (var r = 0; r < Count; r++)
+        {
+            if (rows.ContainsKey(r) || inferred.ContainsKey(r) || (skip != null && skip.Contains(r))) continue;
+            if (names.TryGetValue(r, out var n) && !string.Equals(n, wanted, StringComparison.OrdinalIgnoreCase)) continue;
+            return r;
+        }
+        return null;
+    }
+
     /// <summary>The first row neither picked nor inferred, or null when every row is accounted for.</summary>
     public int? NextUnknown()
     {
@@ -134,6 +179,7 @@ public sealed class StoreroomRows
         if (row < 0) return;
         Shift(rows, row);
         Shift(inferred, row);
+        Shift(names, row);
         Count = Math.Max(0, Count - 1);
     }
 

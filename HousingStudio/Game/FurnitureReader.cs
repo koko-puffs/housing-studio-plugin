@@ -154,6 +154,17 @@ public sealed unsafe class FurnitureReader
         return memory[key].Stain;
     }
 
+    /// <summary>How many pieces are placed (inside, or in the ward's garden list), or -1.</summary>
+    public static int PlacedCount(bool garden)
+    {
+        var hm = HousingManager.Instance();
+        if (hm == null) return -1;
+        HousingFurnitureManager* fm = garden
+            ? (hm->OutdoorTerritory == null ? null : &hm->OutdoorTerritory->FurnitureManager)
+            : (hm->IndoorTerritory == null ? null : &hm->IndoorTerritory->FurnitureManager);
+        return fm == null ? -1 : (int)fm->FurnitureVector.LongCount;
+    }
+
     /// <summary>The preview the game shows while a piece is being picked from the storeroom or bags, or null.</summary>
     public static GameObject* Preview()
     {

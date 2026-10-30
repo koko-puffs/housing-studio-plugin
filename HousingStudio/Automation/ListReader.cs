@@ -100,6 +100,29 @@ public static unsafe class ListReader
         }
     }
 
+    /// <summary>
+    /// Scrolls a list in a window to a row (the list component's own ScrollToItem), so rows it doesn't
+    /// hold yet may be read. Unconfirmed: the run checks whether reading again shows new rows.
+    /// </summary>
+    public static bool ScrollTo(string addonName, uint nodeId, int row)
+    {
+        var addon = GameUi.Ready(addonName);
+        if (addon == null) return false;
+        var uld = &addon->UldManager;
+        for (var i = 0; i < uld->NodeListCount; i++)
+        {
+            var node = uld->NodeList[i];
+            if (node == null || node->NodeId != nodeId || (ushort)node->Type < 1000) continue;
+            var comp = ((AtkComponentNode*)node)->Component;
+            if (comp == null) return false;
+            var type = comp->GetComponentType();
+            if (type is not (ComponentType.TreeList or ComponentType.List)) return false;
+            ((AtkComponentList*)comp)->ScrollToItem((short)Math.Clamp(row, 0, short.MaxValue));
+            return true;
+        }
+        return false;
+    }
+
     /// <summary>The list most likely to be the one with <paramref name="expected"/> rows (the storeroom's pieces), or the longest.</summary>
     public static ListRows? Best(List<ListRows> lists, int expected) =>
         lists.Where(l => l.Rows.Count(r => r.Length > 0) > 0)

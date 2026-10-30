@@ -35,6 +35,13 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>After placing, dye every piece whose dye differs from the design.</summary>
     public bool DyeAfterPlacing { get; set; } = true;
 
+    /// <summary>
+    /// Something-not-working option: move the game's preview of a storeroom piece to its spot before
+    /// choosing Place (Refurnish's technique). Off: in 0.2.2 it stopped pieces being placed at all; the
+    /// piece is placed where the game puts it and then moved to its spot.
+    /// </summary>
+    public bool MovePreviewBeforePlace { get; set; }
+
     /// <summary>Diagnostics: hold before every click until Continue is pressed.</summary>
     public bool StepByStep { get; set; }
 
