@@ -1,4 +1,4 @@
-# How the automation works (0.2.3)
+# How the automation works (0.2.4)
 
 "Start placing" drives the game's own windows the way established automation plugins do: by firing
 the callbacks a window fires when you click in it (`AtkUnitBase.FireCallback`, what ECommons'
@@ -13,10 +13,21 @@ The clicks come from two recordings a user made doing everything by hand ("Recor
 
 `Session/PlacementRunner.cs` builds a list of pieces (`Core/RunSequence.cs`): moves, then pieces from
 the storeroom and bags, floor pieces before what sits on them, and the dyes last (planned when the run
-gets there). Each piece is a list of steps run by `Core/StepQueue.cs`: one step per frame at most, at
-least 0.3 s between two clicks, each wait with a timeout, step-by-step mode holding before every
+gets there). Each piece is a list of steps run by `Core/StepQueue.cs`: waits poll every frame and go on
+the moment their condition holds (several checks can finish in one frame), at least 0.25 s between
+two clicks in the game's windows, each wait with a timeout, step-by-step mode holding before every
 click, and clean-up steps (close the menu or dye window it opened) when a piece ends badly. Between
-pieces it waits the interval set on the Place page (± the jitter).
+pieces it waits the interval set on the Place page (± the jitter): Quick 0.15 s, Steady 0.4 s (the
+default; an old 1.5 s setting moves to it), Careful 1.5 s.
+
+**Timing.** Every step is logged when it ends, with how long it took ("→ Pick row 165: … (12 ms)"),
+and the end of a run (or a stop) logs a **Timing** summary: the average per piece and per phase, and
+the steps that took the most time in all. Send that when something feels slow.
+
+**Speed, roughly.** For a storeroom piece whose row is found by name: pick the row (the menu and the
+preview come within about 0.1 s), choose Place (0.25 s after the pick), the piece appears (about
+0.2 s), pick it up (0.25 s after), set it down (0.25 s after), it lands (0.1–0.5 s): about 1.5 s, plus
+the pace between pieces, so about 2 s a piece at Steady.
 
 Every frame it checks: same home, permission, the editor open (or, for up to 8 s while it switches
 modes, the Housing menu), not in combat/cutscene/zone change. A window that doesn't appear in time
@@ -51,24 +62,27 @@ landed. **Works in game.**
 4. Watch the furniture list for a new piece of that item (a furniture slot that wasn't there before,
    nearest the preview; the preview itself is never in that list). A yes/no that comes up is answered.
 5. Move the new piece to its exact spot with the move that works in game (pick up, set the transform,
-   set down, check).
+   set down, check). If the game doesn't pick it up (a piece just placed sometimes isn't ready), it
+   tries twice more; after that the piece is listed as a problem, and "Try again" moves it later.
 6. If nothing appears in 6 s, it tries once more (logging how many pieces were placed before and after,
    and the game's red error message if there was one); then the piece is skipped as "didn't land".
    Stand somewhere open: the game puts a storeroom piece in front of you.
 
-**Finding a storeroom row quickly** (`Core/StoreroomRows.cs`). The list isn't in storeroom order but
-it's grouped by item.
-- The list's own row names are read once per run without clicking (`Automation/ListReader.cs`). In
-  0.2.2 the furnishing list's tree list held the names of 200 of its 445 rows; those are used, and for
-  a piece not among them the list is scrolled (the list component's `ScrollToItem`, **unconfirmed**)
-  and read again, the new names lined up with the known ones by their overlap
-  (`Core/PlacingHelpers.cs` `ListWindows.Align`). Rows are found by the piece's name and checked by
-  picking: usually one pick.
-- Rows already picked are known (this run, and saved per house between runs while the storeroom holds
-  exactly the same pieces).
-- Otherwise rows are picked, skipping rows whose names are known to be other pieces and the rest of
-  each group (the storeroom's count of a piece says how long its group is).
-- When a piece leaves the list, the rows below (and their names) move up.
+**Finding a storeroom row quickly** (`Core/StoreroomRows.cs`). The list isn't in storeroom order, it
+shifts and re-sorts as pieces leave it, and it's grouped by item.
+- The list's row names are read without clicking (`Automation/ListReader.cs`): every row's from the
+  window's own values when they hold exactly one name per storeroom piece (**unconfirmed**), else the
+  200 the list component holds (0.2.3). They're **read again after every placement** (cheap: no
+  clicks), and remembered rows that no longer match the name now shown there are forgotten.
+- A row is only picked if its name is the piece's (or its name hasn't been read): never a row read to
+  hold another piece. If a row that should have held the piece doesn't, the names are read again
+  rather than scanning.
+- For a piece past the names read, the list is scrolled and read again, the new names lined up by
+  their overlap (**unconfirmed**; in 0.2.3 the stale names stopped this lining up). Filtering the list
+  to the piece's category would be quicker still (`Core/ListCategories.cs`), but the click for the
+  category menu isn't known: a recording of choosing a category in the list gives it.
+- Last of all, rows past the names are picked, skipping the rest of each item's group.
+- Rows picked are saved per house between runs while the storeroom holds exactly the same pieces.
 
 **From your bags**, as Recording 2: the item's menu (opened with `AgentInventoryContext`,
 **unconfirmed**), "Place" `[i:0, i:0, u:0, empty, empty]`; the editor then holds the piece (mode Place).
@@ -96,9 +110,8 @@ is skipped as "dye missing".
 
 ## What's most likely to need fixing next
 
-1. **Placing a storeroom piece where the game puts it**, then moving it: both halves have been seen
-   to work separately (Recording 2; moves in 0.2.2), not yet together.
-2. **Reading rows past the first 200** by scrolling the list.
+1. **Rows past the first 200 names**: reading all names from the window's values, or scrolling.
+2. **The pace**: whether the game keeps up at 0.25 s between clicks and Steady between pieces.
 3. **Setting a held bag piece down.**
 4. **Opening the Housing menu** from nothing.
 5. **Picking another dye shade**, and closing Furnishing Color.
