@@ -3,8 +3,8 @@
     "Author": "koko",
     "Name": "Housing Studio",
     "InternalName": "HousingStudio",
-    "AssemblyVersion": "0.2.1.0",
-    "TestingAssemblyVersion": "0.2.1.0",
+    "AssemblyVersion": "0.2.2.0",
+    "TestingAssemblyVersion": "0.2.2.0",
     "Punchline": "Furnish your house from a Housing Studio build or a MakePlace layout.",
     "Description": "Load a .build from Housing Studio (or a MakePlace .json) and see every piece matched to what you have: already placed, in your bags, in the storeroom, or still to buy. Start placing moves what is placed, places pieces from your bags and storeroom at their exact spots through the game's own windows, then dyes them to match. In-world markers, floor filters, a dry run, step-by-step mode, a copyable shopping list, and backups of your current layout. Early: the automation hasn't been tested in the game yet.\n\nUse /hstudio to open it. Only works in a house or apartment you're allowed to decorate, in the game's furnishing mode.",
     "ApplicableVersion": "any",
@@ -27,8 +27,8 @@
     "IsHide": false,
     "IsTestingExclusive": false,
     "LastUpdate": 1793335369,
-    "DownloadLinkInstall": "https://github.com/koko-puffs/housing-studio-plugin/releases/download/v0.2.1/HousingStudio.zip",
-    "DownloadLinkUpdate": "https://github.com/koko-puffs/housing-studio-plugin/releases/download/v0.2.1/HousingStudio.zip",
-    "DownloadLinkTesting": "https://github.com/koko-puffs/housing-studio-plugin/releases/download/v0.2.1/HousingStudio.zip"
+    "DownloadLinkInstall": "https://github.com/koko-puffs/housing-studio-plugin/releases/download/v0.2.2/HousingStudio.zip",
+    "DownloadLinkUpdate": "https://github.com/koko-puffs/housing-studio-plugin/releases/download/v0.2.2/HousingStudio.zip",
+    "DownloadLinkTesting": "https://github.com/koko-puffs/housing-studio-plugin/releases/download/v0.2.2/HousingStudio.zip"
   }
 ]

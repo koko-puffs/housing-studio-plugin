@@ -5,11 +5,12 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.2.1, partly tested in the game.** Moving placed pieces works in game. The window
-> clicks for switching modes, the Storeroom tab, choosing Place and dyeing now come from a recording
-> of them done by hand; setting a piece down that the editor is holding (after Place) is still
-> unverified (see [docs/AUTOMATION.md](docs/AUTOMATION.md)). Use **Step by step** (Place page) for
-> your first run, keep the **backup** on, and if anything stops, send a **recording**
+> **Status: 0.2.2, partly tested in the game.** Moving placed pieces works in game. Placing from
+> the storeroom now follows a recording of it done by hand (pick the row, the game shows a preview,
+> move the preview to the spot, choose Place). Still unverified: reading the storeroom list's rows
+> without clicking them, setting a bag piece down without a click, and opening the Housing menu from
+> nothing (see [docs/AUTOMATION.md](docs/AUTOMATION.md)). Use **Step by step** (Place page) for your
+> first run, keep the **backup** on, and if anything stops, send a **recording**
 > (see [Sending diagnostics](#sending-diagnostics)).
 
 ## What it does
@@ -31,11 +32,14 @@ its exact spot, then dyes everything to match.
 
   Floor pieces go first, then what sits on them or hangs on walls. Pause, resume, skip, stop
   (also `/hstudio pause|resume|stop`), and per-phase progress with the step being done.
-- **The editor's modes and the Storeroom tab are switched for you** (Rotate to place, Furnishing
-  Color to dye, through the Housing menu as you would). Only if it can't find its way does the run
-  ask you, in the window and in chat.
-- **The storeroom list** isn't in storeroom order, so the run learns which row holds which piece
-  as it goes (each row picked at most once per run) and logs what it learnt.
+- **The Housing menu, the editor's modes and the Storeroom tab are opened for you** (Rotate to
+  place, Furnishing Color to dye, through the Housing menu as you would). Only if it can't find its
+  way does the run ask you, in the window and in chat.
+- **The storeroom list** isn't in storeroom order, so the run finds a piece's row by its name in the
+  list when it can read the list, else picks rows (one per different piece, skipping the rest of
+  each group); every row it learns is kept for the house until the storeroom changes.
+- **When it's done**: what didn't work and why, the dyes you're short of, "try those again", and
+  "restore the backup" to put everything back as it was before the run.
 - **Safety**: only in a home you may decorate, with the furnishing editor open; it stops on leaving,
   a zone change, combat or a cutscene, losing permission, a window that doesn't appear in time, the
   furniture list changing under it, or a few pieces in a row failing; whatever a piece opened is
