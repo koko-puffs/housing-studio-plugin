@@ -1,0 +1,33 @@
+<Project Sdk="Dalamud.NET.Sdk/15.0.0">
+  <!--
+    Dalamud.NET.Sdk sets the target framework (net10.0-windows), x64, nullable, unsafe code, and
+    references Dalamud, ImGui, Lumina and FFXIVClientStructs from your Dalamud install
+    (%AppData%\XIVLauncher\addon\Hooks\dev, or DALAMUD_HOME). DalamudPackager writes the manifest
+    from HousingStudio.json and, in Release, zips the plugin to bin\x64\Release\HousingStudio\latest.zip.
+  -->
+  <PropertyGroup>
+    <Version>0.1.0.0</Version>
+    <AssemblyName>HousingStudio</AssemblyName>
+    <RootNamespace>HousingStudio</RootNamespace>
+    <Description>Load a Housing Studio build or a MakePlace layout and furnish your house from it.</Description>
+    <PackageProjectUrl>https://github.com/koko-puffs/housing-studio-plugin</PackageProjectUrl>
+    <IsPackable>false</IsPackable>
+    <!-- Lets the project build (for checking) on Linux and macOS too; it only runs in the game on Windows. -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The garden's plot table and the theme's fonts travel inside the DLL. -->
+    <EmbeddedResource Include="Data\plots.json" />
+    <EmbeddedResource Include="Resources\Fonts\*.ttf" />
+    <!-- The plugin's licence and the fonts' (the OFL asks for its text to travel with the fonts). -->
+    <Content Include="..\LICENSE" Link="LICENSE.txt" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    <Content Include="Resources\Fonts\OFL-Geist.txt" Link="OFL-Geist.txt" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Resources\Fonts\OFL-SourceSerif4.md" Link="OFL-SourceSerif4.md" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The installer shows images\icon.png for dev builds. -->
+    <Content Include="images\icon.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>images\icon.png</Link>
+    </Content>
+  </ItemGroup>
+</Project>

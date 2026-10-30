@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- Housing Studio's plugin icon: a brass house on the studio's warm ink (the site's studio.css
+       ink, walnut, brass and brass-soft). Rendered to HousingStudio/images/icon.png by tools/make-icon.mjs. -->
+  <defs>
+    <linearGradient id="room" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1c1814"/>
+      <stop offset="1" stop-color="#0e0c0b"/>
+    </linearGradient>
+    <radialGradient id="lamp" cx="0.5" cy="0.18" r="0.7">
+      <stop offset="0" stop-color="#d6b06c" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#d6b06c" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect x="8" y="8" width="496" height="496" rx="112" fill="url(#room)"/>
+  <rect x="8" y="8" width="496" height="496" rx="112" fill="url(#lamp)"/>
+  <rect x="9.5" y="9.5" width="493" height="493" rx="110.5" fill="none" stroke="#efe6d6" stroke-opacity="0.16" stroke-width="3"/>
+  <!-- the house -->
+  <path d="M120 250 L256 128 L392 250" fill="none" stroke="#d6b06c" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M152 236 L152 380 Q152 392 164 392 L348 392 Q360 392 360 380 L360 236" fill="none" stroke="#d6b06c" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- the door, and a lit window -->
+  <path d="M226 392 L226 316 Q226 296 246 296 L266 296 Q286 296 286 316 L286 392" fill="none" stroke="#d6b06c" stroke-width="22" stroke-linejoin="round"/>
+  <rect x="300" y="248" width="34" height="34" rx="7" fill="#ecd3a2"/>
+</svg>

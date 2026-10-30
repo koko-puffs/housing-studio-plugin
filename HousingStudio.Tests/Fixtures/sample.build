@@ -1,0 +1,64 @@
+{
+  "playerTransform": { "location": [0, 0, 0], "rotation": [0, 0, 0, 1], "scale": [1, 1, 1] },
+  "houseSize": "Medium",
+  "interiorScale": 1,
+  "interiorFixture": [
+    { "level": "Main", "type": "District", "name": "Mist", "itemId": 0 },
+    { "level": "Ground Floor", "type": "Wall", "name": "Riviera Interior Wall", "itemId": 6497 },
+    { "level": "Ground Floor", "type": "Floor", "name": "Riviera Flooring", "itemId": 6498 },
+    { "level": "Upper Floor", "type": "Light", "name": "Riviera Ceiling Light", "itemId": 6500 }
+  ],
+  "interiorFurniture": [
+    {
+      "transform": { "location": [1.5, -2.25, 0], "rotation": [0, 0, -0.707, 0.707], "scale": [1, 1, 1] },
+      "properties": { "color": "F9F8F4FF" },
+      "attachments": [
+        {
+          "transform": { "location": [1.6, -2.2, 0.9], "rotation": [0, 0, 0, 1], "scale": [1, 1, 1] },
+          "properties": {},
+          "attachments": [],
+          "name": "Glade Vase",
+          "itemId": 6142
+        }
+      ],
+      "name": "Oak Table",
+      "itemId": 6061
+    },
+    {
+      "transform": { "location": [-3, 4, 7.5], "rotation": [0, 0, 1, 0], "scale": [1, 1, 1] },
+      "properties": {},
+      "attachments": [],
+      "name": "Oak Table",
+      "itemId": 6061
+    },
+    {
+      "transform": { "location": [2, 2, -6.5], "rotation": [0, 0, 0, 1], "scale": [1, 1, 1] },
+      "properties": { "color": "4F2D1FFF", "material": { "itemId": 6497 } },
+      "attachments": [],
+      "name": "Partition",
+      "itemId": 20000
+    },
+    {
+      "transform": { "location": ["0,5", "x", 0], "rotation": "nope", "scale": [1, 1, 1] },
+      "properties": {},
+      "attachments": [],
+      "name": "Broken but kept",
+      "itemId": 6062
+    },
+    { "transform": { "location": [0, 0, 0] }, "name": "No item id" }
+  ],
+  "exteriorScale": 1,
+  "exteriorFixture": [
+    { "level": "Exterior", "type": "Roof", "name": "Riviera Cottage Roof (Red)", "itemId": 7000, "properties": { "color": "E4DFD0FF" } }
+  ],
+  "exteriorFurniture": [
+    {
+      "transform": { "location": [5, -3, 0.25], "rotation": [0, 0, 0.383, 0.924], "scale": [1, 1, 1] },
+      "properties": {},
+      "attachments": [],
+      "name": "Garden Bench",
+      "itemId": 6200
+    }
+  ],
+  "properties": { "build": "Seaside cottage", "plot": 12 }
+}
