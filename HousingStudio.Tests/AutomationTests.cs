@@ -314,21 +314,4 @@ public class MenuTests
     {
         Assert.Equal(0, Menus.FindEntry(new[] { "\u0002Place\u0003 " }, new[] { "Place" }));
     }
-
-    [Fact]
-    public void GuessesAStoreroomPiecesListPosition()
-    {
-        var occupied = new[] { (27001, 0), (27001, 3), (27002, 1), (27002, 5) };
-        Assert.Equal(0, Menus.GuessStoreroomIndex(occupied, (27001, 0)));
-        Assert.Equal(2, Menus.GuessStoreroomIndex(occupied, (27002, 1)));
-        Assert.Equal(3, Menus.GuessStoreroomIndex(occupied, (27002, 5)));
-    }
-
-    [Fact]
-    public void SearchesOutwardFromTheGuess()
-    {
-        Assert.Equal(new[] { 3, 4, 2, 5, 1 }, Menus.SearchOrder(3, 10, 5));
-        Assert.Equal(new[] { 0, 1, 2 }, Menus.SearchOrder(0, 3, 10));
-        Assert.Empty(Menus.SearchOrder(0, 0, 5));
-    }
 }

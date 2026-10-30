@@ -17,7 +17,7 @@ public sealed partial class MainWindow
         Widgets.Eyebrow("Placing");
         var storeroom = config.StoreroomAutomatic;
         if (Widgets.Toggle("Place storeroom pieces for me", ref storeroom)) { config.StoreroomAutomatic = storeroom; config.Save(); }
-        Widgets.Muted("Picks each piece in the furnishing list's storeroom tab, aims the game's preview at its spot and chooses Place. Off: you put them down, the plugin sets them at their spot. (Gardens: always you.)");
+        Widgets.Muted("Picks each piece in the furnishing list's storeroom tab, chooses Place in its menu, aims the piece at its spot and sets it down. Off: you put them down, the plugin sets them at their spot. (Gardens: always you.)");
         var bags = config.BagsAutomatic;
         if (Widgets.Toggle("Place pieces from my bags for me", ref bags)) { config.BagsAutomatic = bags; config.Save(); }
         Widgets.Muted("Opens the item's menu, chooses Place, aims the piece you're handed and sets it down. Off: you put them down, the plugin sets them at their spot.");
@@ -126,6 +126,10 @@ public sealed partial class MainWindow
             ImGui.SetClipboardText(Diagnostics());
             Notify("Diagnostics copied");
         }
+        ImGui.SameLine();
+        if (Widgets.Button("Write down the windows' values", ButtonStyle.Quiet, small: true, disabled: !recorder.Recording,
+                tooltip: "While recording: adds every value the furnishing list, the dye window and the menus hold right now (open the Storeroom tab first). These show how the list's rows could be read without picking them."))
+            Services.Framework.RunOnFrameworkThread(recorder.DumpWindows);
         if (recorder.SetupError != null) Widgets.Muted(recorder.SetupError);
         Widgets.Gap(6);
 
@@ -143,19 +147,11 @@ public sealed partial class MainWindow
         if (ImGui.CollapsingHeader("Windows and clicks used"))
         {
             using var font = theme.Fonts.Small.Push();
-            foreach (var call in Calls())
+            foreach (var call in UiTable.All())
                 ImGui.TextColored(call.Verified ? Palette.Text : Palette.BrassSoft, $"{call.Describe()}  · {call.Source}");
-            ImGui.TextColored(Palette.BrassSoft, UiTable.ListStoreroomTab == null ? "Storeroom tab: you click it (values not known yet)." : UiTable.ListStoreroomTab.Describe());
-            ImGui.TextColored(Palette.BrassSoft, UiTable.EditorSetMode == null ? "Editor modes (Rotate, Dye): you press them (values not known yet)." : UiTable.EditorSetMode.Describe());
         }
         Widgets.EndPanel();
     }
-
-    private static UiCall[] Calls() => new[]
-    {
-        UiTable.ListSelect, UiTable.MenuChoose, UiTable.MenuCancel, UiTable.YesNoYes, UiTable.DyeShade,
-        UiTable.DyePick, UiTable.DyeApply, UiTable.DyeClose, UiTable.DyeConfirmYes, UiTable.DyeConfirmNo,
-    };
 
     private string Diagnostics()
     {

@@ -10,12 +10,15 @@ public enum ArgKind
     Int,
     UInt,
     Bool,
+
+    /// <summary>An empty value (the game's "undefined"), as some windows send after their numbers.</summary>
+    Empty,
 }
 
 /// <summary>One value of a window callback: a number, or a named blank filled in when it's sent ("{index}").</summary>
 public readonly record struct UiArg(ArgKind Kind, long Value, string? Blank)
 {
-    public override string ToString() => (Kind switch { ArgKind.UInt => "u", ArgKind.Bool => "b", _ => "i" }) + ":" + (Blank != null ? $"{{{Blank}}}" : Value.ToString(CultureInfo.InvariantCulture));
+    public override string ToString() => Kind == ArgKind.Empty ? "empty" : (Kind switch { ArgKind.UInt => "u", ArgKind.Bool => "b", _ => "i" }) + ":" + (Blank != null ? $"{{{Blank}}}" : Value.ToString(CultureInfo.InvariantCulture));
 }
 
 /// <summary>
@@ -25,7 +28,7 @@ public readonly record struct UiArg(ArgKind Kind, long Value, string? Blank)
 /// window are in <c>Automation/UiTable.cs</c>, with where each one came from, so they're quick to fix
 /// from a recorded log.
 /// </summary>
-/// <param name="Spec">Values as text, e.g. <c>"i:1 i:{index}"</c> (i int, u uint, b bool).</param>
+/// <param name="Spec">Values as text, e.g. <c>"i:1 i:{index}"</c> (i int, u uint, b bool; <c>empty</c> for an empty value).</param>
 /// <param name="Verified">Seen working in another plugin (true), or a best guess to be confirmed by a recording (false).</param>
 public sealed record UiCall(string Addon, string Spec, bool Close, string Source, bool Verified = true)
 {
@@ -36,6 +39,11 @@ public sealed record UiCall(string Addon, string Spec, bool Close, string Source
         var list = new List<UiArg>();
         foreach (var token in spec.Split(new[] { ' ', ',' }, StringSplitOptions.RemoveEmptyEntries))
         {
+            if (token.Equals("empty", StringComparison.OrdinalIgnoreCase))
+            {
+                list.Add(new UiArg(ArgKind.Empty, 0, null));
+                continue;
+            }
             var colon = token.IndexOf(':');
             if (colon <= 0) throw new FormatException($"\"{token}\" isn't a value like i:1 or i:{{index}}.");
             var kind = token[..colon].ToLowerInvariant() switch
@@ -70,7 +78,7 @@ public sealed record UiCall(string Addon, string Spec, bool Close, string Source
     /// <summary>"HousingGoods ← [i:1, i:12]": what's being sent, for the log and step-by-step mode.</summary>
     public string Describe(IReadOnlyDictionary<string, long>? blanks = null)
     {
-        string Value((ArgKind Kind, long Value) v) => (v.Kind switch { ArgKind.UInt => "u", ArgKind.Bool => "b", _ => "i" }) + ":" + v.Value.ToString(CultureInfo.InvariantCulture);
+        string Value((ArgKind Kind, long Value) v) => v.Kind == ArgKind.Empty ? "empty" : (v.Kind switch { ArgKind.UInt => "u", ArgKind.Bool => "b", _ => "i" }) + ":" + v.Value.ToString(CultureInfo.InvariantCulture);
         string body;
         try
         {

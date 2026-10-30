@@ -5,10 +5,11 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.2, the automation is untested in the game.** It compiles against Dalamud 15 (API 15,
-> game patch 7.5) and its planning is unit-tested, but the clicks through the game's windows were
-> written from other plugins' research and haven't been run yet. Use **Step by step** (Place page)
-> for your first run, keep the **backup** on, and if anything stops, send a **recording**
+> **Status: 0.2.1, partly tested in the game.** Moving placed pieces works in game. The window
+> clicks for switching modes, the Storeroom tab, choosing Place and dyeing now come from a recording
+> of them done by hand; setting a piece down that the editor is holding (after Place) is still
+> unverified (see [docs/AUTOMATION.md](docs/AUTOMATION.md)). Use **Step by step** (Place page) for
+> your first run, keep the **backup** on, and if anything stops, send a **recording**
 > (see [Sending diagnostics](#sending-diagnostics)).
 
 ## What it does
@@ -30,9 +31,11 @@ its exact spot, then dyes everything to match.
 
   Floor pieces go first, then what sits on them or hangs on walls. Pause, resume, skip, stop
   (also `/hstudio pause|resume|stop`), and per-phase progress with the step being done.
-- **Where the game's own button is needed** (the editor's Rotate and Dye modes, the furnishing
-  list's Storeroom tab: their clicks aren't known yet), the run asks you in the window and in chat,
-  and carries on as soon as you've pressed it.
+- **The editor's modes and the Storeroom tab are switched for you** (Rotate to place, Furnishing
+  Color to dye, through the Housing menu as you would). Only if it can't find its way does the run
+  ask you, in the window and in chat.
+- **The storeroom list** isn't in storeroom order, so the run learns which row holds which piece
+  as it goes (each row picked at most once per run) and logs what it learnt.
 - **Safety**: only in a home you may decorate, with the furnishing editor open; it stops on leaving,
   a zone change, combat or a cutscene, losing permission, a window that doesn't appear in time, the
   furniture list changing under it, or a few pieces in a row failing; whatever a piece opened is

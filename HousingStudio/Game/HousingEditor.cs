@@ -1,19 +1,8 @@
 using System;
 using FFXIVClientStructs.FFXIV.Client.LayoutEngine;
+using HousingStudio.Core;
 
 namespace HousingStudio.Game;
-
-/// <summary>The furnishing modes of the game's housing editor (the buttons along the bottom of the screen).</summary>
-public enum EditorMode
-{
-    None = 0,
-    Move = 1,
-    Rotate = 2,
-    Store = 3,
-    Place = 4,
-    Dye = 5,
-    Remove = 6,
-}
 
 /// <summary>
 /// The game's housing editor: which mode is on, which piece is picked, and the game's own "pick a

@@ -64,6 +64,14 @@ public sealed unsafe class UiRecorder : IDisposable
         Services.Toasts.ErrorToast += OnErrorToast;
     }
 
+    /// <summary>Writes down every value the windows the automation uses hold right now.</summary>
+    public void DumpWindows()
+    {
+        foreach (var name in new[] { UiTable.FurnishingList, UiTable.DyeList, UiTable.DyeWindow, UiTable.ContextMenu, UiTable.LayoutBar, UiTable.HousingMenu })
+            Add("VALUES " + GameUi.DumpValues(name));
+        Add("STATE " + DescribeState());
+    }
+
     public void Stop()
     {
         if (!Recording) return;
@@ -150,7 +158,10 @@ public sealed unsafe class UiRecorder : IDisposable
     {
         if (!Recording) return;
         var a = (AtkUnitBase*)args.Addon.Address;
-        var strings = a != null ? GameUi.Strings(a, 12) : new List<string>();
+        // The windows the automation reads get all their words written down (the dye window's list,
+        // the furnishing list's rows); the rest, the first few.
+        var full = args.AddonName is UiTable.DyeWindow or UiTable.FurnishingList or UiTable.DyeList or UiTable.ContextMenu;
+        var strings = a != null ? GameUi.Strings(a, full ? 600 : 12) : new List<string>();
         Add($"OPEN {args.AddonName}{(strings.Count > 0 ? " " + string.Join(" ", strings) : string.Empty)}");
     }
 
@@ -163,6 +174,7 @@ public sealed unsafe class UiRecorder : IDisposable
 
     private void Add(string line)
     {
+        if (started == default) started = DateTime.UtcNow;
         lines.Add($"{(DateTime.UtcNow - started).TotalSeconds,7:0.000}  {line}");
         if (lines.Count > MaxLines) lines.RemoveRange(0, lines.Count - MaxLines);
     }

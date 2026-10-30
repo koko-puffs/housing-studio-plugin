@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices;
 using Dalamud.Game.Text.SeStringHandling;
 using FFXIVClientStructs.FFXIV.Client.UI;
@@ -42,6 +43,9 @@ public static unsafe class GameUi
                     case ArgKind.UInt:
                         ptr[i].Type = FFXIVClientStructs.FFXIV.Component.GUI.AtkValueType.UInt;
                         ptr[i].UInt = (uint)value;
+                        break;
+                    case ArgKind.Empty:
+                        ptr[i].Type = FFXIVClientStructs.FFXIV.Component.GUI.AtkValueType.Undefined;
                         break;
                     case ArgKind.Bool:
                         ptr[i].Type = FFXIVClientStructs.FFXIV.Component.GUI.AtkValueType.Bool;
@@ -111,6 +115,30 @@ public static unsafe class GameUi
             if (a != null) return a->Id;
         }
         return 0;
+    }
+
+    /// <summary>A window's text values by their index in its AtkValues (for reading the dye window's list).</summary>
+    public static Dictionary<int, string> TextValues(string name)
+    {
+        var result = new Dictionary<int, string>();
+        var a = Ready(name);
+        if (a == null || a->AtkValues == null) return result;
+        for (var i = 0; i < a->AtkValuesCount; i++)
+        {
+            var v = a->AtkValues[i];
+            if (IsText(v.Type) && v.String.Value != null) result[i] = Text(v.String.Value);
+        }
+        return result;
+    }
+
+    /// <summary>Every value a window holds, typed ("[12] i:3"), for diagnostics.</summary>
+    public static string DumpValues(string name, int max = 2000)
+    {
+        var a = Ready(name);
+        if (a == null) return $"{name}: not open";
+        if (a->AtkValues == null) return $"{name}: no values";
+        var count = Math.Min((int)a->AtkValuesCount, max);
+        return $"{name} ({a->AtkValuesCount} values): " + string.Join(" ", Enumerable.Range(0, count).Select(i => $"[{i}] {Describe(&a->AtkValues[i], 1)}"));
     }
 
     /// <summary>Every text value a window holds, in order (for the recorder).</summary>

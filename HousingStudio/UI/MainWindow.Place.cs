@@ -33,8 +33,7 @@ public sealed partial class MainWindow
         Check(session.Layout != null, "A design is loaded", "Load one on the Design page.");
         Check(ctx.Side != null, "You're in a home (inside, or on your plot)", "Go to your house, apartment or plot.");
         Check(ctx.HasPermission, "You're allowed to decorate here", "Only your own home, or one whose owner gave you permission.");
-        Check(ctx.EditorOpen, "The furnishing editor is open", ctx.Kind == PlaceKind.Ward ? "Housing → Outdoor Furnishings." : "Housing → Indoor Furnishings (it opens the furnishing list too).");
-        Check(ctx.Mode == EditorMode.Rotate, "It's in Rotate mode", "Press Rotate (the circular arrows); the run asks if it needs another mode.", optional: true);
+        Check(ctx.EditorOpen || Automation.GameUi.IsOpen(Automation.UiTable.HousingMenu), "The editor (or the Housing menu) is open", "The run switches modes itself (Rotate to place, Furnishing Color to dye).");
         Check(session.Warnings.Count == 0, "The design fits this home", session.Warnings.FirstOrDefault() ?? string.Empty);
         if (ctx.Side == Side.Interior)
             Check(session.StoreroomLoaded, "The storeroom is loaded", "Open the furnishing list's Storeroom tab once so its pieces count.", optional: true);
@@ -60,7 +59,7 @@ public sealed partial class MainWindow
         if (missing > 0) Widgets.Muted($"{missing} missing piece{(missing == 1 ? " is" : "s are")} skipped (Pieces → Copy shopping list).");
         if (floorsOff.Count > 0 || config.NearMeRadius > 0)
             Widgets.Muted($"Only what the Pieces filters show: {(floorsOff.Count > 0 ? $"not the {string.Join(" or ", floorsOff)}" : "every floor")}{(config.NearMeRadius > 0 ? $", within {config.NearMeRadius:0} yalms of you" : "")}.");
-        Widgets.Muted("Where the game's own button has to be pressed (the editor's modes, the Storeroom tab), the run asks you and carries on once it's done.");
+        Widgets.Muted("The run switches the editor between Rotate and Furnishing Color, and opens the Storeroom tab, itself. Only if it can't find its way does it ask you.");
         Widgets.Gap(6);
 
         var seconds = config.IntervalMs / 1000f;
