@@ -175,6 +175,19 @@ public static class UiTable
         _ => new[] { "Place" },
     };
 
+    /// <summary>
+    /// The words of the "Store" entry in a bag item's menu (sends it to the storeroom), by client
+    /// language. English "Store" is confirmed (0.3.0: "0:Place | 1:Store | 2:Dye | …"); the others are
+    /// the game's usual words for it and unconfirmed.
+    /// </summary>
+    public static IReadOnlyList<string> StoreLabels(ClientLanguage language) => language switch
+    {
+        ClientLanguage.Japanese => new[] { "収納する", "倉庫に収納する", "収納" },
+        ClientLanguage.German => new[] { "Einlagern", "Lagern" },
+        ClientLanguage.French => new[] { "Entreposer", "Ranger" },
+        _ => new[] { "Store" },
+    };
+
     /// <summary>The words of the "Paint" entry in a Furnishing Color list row's menu. English confirmed (Recording 2).</summary>
     public static IReadOnlyList<string> PaintLabels(ClientLanguage language) => language switch
     {

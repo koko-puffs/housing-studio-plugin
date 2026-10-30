@@ -12,7 +12,7 @@ public sealed class GameData
     private const uint TabletopCategory = 78;
     private const uint WallMountedCategory = 79;
 
-    private readonly Dictionary<uint, (string Name, uint Icon, uint UiCategory)> items = new();
+    private readonly Dictionary<uint, (string Name, uint Icon, uint UiCategory, ListSortKey Sort)> items = new();
     private readonly Dictionary<uint, uint> indoorFurnitureToItem = new();
     private readonly Dictionary<uint, uint> yardObjectToItem = new();
     private readonly Dictionary<byte, DyeColor> dyesById = new();
@@ -31,7 +31,13 @@ public sealed class GameData
         var sheet = Services.Data.GetExcelSheet<Item>();
         foreach (var id in wanted)
             if (sheet.TryGetRow(id, out var item))
-                items[id] = (item.Name.ExtractText(), item.Icon, item.ItemUICategory.RowId);
+            {
+                var ui = item.ItemUICategory.ValueNullable;
+                // Unknown4 is the Item sheet's SubcategorySort (between LevelItem and ItemAction; Lumina's
+                // Experimental sheet names it): Furnishing 8230 … 42000, Table 2000 … 4230 in a user's list.
+                var sort = new ListSortKey(ui?.OrderMajor ?? 0, ui?.OrderMinor ?? 0, item.Unknown4, id);
+                items[id] = (item.Name.ExtractText(), item.Icon, item.ItemUICategory.RowId, sort);
+            }
 
         var dyes = new List<DyeColor>();
         foreach (var stain in Services.Data.GetExcelSheet<Stain>())
@@ -50,6 +56,9 @@ public sealed class GameData
 
     public string ItemName(uint itemId) =>
         items.TryGetValue(itemId, out var i) && !string.IsNullOrEmpty(i.Name) ? i.Name : $"Item {itemId}";
+
+    /// <summary>Where the item sorts in the furnishing list's Storeroom tab (<see cref="ListSortKey"/>).</summary>
+    public ListSortKey SortKey(uint itemId) => items.TryGetValue(itemId, out var i) ? i.Sort : new ListSortKey(int.MaxValue, 0, 0, itemId);
 
     public uint ItemIcon(uint itemId) => items.TryGetValue(itemId, out var i) ? i.Icon : 0;
 

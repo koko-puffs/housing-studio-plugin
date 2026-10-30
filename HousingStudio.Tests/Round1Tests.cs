@@ -124,11 +124,12 @@ public class ModeRouteTests
     }
 
     [Fact]
-    public void BackFromDyeModeOpensIndoorFurnishingsInRotate()
+    public void BackFromDyeModeOpensIndoorFurnishingsThenTheBarsButton()
     {
-        Assert.Equal(new[] { ModeClick.CloseDyeList, ModeClick.OpenFurnishings }, ModeRoute.Plan(EditorMode.Dye, EditorMode.Rotate, false));
+        // 0.3.2: Indoor Furnishings opens in Rotate or Move, so the bar's button follows (pressed only if needed).
+        Assert.Equal(new[] { ModeClick.CloseDyeList, ModeClick.OpenFurnishings, ModeClick.Rotate }, ModeRoute.Plan(EditorMode.Dye, EditorMode.Rotate, false));
         Assert.Equal(new[] { ModeClick.CloseDyeList, ModeClick.OpenFurnishings, ModeClick.Move }, ModeRoute.Plan(EditorMode.Dye, EditorMode.Move, false));
-        Assert.Equal(new[] { ModeClick.OpenFurnishings }, ModeRoute.Plan(EditorMode.None, EditorMode.Rotate, true));
+        Assert.Equal(new[] { ModeClick.OpenFurnishings, ModeClick.Rotate }, ModeRoute.Plan(EditorMode.None, EditorMode.Rotate, true));
     }
 
     [Fact]
@@ -141,7 +142,7 @@ public class ModeRouteTests
     [Fact]
     public void FromNothingOpensTheHousingMenuFirst()
     {
-        Assert.Equal(new[] { ModeClick.OpenHousingMenu, ModeClick.OpenFurnishings }, ModeRoute.Plan(EditorMode.None, EditorMode.Rotate, false));
+        Assert.Equal(new[] { ModeClick.OpenHousingMenu, ModeClick.OpenFurnishings, ModeClick.Rotate }, ModeRoute.Plan(EditorMode.None, EditorMode.Rotate, false));
         Assert.Equal(new[] { ModeClick.OpenHousingMenu, ModeClick.OpenDye }, ModeRoute.Plan(EditorMode.None, EditorMode.Dye, false));
         Assert.True(ModeRoute.LeadsToHousingMenu(ModeClick.OpenHousingMenu));
         Assert.False(ModeRoute.LeadsToHousingMenu(ModeClick.OpenDye));
@@ -150,7 +151,8 @@ public class ModeRouteTests
     [Fact]
     public void KnowsWhereEachClickLeadsTheEditor()
     {
-        Assert.Equal(EditorMode.Rotate, ModeRoute.After(ModeClick.OpenFurnishings));
+        Assert.True(ModeRoute.Reached(ModeClick.OpenFurnishings, EditorMode.Rotate));
+        Assert.True(ModeRoute.Reached(ModeClick.OpenFurnishings, EditorMode.Move));
         Assert.Equal(EditorMode.Dye, ModeRoute.After(ModeClick.OpenDye));
         Assert.Equal(EditorMode.None, ModeRoute.After(ModeClick.CloseEditor));
     }

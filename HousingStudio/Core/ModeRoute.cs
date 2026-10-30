@@ -29,7 +29,7 @@ public enum ModeClick
     /// <summary>Close the dye mode's list: back to the Housing menu.</summary>
     CloseDyeList,
 
-    /// <summary>Housing menu → Indoor Furnishings (opens the editor in Rotate).</summary>
+    /// <summary>Housing menu → Indoor Furnishings: opens the editor in a layout mode, Rotate or Move (0.3.0 saw Move).</summary>
     OpenFurnishings,
 
     /// <summary>Housing menu → Furnishing Color (the dye mode).</summary>
@@ -61,7 +61,7 @@ public static class ModeRoute
             rest.Insert(0, ModeClick.OpenHousingMenu);
             return rest;
         }
-        var layout = current is EditorMode.Move or EditorMode.Rotate or EditorMode.Store or EditorMode.Remove;
+        var layout = IsLayout(current);
 
         if (want is EditorMode.Rotate or EditorMode.Move)
         {
@@ -71,8 +71,9 @@ public static class ModeRoute
             if (current == EditorMode.Dye) route.Add(ModeClick.CloseDyeList);
             else if (!housingMenuOpen) return null;
             route.Add(ModeClick.OpenFurnishings);
-            // Indoor Furnishings opens in Rotate.
-            if (want == EditorMode.Move) route.Add(ModeClick.Move);
+            // Indoor Furnishings opens in Rotate or in Move (a user's run, 0.3.0: Move), so the bar's button
+            // follows; it's pressed only if the editor didn't open in the mode wanted (Needed).
+            route.Add(bar);
             return route;
         }
 
@@ -85,15 +86,34 @@ public static class ModeRoute
         return null;
     }
 
-    /// <summary>The mode the editor is in once a click has gone through.</summary>
+    /// <summary>
+    /// The mode the editor is in once a click has gone through (None for the clicks that bring the
+    /// Housing menu up). Indoor Furnishings has no one mode: see <see cref="Reached"/>.
+    /// </summary>
     public static EditorMode After(ModeClick click) => click switch
     {
         ModeClick.Rotate => EditorMode.Rotate,
         ModeClick.Move => EditorMode.Move,
-        ModeClick.OpenFurnishings => EditorMode.Rotate,
         ModeClick.OpenDye => EditorMode.Dye,
         _ => EditorMode.None,
     };
+
+    /// <summary>A layout mode: one of the modes Indoor Furnishings' editor bar has.</summary>
+    public static bool IsLayout(EditorMode mode) => mode is EditorMode.Move or EditorMode.Rotate or EditorMode.Store or EditorMode.Remove;
+
+    /// <summary>
+    /// Has the click gone through, by the mode the editor is in now? Indoor Furnishings has once the
+    /// editor is open in any layout mode (it opened in Move in 0.3.0, and the run waited for Rotate).
+    /// </summary>
+    public static bool Reached(ModeClick click, EditorMode now) => click switch
+    {
+        ModeClick.OpenFurnishings => IsLayout(now),
+        _ when LeadsToHousingMenu(click) => now == EditorMode.None,
+        _ => now == After(click),
+    };
+
+    /// <summary>Is the click still needed, in the mode the editor is in now? The bar's buttons aren't when it's already in their mode.</summary>
+    public static bool Needed(ModeClick click, EditorMode now) => click is not (ModeClick.Rotate or ModeClick.Move) || now != After(click);
 
     /// <summary>Does this click bring the Housing menu up (rather than an editor mode)?</summary>
     public static bool LeadsToHousingMenu(ModeClick click) => click is ModeClick.CloseEditor or ModeClick.CloseDyeList or ModeClick.OpenHousingMenu;
