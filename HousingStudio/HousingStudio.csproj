@@ -6,7 +6,7 @@
     from HousingStudio.json and, in Release, zips the plugin to bin\x64\Release\HousingStudio\latest.zip.
   -->
   <PropertyGroup>
-    <Version>0.3.3.0</Version>
+    <Version>0.3.4.0</Version>
     <AssemblyName>HousingStudio</AssemblyName>
     <RootNamespace>HousingStudio</RootNamespace>
     <Description>Load a Housing Studio build or a MakePlace layout and furnish your house from it.</Description>

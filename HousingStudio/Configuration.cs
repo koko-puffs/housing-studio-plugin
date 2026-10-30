@@ -9,7 +9,7 @@ namespace HousingStudio;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
-    public int Version { get; set; } = 5;
+    public int Version { get; set; } = 6;
 
     /// <summary>Layouts opened lately, newest first.</summary>
     public List<string> RecentFiles { get; set; } = new();
@@ -53,9 +53,10 @@ public sealed class Configuration : IPluginConfiguration
 
     /// <summary>
     /// Temporarily switch off the game's "floating / sunk / overlapping" placement check while
-    /// placing (the MakePlace plugin's "place anywhere"). Off by default; always switched back.
+    /// placing (the MakePlace plugin's "place anywhere"). On by default since 0.3.4 (designs from
+    /// Housing Studio often float or overlap on purpose); always switched back when a run ends.
     /// </summary>
-    public bool PlaceAnywhere { get; set; }
+    public bool PlaceAnywhere { get; set; } = true;
 
     // Overlay
     public bool ShowMarkers { get; set; } = true;
@@ -106,16 +107,18 @@ public sealed class Configuration : IPluginConfiguration
     /// Version 5 (0.3.3): the pace became a choice of Steady, Quick (the new default) and Daring, each
     /// setting more than the pause between pieces; Careful becomes Steady, the rest Quick.
     /// </remarks>
+    /// <remarks>Version 6 (0.3.4): place anywhere is on by default, so it's switched on.</remarks>
     public bool Migrate()
     {
-        if (Version >= 5) return false;
+        if (Version >= 6) return false;
         if (Version < 4)
         {
             NearMe = NearMeRadius > 0;
             if (NearMeRadius <= 0) NearMeRadius = 8f;
         }
-        Pace = Pacing.FromOldInterval(IntervalMs);
-        Version = 5;
+        if (Version < 5) Pace = Pacing.FromOldInterval(IntervalMs);
+        PlaceAnywhere = true;
+        Version = 6;
         return true;
     }
 

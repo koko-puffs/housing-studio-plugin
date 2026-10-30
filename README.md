@@ -5,7 +5,10 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.3.3, working in the game.** 0.3.3 makes Quick (0.3.2's pace) the default, with Steady
+> **Status: 0.3.4, working in the game.** 0.3.4 turns **Place anywhere** on by default, makes the
+> furnishing list again when a piece isn't in it (a bag piece just stored wasn't), never re-picks a
+> storeroom row already seen to hold the piece in another dye, and gives up on a piece the list won't
+> show after 60 rows instead of 600. 0.3.3 made Quick (0.3.2's pace) the default, with Steady
 > for a slow connection and Daring for the impatient, and fixes the storeroom picking a piece in the
 > wrong dye, a garden or house whose placed furniture couldn't be read being planned as empty (every
 > piece placed again), and a few slow spots in the window (see [Pace](#pace)). 0.3.2 also fixes a freeze on closing a
@@ -62,8 +65,9 @@ its exact spot, then dyes everything to match.
 
 - **Walls, floors, lights, the house's outside**: listed ("set these yourself").
 - **Removing a dye** (a piece dyed in your house but undyed in the design): listed.
-- **Pieces the game refuses** (floating, sunk or overlapping) unless **Place anywhere** is on in
-  Settings, which turns off the game's placement check for the run (as MakePlace does).
+- **Pieces the game refuses** (floating, sunk or overlapping) if **Place anywhere** is switched off
+  in Settings → More options. It's on by default: the game's placement check is off while a run
+  lasts (as MakePlace does), and back on when it ends.
 - **The garden's storeroom**: you put those pieces down, the plugin sets them at their spot.
 - **Paintings' and fish prints' pictures, aquarium fish, a partition's wall material**.
 

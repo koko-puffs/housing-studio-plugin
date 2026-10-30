@@ -48,6 +48,12 @@ public sealed unsafe class PlacementRunner : IDisposable
     private const float LandedDistance = 0.05f;
     private const float LandedYaw = 0.03f;
     private const int MaxRowPicksPerPiece = 600;
+
+    /// <summary>
+    /// Rows tried one after another for a piece once its name and the list's order can't place it (0.3.3
+    /// tried up to 600: two minutes and more for a piece the list didn't show at all).
+    /// </summary>
+    private const int MaxRowsInTurn = 60;
     private static readonly TimeSpan WindowWait = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan ClickWait = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan LandWait = TimeSpan.FromSeconds(6);
@@ -107,6 +113,15 @@ public sealed unsafe class PlacementRunner : IDisposable
 
     /// <summary>Picks the sort-order search has made for each piece.</summary>
     private readonly Dictionary<RunJob, int> searchPicks = new();
+
+    /// <summary>Pieces the list has been made again for (its Storeroom tab shown afresh), once each.</summary>
+    private readonly HashSet<RunJob> listRemadeFor = new();
+
+    /// <summary>
+    /// A piece came into the storeroom (a bag piece stored to be placed): the list doesn't show it until
+    /// it's made again (0.3.3 searched 170 rows for a stored Waterfall Partition the list didn't have).
+    /// </summary>
+    private bool listMissesStored;
 
     /// <summary>
     /// Rows whose pieces were just placed while the storeroom still showed them (its count lags the new
@@ -280,6 +295,10 @@ public sealed unsafe class PlacementRunner : IDisposable
         anywhereForOne = false;
         rowsLeaving.Clear();
         searchPicks.Clear();
+        listRemadeFor.Clear();
+        inTurnPicks.Clear();
+        orderLogged.Clear();
+        listMissesStored = false;
         queue.Begin(Array.Empty<Step>());
         nextJobAt = DateTime.UtcNow;
         editorMayCloseUntil = DateTime.UtcNow + ModeSwitchGrace;
@@ -696,6 +715,13 @@ public sealed unsafe class PlacementRunner : IDisposable
                 Key = "ready",
                 Run = () =>
                 {
+                    if (listMissesStored && GameUi.IsOpen(UiTable.FurnishingList) && InventoryReader.StoreroomTabShown())
+                    {
+                        listMissesStored = false;
+                        listRemadeFor.Add(job);
+                        queue.InsertNext(RemakeList("a piece was just stored, and the list shows it only once it's made again"));
+                        return StepOutcome.Done;
+                    }
                     if (HousingEditor.Mode == EditorMode.Rotate && GameUi.IsOpen(UiTable.FurnishingList)
                         && InventoryReader.StoreroomTabShown() && InventoryReader.StoreroomLoaded(side) && listSettled) return StepOutcome.Done;
                     queue.InsertNext(new[]
@@ -997,13 +1023,68 @@ public sealed unsafe class PlacementRunner : IDisposable
                     queue.InsertNext(new[] { ReadMoreRows(), FindRowStep(job, tried, chosen) });
                     return StepOutcome.Done;
                 }
-                var next = NextRow(job, tried);
-                if (next == null) return StepOutcome.Skip("No row of the list held it.", ProblemKind.NotFound);
-                queue.InsertNext(TryRow(job, next.Value, tried, chosen));
+                queue.InsertNext(NextPick(job, tried, chosen));
                 return StepOutcome.Done;
             },
         };
     }
+
+    /// <summary>
+    /// The steps for the next row to try: that row's, or when neither the piece's name nor the list's
+    /// order says where it is, the list made again once (it may not show the piece: one just stored, or
+    /// a list the game didn't refresh) and the search started over; else giving up.
+    /// </summary>
+    private List<Step> NextPick(RunJob job, HashSet<int> tried, int[] chosen)
+    {
+        var next = NextRow(job, tried, out var inTurn);
+        if (inTurn && next != null && inTurnPicks.GetValueOrDefault(job) == 1 && listRemadeFor.Contains(job))
+            log.Info($"  Trying rows in turn for {Name(job)} (at most {MaxRowsInTurn}).");
+        if (inTurn && listRemadeFor.Add(job))
+        {
+            log.Info($"  Neither its name nor the list's order puts {Name(job)} in a row: the list is made again before looking further.");
+            tried.Clear();
+            searchPicks.Remove(job);
+            inTurnPicks.Remove(job);
+            orderLogged.Remove(job);
+            var steps = RemakeList("the piece wasn't where the list should have it");
+            steps.Add(FindRowStep(job, tried, chosen));
+            return steps;
+        }
+        if (next != null) return TryRow(job, next.Value, tried, chosen);
+        var name = Name(job);
+        return new List<Step>
+        {
+            Step.Act("Give up looking", () => StepOutcome.Skip(
+                $"The furnishing list didn't show {name} (looked in {tried.Count} rows, and made the list again). Place it from the list by hand, or \"Try again\" later.",
+                ProblemKind.NotFound)),
+        };
+    }
+
+    /// <summary>
+    /// Shows the list's Placed tab and then its Storeroom tab again (one button, [i:11], switches between
+    /// them, as you did in 0.3.3's recording), so the game makes the list afresh; then waits for it to fill in.
+    /// </summary>
+    private List<Step> RemakeList(string why) => new()
+    {
+        Step.Act($"Make the list again ({why}): show the Placed tab: {UiTable.ListStoreroomTab.Describe()}", () => Fire(UiTable.ListStoreroomTab)),
+        Step.Wait("The Placed tab shows", () => !InventoryReader.StoreroomTabShown(), WindowWait, StepStatus.Done),
+        Step.Act($"Back to the Storeroom tab: {UiTable.ListStoreroomTab.Describe()}", () =>
+        {
+            if (InventoryReader.StoreroomTabShown()) return StepOutcome.Done;
+            return Fire(UiTable.ListStoreroomTab);
+        }),
+        Step.Wait("The Storeroom tab shows", InventoryReader.StoreroomTabShown, WindowWait),
+        Step.Wait("The storeroom is loaded", () => InventoryReader.StoreroomLoaded(side), WindowWait),
+        Step.Act("Read the list afresh", () =>
+        {
+            namesStale = true;
+            listSettled = false;
+            listWatch.Reset();
+            listExpect = null;
+            return StepOutcome.Done;
+        }),
+        ListSettles(),
+    };
 
     /// <summary>Reads the list's names again (cheap: no clicks) after it changed, and forgets picked rows that no longer match.</summary>
     private void RefreshListNames()
@@ -1120,25 +1201,55 @@ public sealed unsafe class PlacementRunner : IDisposable
     /// contents, bounded by every row whose item is known, halving what's left with each miss), and
     /// only if that order turns out not to hold, the first row that could be it.
     /// </summary>
-    private int? NextRow(RunJob job, HashSet<int> tried)
+    private int? NextRow(RunJob job, HashSet<int> tried, out bool inTurn)
     {
+        inTurn = false;
         if (tried.Count >= MaxRowPicksPerPiece) return null;
+        var item = job.Target.ItemId;
         var name = Menus.Clean(Name(job));
+        var dye = DyeWanted(job);
+        // A row picked before and found to hold this piece in another dye isn't it, while the storeroom has
+        // one in the dye wanted (0.3.3 picked the same six black partitions again for every undyed one).
+        var dyeMatters = Occupied().Any(o => o.ItemId == item && o.Stain == dye);
+        bool OtherDye(int r) => dyeMatters && rows.Known.TryGetValue(r, out var k) && k.ItemId == item && k.Stain != dye;
         bool NameFits(int r) => !rows.Names.TryGetValue(r, out var n) || string.Equals(n, name, StringComparison.OrdinalIgnoreCase);
-        var known = rows.Find(job.Target.ItemId, job.Target.Stain);
-        if (known != null && !tried.Contains(known.Value) && NameFits(known.Value)) return known;
-        foreach (var r in rows.ByName(Name(job), job.Target.ItemId))
-            if (!tried.Contains(r)) return r;
+        var known = rows.Find(item, dye);
+        if (known is { } kr && !tried.Contains(kr) && NameFits(kr) && !OtherDye(kr)) return kr;
+        foreach (var r in rows.ByName(Name(job), item))
+            if (!tried.Contains(r) && !OtherDye(r)) return r;
         var searched = searchPicks.GetValueOrDefault(job);
-        if (searched < SearchPicks && SearchByOrder(job, tried, searched) is { } probe)
+        if (searched < SearchPicks)
         {
-            searchPicks[job] = searched + 1;
-            return probe;
+            if (SearchByOrder(job, tried, searched) is { } probe)
+            {
+                searchPicks[job] = searched + 1;
+                return probe;
+            }
+            // The rows known don't fit the order around it: no more order picks for it (0.3.3 asked again every pick).
+            searchPicks[job] = SearchPicks + 1;
         }
-        // Never a row read to hold another piece; rows only guessed to be another piece's are tried before giving up.
-        if (searched == SearchPicks) log.Info($"  {SearchPicks} picks didn't find {Name(job)} by the list's order: trying rows in turn.");
-        return rows.NextCandidate(Name(job), job.Target.ItemId, tried);
+        else if (searched == SearchPicks && !inTurnPicks.ContainsKey(job))
+            log.Info($"  {SearchPicks} picks didn't find {Name(job)} by the list's order.");
+        // Rows in turn, a limited number: never a row read to hold another piece; rows only guessed to be
+        // another piece's are tried before giving up.
+        inTurn = true;
+        var scanned = inTurnPicks.GetValueOrDefault(job);
+        if (scanned >= MaxRowsInTurn) return null;
+        var skip = new HashSet<int>(tried);
+        foreach (var (r, _) in rows.Known) if (OtherDye(r)) skip.Add(r);
+        var next = rows.NextCandidate(Name(job), item, skip);
+        if (next != null) inTurnPicks[job] = scanned + 1;
+        return next;
     }
+
+    /// <summary>The dye of the copy the plan chose (the design's, or one it will dye), the dye a storeroom row is checked for.</summary>
+    private static byte DyeWanted(RunJob job) => job.Entry?.Stock?.Stain ?? job.Target.Stain;
+
+    /// <summary>Rows tried in turn for each piece (see <see cref="MaxRowsInTurn"/>).</summary>
+    private readonly Dictionary<RunJob, int> inTurnPicks = new();
+
+    /// <summary>Pieces whose rows were found not to fit the list's order (said once each).</summary>
+    private readonly HashSet<RunJob> orderLogged = new();
 
     /// <summary>Picks the sort-order search may make for one piece before rows are tried in turn (under 20 find any of 445 rows).</summary>
     private const int SearchPicks = 20;
@@ -1159,7 +1270,7 @@ public sealed unsafe class PlacementRunner : IDisposable
         var probe = StoreroomOrder.Next(job.Target.ItemId, data.SortKey, rows.Count, seen, tried, predicted, picks);
         if (probe is not { } p)
         {
-            log.Info($"  The rows known don't fit the list's sort order around {Name(job)} (predicted row {predicted}).");
+            if (orderLogged.Add(job)) log.Info($"  The rows known don't fit the list's sort order around {Name(job)} (predicted row {predicted}).");
             return null;
         }
         log.Info(p.Predicted
@@ -1233,7 +1344,7 @@ public sealed unsafe class PlacementRunner : IDisposable
                     // has one: 0.3.2 took any of the item, so an undyed table placed for a black one used up a
                     // dye and the black one was left over.
                     var sameItem = held.ItemId == job.Target.ItemId;
-                    var dye = job.Entry?.Stock?.Stain ?? job.Target.Stain;
+                    var dye = DyeWanted(job);
                     var right = sameItem && (held.Stain == dye || !occupied.Any(o => o.ItemId == held.ItemId && o.Stain == dye));
                     log.Info($"  row {row} → storeroom {container}/{slot}: {(held.ItemId == 0 ? "nothing?" : data.ItemName(held.ItemId))}"
                              + $"{(right ? " (this one)" : sameItem ? $" in {DyeWord(held.Stain)}; the storeroom has one in {DyeWord(dye)}" : string.Empty)}");
@@ -1256,14 +1367,7 @@ public sealed unsafe class PlacementRunner : IDisposable
                         namesStale = true;
                         after.Add(FindRowStep(job, tried, chosen));
                     }
-                    else
-                    {
-                        var next = NextRow(job, tried);
-                        if (next == null)
-                            after.Add(Step.Act("Give up looking", () => StepOutcome.Skip($"No row of the list held {name}.", ProblemKind.NotFound)));
-                        else
-                            after.AddRange(TryRow(job, next.Value, tried, chosen));
-                    }
+                    else after.AddRange(NextPick(job, tried, chosen));
                     queue.InsertNext(after);
                     return StepOutcome.Done;
                 },
@@ -1370,6 +1474,7 @@ public sealed unsafe class PlacementRunner : IDisposable
                         listSettled = false;
                         listWatch.Reset();
                         listExpect = null;
+                        listMissesStored = true;
                         queue.InsertNext(StoreroomSteps(job));
                         return StepOutcome.Done;
                     }

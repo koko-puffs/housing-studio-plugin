@@ -126,6 +126,15 @@ once a run, how many known rows the order predicts.
 A pick that turns out to be another piece (a probe) closes its menu in the same step: only the next
 pick waits the gap between actions (0.3.1 spent 0.6 s a row, closing with a second paced click).
 
+**0.3.4: making the list again.** The furnishing list doesn't show a piece that came into the
+storeroom while it was open (0.3.3's log: a bag piece stored, then 170 rows searched for it one by
+one). So after a bag piece is stored, and whenever neither a piece's name nor the list's order puts
+it in a row, the list is made again once for that piece: its Placed tab and then its Storeroom tab
+([i:11] switches between them, as the 0.3.3 recording showed), then it's read afresh. After that,
+rows are tried in turn 60 at most (0.3.3: up to 600), and the piece is skipped with why. A row
+already picked and found to hold the piece in another dye isn't picked again for it while the
+storeroom has one in the dye wanted (0.3.3 picked the same six black partitions for every undyed one).
+
 **0.3.3's storeroom fixes.** A row is taken only in the dye the plan chose the piece in, while the
 storeroom has one in that dye (0.3.2 took any of the item, so an undyed table placed for a black one
 used up a dye and the black one was left over). A placed piece's row comes out of the rows once its
