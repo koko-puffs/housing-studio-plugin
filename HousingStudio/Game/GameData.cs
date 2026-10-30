@@ -91,10 +91,24 @@ public sealed class GameData
         return Dyes.Closest(hex, HousingDyes)?.StainId ?? 0;
     }
 
-    private Fixtures? fixtures;
+    /// <summary>
+    /// The fixture tables: read in the background once the plugin starts (the whole Item sheet is
+    /// gone through), so saving a home doesn't hitch the game; a save before that reads them itself
+    /// (and a failed read is tried again next time, not kept).
+    /// </summary>
+    private readonly System.Lazy<Fixtures> fixtures = new(() => new Fixtures(), System.Threading.LazyThreadSafetyMode.PublicationOnly);
 
-    /// <summary>The fixture tables (read the first time a home is saved: the Item sheet is long).</summary>
-    private Fixtures FixtureTables => fixtures ??= new Fixtures();
+    private Fixtures FixtureTables => fixtures.Value;
+
+    /// <summary>Whether the fixture tables are read (the ward's outsides are only kept once they are).</summary>
+    public bool FixturesReady => fixtures.IsValueCreated;
+
+    /// <summary>Starts reading the fixture tables off the framework thread.</summary>
+    public void WarmUp() => System.Threading.Tasks.Task.Run(() =>
+    {
+        try { _ = fixtures.Value; }
+        catch (System.Exception ex) { Services.Log.Warning(ex, "Couldn't read the fixture tables yet"); }
+    });
 
     /// <summary>The item a fixture key is (a HousingExterior or HousingInterior row, as the game keeps them), or 0.</summary>
     public uint FixtureItem(uint key) => key != 0 && FixtureTables.ItemOfKey.TryGetValue(key, out var item) ? item : 0;

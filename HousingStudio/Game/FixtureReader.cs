@@ -140,8 +140,22 @@ public sealed unsafe class FixtureReader
     /// </summary>
     public void Look(HousingContext ctx)
     {
-        if (ctx.Kind != PlaceKind.Ward || DateTime.UtcNow < nextLook) return;
+        if (ctx.Kind != PlaceKind.Ward || DateTime.UtcNow < nextLook || !data.FixturesReady) return;
         nextLook = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+        try
+        {
+            LookAround(ctx);
+        }
+        catch (Exception ex)
+        {
+            // Only for saving later: never worth stopping a run over.
+            Services.Log.Warning(ex, "Couldn't read the ward's houses");
+            nextLook = DateTime.UtcNow + TimeSpan.FromMinutes(1);
+        }
+    }
+
+    private void LookAround(HousingContext ctx)
+    {
         var hm = HousingManager.Instance();
         if (hm == null || hm->OutdoorTerritory == null) return;
         var ward = hm->GetCurrentWard();

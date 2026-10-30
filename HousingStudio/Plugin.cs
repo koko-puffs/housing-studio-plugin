@@ -49,6 +49,7 @@ public sealed class Plugin : IDalamudPlugin
 
         Plots = PlotTable.LoadEmbedded();
         data = new GameData();
+        data.WarmUp();
         editor = new HousingEditor();
         actions = new HousingActions();
         recorder = new Automation.UiRecorder();

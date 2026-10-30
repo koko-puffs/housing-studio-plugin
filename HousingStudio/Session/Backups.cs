@@ -72,7 +72,7 @@ public static class Backups
         string? Hex(byte stain) => stain == 0 ? null : data.DyeRgb(stain) is { } rgb ? Dyes.HexOfRgb(rgb) : null;
         SavedPiece Saved(LivePiece p, System.Numerics.Vector3 at, float yaw)
         {
-            var material = data.MaterialItem(p.ItemId, FurnitureReader.Material(p.Instance));
+            var material = Try(() => data.MaterialItem(p.ItemId, FurnitureReader.Material(p.Instance)), 0u, "a piece's wallpaper");
             return new SavedPiece(p.ItemId, data.ItemName(p.ItemId), at, yaw, Hex(p.Stain),
                 material == 0 ? null : new SavedItem(material, data.AnyItemName(material)));
         }
@@ -82,7 +82,9 @@ public static class Backups
         {
             var size = ctx.HouseSize;
             var home = new SavedHome(size, Districts.StyleOfInterior(ctx.TerritoryName) ?? StyleOf(ctx.District),
-                fixtures.ReadInterior(size), size == "Apartment" ? [] : fixtures.ExteriorOfHome(ctx), FixtureReader.PlotOfInterior());
+                Try(() => fixtures.ReadInterior(size), [], "the fixtures"),
+                size == "Apartment" ? [] : Try(() => fixtures.ExteriorOfHome(ctx), [], "the outside"),
+                FixtureReader.PlotOfInterior());
             var inside = pieces.Select(p => Saved(p, p.Position, p.Yaw)).ToList();
             return Write(path, LayoutWriter.Write(home, inside, [], title), out why);
         }
@@ -97,8 +99,22 @@ public static class Backups
             var (local, yaw) = Transforms.WardToPlot(p.Position, p.Yaw, plot);
             return Saved(p, local, yaw);
         }).ToList();
-        var outside = new SavedHome(ctx.HouseSize, StyleOf(ctx.District), [], fixtures.ExteriorOfHome(ctx), plot.Number);
+        var outside = new SavedHome(ctx.HouseSize, StyleOf(ctx.District), [], Try(() => fixtures.ExteriorOfHome(ctx), [], "the outside"), plot.Number);
         return Write(path, LayoutWriter.Write(outside, [], garden, title), out why);
+    }
+
+    /// <summary>The home's fixtures and wallpapers are extras: when one can't be read, the furniture is still saved.</summary>
+    private static T Try<T>(Func<T> read, T otherwise, string what)
+    {
+        try
+        {
+            return read();
+        }
+        catch (Exception ex)
+        {
+            Services.Log.Warning(ex, $"Couldn't read {what} to save");
+            return otherwise;
+        }
     }
 
     private static bool Write(string path, string json, out string why)
