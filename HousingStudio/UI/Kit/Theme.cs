@@ -7,10 +7,13 @@ using Dalamud.Interface.Utility;
 namespace HousingStudio.UI;
 
 /// <summary>
-/// Pushes the window's look onto ImGui: the frame (Dalamud's title bar in walnut, 32px, with 13px
-/// Geist in ivory; a 10px window radius and the 0.2 ivory edge, as the mockups' window) before
-/// ImGui.Begin, and inside it no padding or item spacing (every gap is the mockup's own, placed by
-/// the views) and ImGui's own controls (the text fields, scrollbars, popups) in the tokens' colours.
+/// Pushes the window's look onto ImGui. Before ImGui.Begin only what can't touch the title bar's
+/// buttons: colours (the walnut bar, the ink window, the 0.2 ivory edge), the 10px window radius
+/// and no window padding. The title bar keeps Dalamud's own font and frame padding, so its ☰, ▼ and
+/// × sit and hit exactly as in every other Dalamud window (0.3.0 pushed a 13px font and a 12px frame
+/// padding there, which made each button's hit box about 41px wide while they stand 17px apart).
+/// Inside the window: no item spacing (every gap is the mockup's own, placed by the views), and
+/// ImGui's own controls (text fields, scrollbars, popups) in the tokens' colours.
 /// </summary>
 public static class Theme
 {
@@ -21,8 +24,8 @@ public static class Theme
 
     private static readonly Stack<(int Colors, int Vars, IDisposable? Font)> Pushed = new();
 
-    /// <summary>Before ImGui.Begin: what the window frame and title bar use.</summary>
-    public static void PushFrame(Fonts fonts)
+    /// <summary>Before ImGui.Begin: the frame's colours, radius, edge and padding; nothing that sizes the title bar.</summary>
+    public static void PushFrame()
     {
         var colors = 0;
         var vars = 0;
@@ -49,27 +52,11 @@ public static class Theme
         C(ImGuiCol.TitleBgActive, Palette.Walnut);
         C(ImGuiCol.TitleBgCollapsed, Palette.Walnut);
         C(ImGuiCol.Text, Palette.Ivory);
-        C(ImGuiCol.ResizeGrip, Vector4.Zero);
-        C(ImGuiCol.ResizeGripHovered, Palette.LineHover);
-        C(ImGuiCol.ResizeGripActive, Palette.Brass);
-        C(ImGuiCol.Button, Vector4.Zero);
-        C(ImGuiCol.ButtonHovered, Palette.LineFaint);
-        C(ImGuiCol.ButtonActive, Palette.LinePicked);
-        C(ImGuiCol.ScrollbarBg, Vector4.Zero);
-        C(ImGuiCol.ScrollbarGrab, Palette.WithAlpha(Palette.Ash, 0.32f));
-        C(ImGuiCol.ScrollbarGrabHovered, Palette.WithAlpha(Palette.Ash, 0.5f));
-        C(ImGuiCol.ScrollbarGrabActive, Palette.Brass);
 
         F(ImGuiStyleVar.WindowRounding, S(10));
         F(ImGuiStyleVar.WindowBorderSize, 1f);
         V(ImGuiStyleVar.WindowPadding, Vector2.Zero);
-        V(ImGuiStyleVar.WindowTitleAlign, new Vector2(0f, 0.5f));
-        // The title bar is the font's line plus twice this: 13px Geist (16.9px) + 2 × 7.55 = 32px.
-        var font = fonts.Push(Face.Sans, 13);
-        V(ImGuiStyleVar.FramePadding, new Vector2(S(12), MathF.Max(0, (S(32) - ImGui.GetFontSize()) / 2)));
-        F(ImGuiStyleVar.ScrollbarSize, S(8));
-        F(ImGuiStyleVar.ScrollbarRounding, S(999));
-        Pushed.Push((colors, vars, font));
+        Pushed.Push((colors, vars, null));
     }
 
     /// <summary>Inside the window: no spacing of ImGui's own, and its controls in the tokens' colours.</summary>
@@ -107,6 +94,10 @@ public static class Theme
         C(ImGuiCol.HeaderHovered, Palette.LineFaint);
         C(ImGuiCol.HeaderActive, Palette.LinePicked);
         C(ImGuiCol.ModalWindowDimBg, Palette.WithAlpha(Palette.Ink, 0.6f));
+        C(ImGuiCol.ScrollbarBg, Vector4.Zero);
+        C(ImGuiCol.ScrollbarGrab, Palette.WithAlpha(Palette.Ash, 0.32f));
+        C(ImGuiCol.ScrollbarGrabHovered, Palette.WithAlpha(Palette.Ash, 0.5f));
+        C(ImGuiCol.ScrollbarGrabActive, Palette.Brass);
 
         V(ImGuiStyleVar.ItemSpacing, Vector2.Zero);
         V(ImGuiStyleVar.ItemInnerSpacing, Vector2.Zero);
@@ -116,6 +107,8 @@ public static class Theme
         F(ImGuiStyleVar.PopupRounding, S(Palette.RadiusLg));
         F(ImGuiStyleVar.PopupBorderSize, 1f);
         V(ImGuiStyleVar.WindowPadding, Vector2.Zero);
+        F(ImGuiStyleVar.ScrollbarSize, S(8));
+        F(ImGuiStyleVar.ScrollbarRounding, S(999));
         Pushed.Push((colors, vars, null));
     }
 

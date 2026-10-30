@@ -5,7 +5,8 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.3.2, working in the game, being made quicker.** Moving placed pieces and placing from
+> **Status: 0.3.2, working in the game, being made quicker.** 0.3.2 also fixes a freeze on closing a
+> design and the title bar's buttons; 0.3.0 is a new window (see [The window](#the-window)). Moving placed pieces and placing from
 > the storeroom (the game places the piece, then it's moved to its spot) work in game, at about 2.4 s
 > a piece in 0.3.1. 0.3.2 stops scanning the storeroom list row by row: storeroom pieces whose names
 > the list shows go first (each placement brings more rows into view), and a row it can't read is

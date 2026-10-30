@@ -268,3 +268,50 @@ public class UiSvgPathTests
         public int GetHashCode(Vector2 v) => 0;
     }
 }
+
+public class UiDashesTests
+{
+    /// <summary>The Start view's drop zone at the widths 0.3.0 hung on (321 of 324 sizes stalled its dash walk).</summary>
+    [Theory]
+    [InlineData(1f)]
+    [InlineData(1.25f)]
+    [InlineData(1.5f)]
+    [InlineData(2f)]
+    public void TheDropZonesEdgeAlwaysEnds(float scale)
+    {
+        var h = (40 + 56 + 14 + 22 * 1.15f + 6 + 19.5f + 14 + 40 + 40) * scale;
+        var thickness = 1.5f * scale;
+        for (var w = 400; w <= 1600; w++)
+        {
+            var min = new Vector2(100.3f, 200.7f) + new Vector2(thickness / 2);
+            var max = new Vector2(100.3f + w, 200.7f + h) - new Vector2(thickness / 2);
+            var outline = Dashes.RoundedRect(min, max, 16 * scale - thickness / 2);
+            var dashes = Dashes.Along(outline, thickness * 6);
+            var perimeter = 0f;
+            for (var i = 1; i < outline.Count; i++) perimeter += Vector2.Distance(outline[i - 1], outline[i]);
+            Assert.Equal((int)MathF.Round(perimeter / (thickness * 6)), dashes.Count);
+            foreach (var d in dashes)
+            {
+                Assert.True(d.Length is >= 2 and <= 16, $"a dash of {d.Length} points at width {w}");
+                var len = 0f;
+                for (var i = 1; i < d.Length; i++) len += Vector2.Distance(d[i - 1], d[i]);
+                Assert.InRange(len, thickness * 2.5f, thickness * 3.5f);
+            }
+        }
+    }
+
+    [Fact]
+    public void DegenerateOutlinesGiveNoDashesOrFew()
+    {
+        Assert.Empty(Dashes.Along(new[] { Vector2.Zero }, 6));
+        Assert.Empty(Dashes.Along(new[] { Vector2.Zero, Vector2.Zero }, 6));
+        Assert.Empty(Dashes.Along(new[] { Vector2.Zero, Vector2.One }, 0));
+        Assert.Empty(Dashes.Along(new[] { Vector2.Zero, Vector2.One }, float.NaN));
+        Assert.Single(Dashes.Along(new[] { Vector2.Zero, new Vector2(1, 0) }, 100));
+        Assert.Equal(Dashes.MaxDashes, Dashes.Along(new[] { Vector2.Zero, new Vector2(1e7f, 0) }, 1).Count);
+        // A rectangle smaller than its radius still closes.
+        var tiny = Dashes.RoundedRect(Vector2.Zero, new Vector2(4, 4), 16);
+        Assert.Equal(tiny[0], tiny[^1]);
+        Assert.NotEmpty(Dashes.Along(tiny, 3));
+    }
+}

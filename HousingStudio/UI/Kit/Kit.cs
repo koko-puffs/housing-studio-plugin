@@ -567,77 +567,17 @@ public static class Kit
 
     /// <summary>
     /// A dashed rounded rectangle, as the browser draws a dashed border: dashes three times the
-    /// line's width with gaps as long, walked round the whole edge (corners too) and evened out so
-    /// the pattern closes.
+    /// line's width with gaps as long, round the whole edge (corners too), evened out so the pattern
+    /// closes. The dashes come from <see cref="Model.Dashes"/>, whose loops are bounded.
     /// </summary>
     public static void Dashed(Vector2 min, Vector2 max, float radius, Vector4 color, float thickness)
     {
         var half = thickness / 2;
-        min += new Vector2(half);
-        max -= new Vector2(half);
-        radius = MathF.Max(0, radius - half);
-        var pts = new List<Vector2>();
-        void Arc(Vector2 c, float a0, float a1)
-        {
-            const int n = 10;
-            for (var i = 0; i <= n; i++)
-            {
-                var a = a0 + (a1 - a0) * i / n;
-                pts.Add(c + new Vector2(MathF.Cos(a), MathF.Sin(a)) * radius);
-            }
-        }
-        Arc(new Vector2(max.X - radius, min.Y + radius), -MathF.PI / 2, 0);
-        Arc(new Vector2(max.X - radius, max.Y - radius), 0, MathF.PI / 2);
-        Arc(new Vector2(min.X + radius, max.Y - radius), MathF.PI / 2, MathF.PI);
-        Arc(new Vector2(min.X + radius, min.Y + radius), MathF.PI, MathF.PI * 1.5f);
-        pts.Add(pts[0]);
-
-        var perimeter = 0f;
-        for (var i = 1; i < pts.Count; i++) perimeter += Vector2.Distance(pts[i - 1], pts[i]);
-        var period = thickness * 6;
-        var count = MathF.Max(1, MathF.Round(perimeter / period));
-        period = perimeter / count;
-        var dash = period / 2;
-
+        var outline = Model.Dashes.RoundedRect(min + new Vector2(half), max - new Vector2(half), MathF.Max(0, radius - half));
         var col = Palette.U32(color);
         var dl = Dl;
-        var along = 0f;
-        var segment = new List<Vector2>();
-        for (var i = 1; i < pts.Count; i++)
-        {
-            var a = pts[i - 1];
-            var b = pts[i];
-            var len = Vector2.Distance(a, b);
-            var t = 0f;
-            while (t < len)
-            {
-                var phase = (along + t) % period;
-                var on = phase < dash;
-                var toEdge = on ? dash - phase : period - phase;
-                var step = MathF.Min(toEdge, len - t);
-                var p0 = a + (b - a) * (t / len);
-                var p1 = a + (b - a) * ((t + step) / len);
-                if (on)
-                {
-                    if (segment.Count == 0) segment.Add(p0);
-                    segment.Add(p1);
-                    if (step >= toEdge - 0.0001f) Flush();
-                }
-                t += step;
-            }
-            along += len;
-        }
-        Flush();
-
-        void Flush()
-        {
-            if (segment.Count >= 2)
-            {
-                var arr = segment.ToArray();
-                dl.AddPolyline(ref arr[0], arr.Length, col, ImDrawFlags.None, thickness);
-            }
-            segment.Clear();
-        }
+        foreach (var dash in Model.Dashes.Along(outline, thickness * 6))
+            if (dash.Length >= 2) dl.AddPolyline(ref dash[0], dash.Length, col, ImDrawFlags.None, thickness);
     }
 
     // ---------------------------------------------------------------------------------------------
