@@ -229,8 +229,8 @@ shifts and re-sorts as pieces leave it, and it's grouped by item.
 "Unable to place item." in 0.3.0 (the editor held the piece, the set-down was refused, nothing
 placed), while placing from the storeroom works. So inside a house:
 1. The item's menu (opened with `AgentInventoryContext`, which worked in 0.3.0), **"Store"** (entry 1
-   in "0:Place | 1:Store | 2:Dye | …"; other languages' words are unconfirmed, and a menu without it
-   goes to step 3).
+   in "0:Place | 1:Store | 2:Dye | …"; in other languages the game's own words, below, untried there;
+   a menu without it goes to step 3).
 2. Wait until the storeroom holds one more of it and your bags one fewer (3 frames, 0.1 s), then the
    storeroom's steps above place it and move it to its spot.
 3. If the game won't store it (an error message, such as a full storeroom, or no change in 3.5 s):
@@ -265,6 +265,16 @@ real run's counts only pieces that got placed, and says so when that's fewer.
 The dye window chooses which dye item it uses (both recordings used "Standard Spectrum Dye"), so a
 piece isn't skipped because the Stain's own dye items aren't in your bags; a piece the game won't dye
 is skipped as "dye missing".
+
+## The menus' words in other languages
+
+The entries chosen by their words ("Place", "Store", "Paint") come from the game's own text, the
+Addon sheet in the client's language (`Core/MenuWords.cs`, `Game/GameWords.cs`, used by
+`UiTable.PlaceLabels`, `StoreLabels` and `PaintLabels`): rows 1751 (a bag item's menu) and 6229 (the
+housing windows') for Place, 6840 for Store, 6272 for Paint, each checked against its English words
+first, so rows moved by a patch fall back to the built-in words. Settings' "Place" words override.
+A recording from a German, French or Japanese client (placing from the bags and the storeroom, and
+dyeing through Furnishing Color's list) would confirm them: its "menu entries" lines show the words.
 
 ## What's most likely to need fixing next
 

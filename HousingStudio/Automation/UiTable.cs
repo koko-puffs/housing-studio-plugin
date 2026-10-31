@@ -170,32 +170,44 @@ public static class UiTable
     };
 
     /// <summary>
-    /// The words of the "place" entry in an item's menu, by client language. English "Place" is
-    /// confirmed (Recording 1: "0:Place | 1:Store | 2:Dye | …"); Settings → Something not working? takes others.
+    /// The words of the "place" entry in an item's menu, in the client's language: the game's own
+    /// (<see cref="MenuWords.Place"/>), else the built-in ones. English "Place" is confirmed (Recording 1:
+    /// "0:Place | 1:Store | 2:Dye | …"); Settings → Something not working? takes others.
     /// </summary>
-    public static IReadOnlyList<string> PlaceLabels(ClientLanguage language) => language switch
+    public static IReadOnlyList<string> PlaceLabels(ClientLanguage language) => Game.GameWords.Place(language, BuiltInPlaceLabels(language));
+
+    /// <summary>The words of the "Store" entry in a bag item's menu (sends it to the storeroom): the game's own, else the built-in ones.</summary>
+    public static IReadOnlyList<string> StoreLabels(ClientLanguage language) => Game.GameWords.Store(language, BuiltInStoreLabels(language));
+
+    /// <summary>The words of the "Paint" entry in a Furnishing Color list row's menu: the game's own, else the built-in ones.</summary>
+    public static IReadOnlyList<string> PaintLabels(ClientLanguage language) => Game.GameWords.Paint(language, BuiltInPaintLabels(language));
+
+    /// <summary>
+    /// The "place" entry's words when the game's own can't be read: English "Place" is confirmed; the
+    /// others were guesses before the game's words were read (German's is Platzieren there).
+    /// </summary>
+    public static IReadOnlyList<string> BuiltInPlaceLabels(ClientLanguage language) => language switch
     {
         ClientLanguage.Japanese => new[] { "配置する", "設置する", "配置" },
-        ClientLanguage.German => new[] { "Aufstellen", "Platzieren", "Einrichten" },
+        ClientLanguage.German => new[] { "Platzieren", "Aufstellen", "Einrichten" },
         ClientLanguage.French => new[] { "Placer", "Installer", "Disposer" },
         _ => new[] { "Place" },
     };
 
     /// <summary>
-    /// The words of the "Store" entry in a bag item's menu (sends it to the storeroom), by client
-    /// language. English "Store" is confirmed (0.3.0: "0:Place | 1:Store | 2:Dye | …"); the others are
-    /// the game's usual words for it and unconfirmed.
+    /// The "Store" entry's words when the game's own can't be read. English "Store" is confirmed
+    /// (0.3.0: "0:Place | 1:Store | 2:Dye | …"); the others are the game's (Addon row 6840, 2026.10).
     /// </summary>
-    public static IReadOnlyList<string> StoreLabels(ClientLanguage language) => language switch
+    public static IReadOnlyList<string> BuiltInStoreLabels(ClientLanguage language) => language switch
     {
-        ClientLanguage.Japanese => new[] { "収納する", "倉庫に収納する", "収納" },
-        ClientLanguage.German => new[] { "Einlagern", "Lagern" },
-        ClientLanguage.French => new[] { "Entreposer", "Ranger" },
+        ClientLanguage.Japanese => new[] { "倉庫に入れる" },
+        ClientLanguage.German => new[] { "Ins Lagerhaus legen" },
+        ClientLanguage.French => new[] { "Ranger dans l'entrepôt" },
         _ => new[] { "Store" },
     };
 
-    /// <summary>The words of the "Paint" entry in a Furnishing Color list row's menu. English confirmed (Recording 2).</summary>
-    public static IReadOnlyList<string> PaintLabels(ClientLanguage language) => language switch
+    /// <summary>The "Paint" entry's words when the game's own can't be read. English confirmed (Recording 2); the others the game's (Addon row 6272).</summary>
+    public static IReadOnlyList<string> BuiltInPaintLabels(ClientLanguage language) => language switch
     {
         ClientLanguage.Japanese => new[] { "染色する", "染色" },
         ClientLanguage.German => new[] { "Färben" },

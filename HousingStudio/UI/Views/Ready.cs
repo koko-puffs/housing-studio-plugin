@@ -99,6 +99,7 @@ public sealed partial class MainWindow
             AlertNote(warning, Palette.Danger, textColor: Palette.Text);
             Kit.Gap(10);
         }
+        DrawReadyCare(entries);
 
         Kit.EyebrowRow("What Start does");
         Kit.Gap(10);
@@ -117,6 +118,7 @@ public sealed partial class MainWindow
             Kit.Gap(18);
             DrawFixtures(layout);
         }
+        DrawDrift();
 
         Frame.BeginBottom("ready-bottom");
         var stay = side == Side.Garden ? "Stay on your plot while it runs."

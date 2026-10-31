@@ -28,6 +28,13 @@ public sealed partial class MainWindow
             config.SetFixturesForYou = !config.SetFixturesForYou;
             config.Save();
         }
+        if (SwitchRow(i++, "##putback-changes", "Put back what changed since a run",
+                "After Check for changes (Start or Ready): moves the pieces moved since your last run back, and places the ones taken away. Pieces added since stay.",
+                config.PutBackChanges))
+        {
+            config.PutBackChanges = !config.PutBackChanges;
+            config.Save();
+        }
         _ = i;
     }
 }

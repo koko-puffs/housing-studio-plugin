@@ -101,6 +101,59 @@ its exact spot, then dyes everything to match.
 - **Preview first**: walks every piece, marking each spot and logging what it would do, touching nothing.
 - **Activity log** of every step, with the windows and values used, copyable.
 
+### Looking after a home
+
+- **How full it is**: Start shows how many pieces are placed where you are against what the home
+  holds ("312 of 450 pieces placed inside"). The numbers are the site's (`Core/ItemLimits.cs`, from
+  `ITEM_LIMITS` and `OUTDOOR_LIMIT`): inside an apartment 150, a cottage 300, a house 450, a mansion
+  600; a garden 40, 60 or 80. Ready says when a design won't fit: the design alone ("This design has
+  480 pieces inside; a house (medium) holds 450."), or with the pieces already there that aren't in
+  it (they stay, and count), and what Start does then: it places pieces until the home is full, the
+  game refuses the rest, and after a few refused in a row the run stops. Near me and the floors
+  leave pieces out, and the count follows them.
+- **Pieces the game may refuse** (`Core/Clashes.cs`): what can be told without the game's own check
+  and without the pieces' sizes (the plugin has none): copies of one item at the same spot (within
+  0.02 yalms), spots below the home's lowest floor or above its top floor's ceiling (the basement's
+  floor at -7, an apartment's at 0; the ceilings at 6.5 for a cottage or an apartment, 13.5 with an
+  upper floor, Shirogane's 0.3 lower; from the site's `interiors.json`, read from the game's models;
+  0.05 of slack; between two floors isn't told, as the stairs run there), spots outside the
+  house's walls (the box its model fills, by size), and an indoor furnishing in the garden or an
+  outdoor one inside (the game's HousingFurniture and HousingYardObject sheets). Ready says so in a
+  line (in danger with Place anywhere off; a quiet note with it on, as the game takes them then;
+  always for the other side's furnishings), and Pieces lists each under **Pieces the game may
+  refuse**, with Show where.
+- **Carry on after a crash or a disconnect** (`Core/RunProgress.cs`, `Session/Care.cs`): while a run
+  goes, its progress is kept in `resume.json` in the plugin's folder (the design file, the home, the
+  design's pieces it was given, how many are through and the phase), written beside it and moved
+  over it at most twice a second. When it finishes, or you stop it, the file goes. Otherwise (the
+  game closed, you were disconnected or changed zones, or the run stopped for safety), the next time
+  that design is loaded in that home Ready offers **Carry on from piece N of M** or **Forget it**.
+  Carrying on starts a run on those pieces as they're matched now, so the ones done are in place and
+  nothing is done twice; its numbers go on from the run cut off. A file that's cut short or edited
+  reads as none (and is dropped). A restore's pieces to put away aren't carried on.
+- **Check for changes** (`Core/Drift.cs`): after every run (not a preview), what's placed is kept as
+  a snapshot of the home (`snapshots/<home>.build`, the same file a backup is; the home is told by
+  side, world, territory, house and plot). It's dropped when the next run starts and made again when
+  it ends in the home, so a run that ended away (a zone change) leaves none rather than a stale one.
+  On Start or Ready, in a home you may decorate with a snapshot, **Since your last run** has **Check
+  for changes**: what's placed now against the snapshot, paired as the matching pairs pieces (the
+  same item, the same dye, the nearest; within 0.05 yalms and 0.03 radians counts as unmoved): moved,
+  added, taken away, in another dye, with **Show where they were**. Nothing is touched by checking.
+- **Put them back where they were** (Settings → Experimental → Put back what changed since a run;
+  off by default): after asking, the snapshot (a copy of it) is loaded as the design and a run
+  started on it once it's matched: the moved pieces are moved back, the ones taken away placed again
+  from your storeroom or bags, and the ones dyed since dyed back (when Dye after placing is on). The
+  pieces added since stay where they are (it doesn't put anything away). Not yet tried in the game.
+- **Other client languages** (`Core/MenuWords.cs`, `Game/GameWords.cs`): the menu entries the run
+  chooses by their words ("Place" in a bag item's menu and a storeroom row's, "Store", Furnishing
+  Color's "Paint") are read from the game's own text, the Addon sheet in the client's language
+  (rows 1751 and 6229 Place, 6840 Store, 6272 Paint: Platzieren / Placer / 配置する, Ins Lagerhaus
+  legen / Ranger dans l'entrepôt / 倉庫に入れる, Färben / Teindre / 染色する). Each row's English
+  words are checked first; if a patch moved the rows, the built-in words are used (logged). The
+  "Place" words typed in Settings still override them. Everything else the run matches by words is
+  the game's own text already (item and dye names from the sheets in the client's language, the dye
+  window's "No Color" read from the window). Not yet tried on a German, French or Japanese client.
+
 ### What it doesn't do
 
 - **Walls, floors, lights, the house's outside**: listed ("set these yourself"); with Settings →
@@ -380,7 +433,8 @@ HousingStudio/
                (the retainer record, Allagan Tools' IPC), AutoRetainer (retainers' names over IPC).
   Session/     LayoutSession (the design matched to the game), PlacementRunner (the run: each
                piece's steps; PlacementRunner.ClearOut, clearing out and swapping), FixtureRunner
-               (Set them for me), Backups, ActivityLog, Shopping (the shopping plan, kept up to date).
+               (Set them for me), Care (snapshots, the run's progress, putting back), Backups,
+               ActivityLog, Shopping (the shopping plan, kept up to date).
   UI/          the window: Kit/ (the design system's tokens, fonts, icons and controls drawn with
                ImGui's draw lists), Model/ (game-free, unit-tested: words, the Pieces list, pace,
                fixture ticks, SVG icon paths), Views/ (Start, Ready, Running, Done, Pieces,

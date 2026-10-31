@@ -92,6 +92,9 @@ public sealed class Configuration : IPluginConfiguration
     /// </summary>
     public bool Experimental { get; set; }
 
+    /// <summary>Experimental: "Put them back where they were" after Check for changes (a run on the snapshot kept after the last run).</summary>
+    public bool PutBackChanges { get; set; }
+
     /// <summary>
     /// Experimental: Ready's "Set them for me" sets the design's fixtures through the game's fixtures
     /// windows (Session/FixtureRunner). Only while <see cref="Experimental"/> is on too.

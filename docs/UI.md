@@ -105,6 +105,16 @@ Paths are under `HousingStudio/UI/`.
 | Something not working? | `DrawTrouble`: step by step, move the preview before Place (old method), the recorder, the "Place" words, windows and clicks used |
 | "Housing Studio 0.3.0" + What's new | the bottom block of `DrawSettings` |
 
+## Looking after a home (`Views/Care.cs`, no mockup)
+
+| Part | Code |
+| --- | --- |
+| Start: "312 of 450 pieces placed inside" | `DrawHomeCare`, the count from `Session/Care.Count` (read every 2 s while Start shows), words from `Model/CareWords.HowFull` |
+| Start and Ready: "Since your last run", Check for changes, the changes, Show where they were, Put them back where they were | `DrawDrift` → `DrawDriftResult` → `AskPutBack` (`MainWindow.Ask`), from `Care.CheckForChanges` / `Care.PutBack` |
+| Ready: "A run of this design was cut off…", Carry on from piece N of M, Forget it | `DrawCarryOn` (brass-wash panel), from `Care.Offer` |
+| Ready: won't fit, pieces the game may refuse | `DrawReadyCare` → `AlertNote` (danger, or dim when Place anywhere takes them) |
+| Pieces: "Pieces the game may refuse" with Show where | `DrawPiecesClashes` → `Disclosure` + Done's `IssueRow` |
+
 ## Decisions and differences from the mockups
 
 - During a run, Pieces and Settings are hidden (not read-only): the run uses the settings it started

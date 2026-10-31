@@ -356,7 +356,7 @@ public sealed partial class MainWindow
 
         placeWords ??= config.PlaceMenuWords;
         var builtIn = string.Join(", ", UiTable.PlaceLabels(Services.ClientState.ClientLanguage));
-        SetRow(i++, "The \"Place\" entry in an item's menu", $"Built in for your client: {builtIn}. If your menu says something else, type it here (several, comma-separated).",
+        SetRow(i++, "The \"Place\" entry in an item's menu", $"{(Game.GameWords.PlaceFromGame(Services.ClientState.ClientLanguage) ? "The game's own, in your client's language" : "Built in for your client")}: {builtIn}. If your menu says something else, type it here (several, comma-separated).",
             width, S(40), p =>
             {
                 var text = placeWords;
