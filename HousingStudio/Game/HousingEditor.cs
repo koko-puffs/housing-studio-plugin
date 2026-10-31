@@ -115,6 +115,8 @@ public sealed unsafe class HousingEditor
     {
         var state = State;
         if (!Ready || state == 0 || layoutInstance == 0) return false;
+        // A rehearsal never sets a piece down (it would commit a placement or a move): refused and noted.
+        if (Rehearsals.Blocks("the editor's set-down")) return false;
         place(state, SetDownFlag);
         return true;
     }

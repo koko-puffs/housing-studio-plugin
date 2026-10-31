@@ -27,7 +27,7 @@ namespace HousingStudio.Session;
 /// on leaving the home, a zone change, combat, a logout or losing permission, and never presses
 /// anything to clean up (the fixtures window is left for you to apply or close).
 /// </summary>
-public sealed unsafe class FixtureRunner
+public sealed unsafe partial class FixtureRunner
 {
     private static readonly TimeSpan WindowWait = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan YouWait = TimeSpan.FromSeconds(90);
@@ -71,6 +71,7 @@ public sealed unsafe class FixtureRunner
         this.session = session;
         this.data = data;
         this.log = log;
+        Rehearsals.Register(rehearsing);
         queue.ActionGap = ClickGap;
         queue.Trace += (step, what) =>
         {
@@ -137,6 +138,9 @@ public sealed unsafe class FixtureRunner
 
     public void Start()
     {
+        // A rehearsal (Rehearse) is the same steps, closing the window instead of applying; any other start is real.
+        Rehearsal = rehearseNext;
+        rehearseNext = false;
         StopReason = null;
         Result = null;
         if (CanStart() is { } why)
@@ -150,8 +154,8 @@ public sealed unsafe class FixtureRunner
         toSet = tasks.Where(t => t.State == FixtureState.ToSet && t.Slot != null).ToList();
         designKey = FixtureTicks.DesignKey(session.FilePath, session.Title);
         startLayout = session.Layout;
-        // What's set already is ticked (the ticks are kept per design).
-        TickSet(tasks.Where(t => t.State == FixtureState.Set).Select(t => t.Fixture));
+        // What's set already is ticked (the ticks are kept per design); a rehearsal changes no ticks.
+        if (!Rehearsal) TickSet(tasks.Where(t => t.State == FixtureState.Set).Select(t => t.Fixture));
         if (toSet.Count == 0)
         {
             StopReason = tasks.Any(t => t.State == FixtureState.NotOwned) ? "Nothing to set from your bags: the fixtures left aren't in them." : "Nothing to set here: what's left is yours to set.";
@@ -169,9 +173,10 @@ public sealed unsafe class FixtureRunner
         // While any of it is a guess, every action waits for Continue.
         queue.StepByStep = !FixtureTable.Verified || config.StepByStep;
         queue.StepsPerTick = 4;
-        queue.Begin(Steps(), new[] { LeaveWindow() });
+        if (Rehearsal) RehearsalStarted(tasks);
+        queue.Begin(Steps(), new[] { Rehearsal ? CloseWindowUnapplied() : LeaveWindow() });
         State = RunState.Running;
-        log.Info($"Setting fixtures ({(side == Side.Interior ? "inside" : "outside")}): {string.Join(", ", toSet.Select(Describe))}. "
+        log.Info($"{(Rehearsal ? "Rehearsing setting" : "Setting")} fixtures ({(side == Side.Interior ? "inside" : "outside")}): {string.Join(", ", toSet.Select(Describe))}. "
                  + $"{(queue.StepByStep ? "Step by step: press Continue before each action. " : string.Empty)}"
                  + $"{Count(tasks, FixtureState.NotOwned)} not in your bags, {Count(tasks, FixtureState.ByHand)} yours to set, {Count(tasks, FixtureState.Set)} set already.");
 
@@ -185,7 +190,8 @@ public sealed unsafe class FixtureRunner
         State = RunState.Stopped;
         StopReason = reason;
         Result = Summary();
-        log.Warn($"Fixtures stopped: {reason}");
+        if (Rehearsal && !reason.StartsWith("Stopped by you", StringComparison.Ordinal)) Rehearsals.Report.Issue("Setting the fixtures", $"Stopped: {reason}");
+        log.Warn($"Fixtures {(Rehearsal ? "rehearsal " : string.Empty)}stopped: {reason}");
         if (config.ChatMessages) Services.Chat.PrintError($"Stopped setting fixtures: {reason}", "Housing Studio");
     }
 
@@ -276,7 +282,8 @@ public sealed unsafe class FixtureRunner
             ReadSlots(),
         };
         foreach (var task in toSet) steps.AddRange(PutInSlot(task));
-        steps.AddRange(Apply());
+        // A rehearsal closes the window instead of applying: nothing is set.
+        steps.AddRange(Rehearsal ? RehearseApply() : Apply());
         return steps;
     }
 
@@ -636,6 +643,7 @@ public sealed unsafe class FixtureRunner
 
     private string Summary()
     {
+        if (Rehearsal) return RehearsalSummary();
         var now = Current(side, session.Context);
         var set = toSet.Count(t => IsSet(t, now));
         return set == toSet.Count ? $"{set} of {toSet.Count} set." : $"{set} of {toSet.Count} set; the rest are still to set (the log says what each step saw).";

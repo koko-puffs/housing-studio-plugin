@@ -49,6 +49,12 @@ public sealed partial class MainWindow
 
     private void DrawDone()
     {
+        // After a rehearsal: what it would have done and what didn't work (no undo, no retry: nothing changed).
+        if (runner.Rehearsal)
+        {
+            DrawRehearsalResult(errands: false);
+            return;
+        }
         var preview = runner.DryRun;
         var stopped = runner.State == RunState.Stopped;
         var problems = runner.Problems;

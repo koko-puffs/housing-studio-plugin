@@ -79,6 +79,17 @@ public static class UiTable
     /// </summary>
     public static readonly UiCall LayoutStore = new(LayoutBar, "i:2", true, "0.3.3 recording");
 
+    /// <summary>
+    /// A rehearsal's let-go: the editor holds a placed piece (picked up in Rotate, moved to its spot and
+    /// then its old spot written back), and pressing Move changes the mode, which is expected to drop
+    /// what the editor holds without setting it down. Not seen in the game: the click itself is
+    /// recorded (it's <see cref="LayoutMove"/>), what it does to a held piece isn't, so a rehearsal holds
+    /// before it for Continue until you trust it. Its old spot is written back first, so even if the
+    /// game set it down instead, it would land where it was. [Rehearsal; to confirm: a recording of
+    /// picking a piece up in Rotate and pressing Move (or Esc) while holding it]
+    /// </summary>
+    public static readonly UiCall LetGo = new(LayoutBar, "i:0", true, "Rehearsal: a mode change drops what's held", Verified: false);
+
     /// <summary>Close the editor (back to the Housing menu). [Recording 1]</summary>
     public static readonly UiCall LayoutClose = new(LayoutBar, "i:-2", false, "Recording 1");
 
@@ -219,6 +230,6 @@ public static class UiTable
     {
         MenuFurnishings, MenuDye, MenuClose, LayoutMove, LayoutRotate, LayoutStore, LayoutClose, ListClose, DyeListClose, ListStoreroomTab, ListSelect,
         DyeListSelect, DyeListMenu,
-        MenuChoose, MenuCancel, YesNoYes, DyeShade, DyePick, DyeApply, DyeClose, DyeConfirmYes, DyeConfirmNo,
+        MenuChoose, MenuCancel, YesNoYes, DyeShade, DyePick, DyeApply, DyeClose, DyeConfirmYes, DyeConfirmNo, LetGo,
     };
 }

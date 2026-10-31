@@ -20,17 +20,20 @@ public sealed partial class MainWindow
     private void DrawRunning()
     {
         var preview = runner.DryRun;
+        var rehearsal = runner.Rehearsal;
         var waiting = runner.AwaitingContinue || runner.WaitingForYou;
 
         Frame.BeginHeader(24);
         var at = Kit.At;
-        var eyebrowH = Kit.Eyebrow(at, $"{(preview ? "Previewing" : "Placing")} {vm.RunTitle}", null, Kit.Width);
+        var eyebrowH = Kit.Eyebrow(at, rehearsal ? $"{RehearsalWords.Eyebrow} · {vm.RunTitle}" : $"{(preview ? "Previewing" : "Placing")} {vm.RunTitle}", null, Kit.Width);
         var left = Words.About(runner.TimeLeft);
         var (pill, tone) = waiting ? ("Waiting for you", Tone.Waiting)
             : runner.State == RunState.Paused ? ("Paused", Tone.Neutral)
             : preview ? ($"Previewing · nothing is moved · {left} left", Tone.Live)
             : ($"Running · {left} left", Tone.Live);
-        Kit.StatusPill(at + new Vector2(0, eyebrowH + S(8)), pill, tone, tone == Tone.Live, Kit.Width);
+        // A rehearsal's pill is a brass outline (it changes nothing), while it isn't waiting or paused.
+        if (rehearsal && tone == Tone.Live) RehearsalPill(at + new Vector2(0, eyebrowH + S(8)), RehearsalWords.Pill(left), Kit.Width);
+        else Kit.StatusPill(at + new Vector2(0, eyebrowH + S(8)), pill, tone, tone == Tone.Live, Kit.Width);
         Kit.Reserve(at, Kit.Width, eyebrowH + S(8) + S(28));
         Frame.EndHeader();
 
@@ -66,7 +69,9 @@ public sealed partial class MainWindow
         var stay = session.Context.Side == Side.Garden
             ? "Stay on your plot and leave the furnishing editor open. You can move the camera."
             : "Stay in the house and leave the furnishing editor open. You can move the camera.";
-        Txt.Note(preview ? "Nothing is moved: each spot is marked in your home in turn. You can move the camera." : stay, center: true);
+        Txt.Note(preview ? "Nothing is moved: each spot is marked in your home in turn. You can move the camera."
+            : rehearsal ? $"Nothing is committed: each piece is held at its spot and let go, each dye picked and closed. {stay}"
+            : stay, center: true);
         Frame.EndBottom();
         Frame.EndBody();
 
@@ -79,7 +84,7 @@ public sealed partial class MainWindow
         var at = Kit.At;
         var w = Kit.Width;
         var figure = vm.Figure.ToString();
-        var words = preview ? $"of {vm.RunPieces} pieces marked" : $"of {vm.RunPieces} pieces done";
+        var words = preview ? $"of {vm.RunPieces} pieces marked" : runner.Rehearsal ? RehearsalWords.Figure(vm.RunPieces) : $"of {vm.RunPieces} pieces done";
         var dl = Kit.Dl;
         // line-height 1 for the figure; the words share its baseline (align-items: baseline).
         var bigBox = S(56);
@@ -206,6 +211,21 @@ public sealed partial class MainWindow
             Txt.Para(new[] { new Run(runner.StepLabel ?? string.Empty, Face.Mono, 12, Palette.Dim) }, 12 * 1.6f);
             Kit.Gap(4);
             Txt.Para(new[] { Run.Note("Nothing is clicked until you continue. "), Run.Note("/hstudio continue", Palette.Dim), Run.Note(" works too.") });
+            if (runner.HoldingALetGo)
+            {
+                // The rehearsal's let-go isn't seen working yet: it waits here until you trust it.
+                Kit.Gap(6);
+                Txt.Note("This click hasn't been seen working yet: watch that the editor lets go of the piece without setting it down (its old spot is written back first, so it stays where it was either way). Send the log if it doesn't.");
+                Kit.Gap(8);
+                var trustAt = Kit.At;
+                if (Kit.Button("##trust-letgo", trustAt, "Trust it from now on", Btn.Quiet, BtnSize.Sm, Icon.Check, 0, false,
+                        "Lets the rehearsal let go of pieces without waiting for Continue each time."))
+                {
+                    config.RehearsalTrustLetGo = true;
+                    config.Save();
+                }
+                Kit.Reserve(trustAt, Kit.Width, Kit.ButtonHeight(BtnSize.Sm));
+            }
         }
         else
         {
