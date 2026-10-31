@@ -56,6 +56,17 @@ public class ReadyWordsTests
     }
 
     [Fact]
+    public void TheEstimateSaysWhenGetFirstCantGo()
+    {
+        Assert.Equal("Not getting first: Nothing the errands can get. About 25 minutes at a quick pace",
+            ReadyWords.Hint("about 25 minutes", "quick", false, 0, "Nothing the errands can get."));
+        Assert.Equal("Not getting first: vnavmesh isn't installed. About 25 minutes at a quick pace",
+            ReadyWords.Hint("about 25 minutes", "quick", false, 0, "vnavmesh isn't installed"));
+        // Getting first after all: the trips, as before.
+        Assert.Equal("2 trips first, then about 25 minutes at a quick pace", ReadyWords.Hint("about 25 minutes", "quick", true, 2, "ignored"));
+    }
+
+    [Fact]
     public void StageAndChipWords()
     {
         Assert.Equal("443 to do", ReadyWords.PlaceBig(443, 87));

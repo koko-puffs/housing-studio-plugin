@@ -24,40 +24,23 @@ public sealed partial class MainWindow
     private sealed record Issue(Icon Icon, string Name, string Reason, string Action, Action OnAction, string? Tip = null, Icon? ActionIcon = null,
         bool NeedsHome = false);
 
-    /// <summary>When the run Done is about started, if it was the errands' placing (so Done says what they got).</summary>
-    private DateTime errandsRunAt;
-
-    /// <summary>Every frame, after the view model has seen a run start: notes a run the errands started.</summary>
-    private void NoteErrandsRun()
-    {
-        if (Plugin.Errands.Placing) errandsRunAt = vm.RunStartedAt;
-    }
-
-    /// <summary>What the errands did before this run, when it was theirs: got, trips, gil.</summary>
-    private (int Got, int Trips, long Gil)? DoneErrands()
-    {
-        var e = Plugin.Errands;
-        return errandsRunAt != default && errandsRunAt == vm.RunStartedAt && e.Trip > 0 ? (e.GotCount, e.Trip, e.Spent) : null;
-    }
-
-    private readonly record struct DoneLineKey(bool Preview, bool Stopped, bool ByYou, string? Why, int Figure, int Pieces, int Work, bool Dyes, (int, int, long)? Errands);
+    private readonly record struct DoneLineKey(bool Preview, bool Stopped, bool ByYou, string? Why, int Figure, int Pieces, int Work, bool Dyes);
 
     private (DoneLineKey Key, string Line) doneLine = (default, string.Empty);
 
     /// <summary>Done's one line under the title, made again only when what it says changes.</summary>
     private string DoneLine(bool preview, bool stopped)
     {
-        var errands = preview ? null : DoneErrands();
         var key = new DoneLineKey(preview, stopped, vm.StoppedByYou, runner.StopReason, vm.Figure, vm.RunPieces,
-            preview ? runner.Count(RunPhase.Move) - runner.ClearOutCount + runner.Count(RunPhase.Place) : 0, config.DyeAfterPlacing, errands);
+            preview ? runner.Count(RunPhase.Move) - runner.ClearOutCount + runner.Count(RunPhase.Place) : 0, config.DyeAfterPlacing);
         if (doneLine.Line.Length > 0 && doneLine.Key == key) return doneLine.Line;
         string line;
         if (preview)
             line = $"Every spot was marked and nothing was moved. Start works on {Words.Count(key.Work, "piece")}{(config.DyeAfterPlacing ? ", then the dyes" : string.Empty)}.";
         else if (stopped)
-            line = (vm.StoppedByYou ? "You stopped it" : runner.StopReason ?? "It stopped") + (errands is { } e ? $" · {DoneWords.Errands(e.Got, e.Trips, e.Gil)}" : string.Empty);
+            line = vm.StoppedByYou ? "You stopped it" : runner.StopReason ?? "It stopped";
         else
-            line = DoneWords.Line(vm.Figure, vm.RunPieces, errands);
+            line = DoneWords.Line(vm.Figure, vm.RunPieces);
         doneLine = (key, line);
         return line;
     }
@@ -298,8 +281,6 @@ public sealed partial class MainWindow
             AskSetFixtures(toSet);
     }
 
-    private (ReadyMode Mode, int Clear, string Label) previewGo = (ReadyMode.Keep, 0, string.Empty);
-
     private void DrawDoneFooter(bool preview, bool stopped, IReadOnlyList<RunProblem> problems)
     {
         Frame.BeginFooter("done-foot", 18, 22);
@@ -311,25 +292,22 @@ public sealed partial class MainWindow
         var retry = problems.Count;
         if (preview)
         {
-            // As Ready's choice has it: Keep, Clear out (asks first) or Swap (asks first, keeps what's here).
-            var mode = ModeNow;
-            var clear = ChosenClearOut();
-            var g = previewGo;
-            if (g.Label.Length == 0 || g.Mode != mode || g.Clear != (clear?.Count ?? 0))
-                g = previewGo = (mode, clear?.Count ?? 0, ReadyWords.Go(mode, 0, clear?.Count ?? 0, false));
-            var blocked = runner.CanStart(false);
-            if (Kit.Button("##start-real", at, g.Label, Btn.Primary, BtnSize.Lg, Icon.Play, primaryW, blocked != null, blocked))
-            {
-                if (mode == ReadyMode.Swap && clear != null) AskSwap(KeepAsName(), clear.Count);
-                else StartFromReady(Filtered().ToList());
-            }
+            // Ready's brass button, as it stands: Get first (the errands' estimate), Keep, Clear out (asks
+            // first) or Swap (asks first, keeps what's here), with " · fixtures" when they follow.
+            var g = ReadyGo();
+            var blocked = g.Getting ? null : runner.CanStart(false);
+            var tip = g.Getting ? "Opens what the errands would get, the trips and the gil, before anything is bought."
+                : g.NotGetting;
+            if (Kit.Button("##start-real", at, g.Label, Btn.Primary, BtnSize.Lg, Icon.Play, primaryW, blocked != null, blocked ?? tip))
+                Go(g, Filtered().ToList());
         }
         else if (stopped)
         {
             var blocked = runner.CanStart(false);
             if (Kit.Button("##carry-on", at, "Carry on", Btn.Primary, BtnSize.Lg, Icon.Play, primaryW, blocked != null, blocked ?? "Starts again with what's still to do."))
             {
-                StartRun(false, onStarted: vm.Dismiss);
+                // It clears out again only when the run stopped was clearing out (what you confirmed then).
+                StartRun(false, null, runner.ClearOutCount > 0 ? ChosenClearOut() : null, vm.Dismiss);
             }
         }
         else if (retry > 0)

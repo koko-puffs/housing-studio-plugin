@@ -399,6 +399,10 @@ public static partial class Kit
     // ---------------------------------------------------------------------------------------------
     // The banner: one line in brass, with up to two small buttons on the right.
 
+    private static readonly Run[] BannerOne = new Run[1];
+    private static readonly Run[] BannerTwo = new Run[2];
+    private static (string? Note, string Spaced) bannerNote = (null, string.Empty);
+
     /// <summary>
     /// A one-line banner (brass edge, brass wash, radius 14, 10px 10px 10px 14px inside): an icon in
     /// brass, the words in ivory and a <paramref name="note"/> after them in dim, then a brass button
@@ -422,9 +426,20 @@ public static partial class Kit
         var textW = right - (buttonsW > 0 ? buttonsW + S(10) : 0) - textX;
         var stacked = buttonsW > 0 && textW < S(140);
         if (stacked) textW = right - textX;
-        var runs = note != null
-            ? new[] { new Run(text, Face.SansMedium, 13, Palette.Ivory), new Run(" " + note, Face.Sans, 13, Palette.Dim) }
-            : new[] { new Run(text, Face.SansMedium, 13, Palette.Ivory) };
+        // The runs in two kept arrays, the note's leading space made once per note: not every frame.
+        if (!ReferenceEquals(bannerNote.Note, note)) bannerNote = (note, note != null ? " " + note : string.Empty);
+        Run[] runs;
+        if (note != null)
+        {
+            BannerTwo[0] = new Run(text, Face.SansMedium, 13, Palette.Ivory);
+            BannerTwo[1] = new Run(bannerNote.Spaced, Face.Sans, 13, Palette.Dim);
+            runs = BannerTwo;
+        }
+        else
+        {
+            BannerOne[0] = new Run(text, Face.SansMedium, 13, Palette.Ivory);
+            runs = BannerOne;
+        }
         var th = Txt.Flow(Vector2.Zero, textW, runs, 19.5f, out _, draw: false);
         var contentH = stacked ? th + S(10) + bh : MathF.Max(th, buttonsW > 0 ? bh : 0);
         var h = padY * 2 + contentH;

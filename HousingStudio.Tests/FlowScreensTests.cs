@@ -38,11 +38,9 @@ public class FlowScreensTests
     [Fact]
     public void DoneSaysWhatHappenedInOneLine()
     {
-        Assert.Equal("445 of 447 pieces", DoneWords.Line(445, 447, null));
-        Assert.Equal("All 447 pieces", DoneWords.Line(447, 447, null));
-        Assert.Equal("1 of 1 piece", DoneWords.Line(1, 1, null));
-        Assert.Equal("445 of 447 pieces · 12 got on 2 trips for 58,920 gil", DoneWords.Line(445, 447, (12, 2, 58_920)));
-        Assert.Equal("3 got on 1 trip", DoneWords.Errands(3, 1, 0));
+        Assert.Equal("445 of 447 pieces", DoneWords.Line(445, 447));
+        Assert.Equal("All 447 pieces", DoneWords.Line(447, 447));
+        Assert.Equal("1 of 1 piece", DoneWords.Line(1, 1));
     }
 
     [Fact]

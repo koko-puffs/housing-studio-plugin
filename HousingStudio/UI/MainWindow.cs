@@ -112,8 +112,6 @@ public sealed partial class MainWindow : Window
     private void DrawBody()
     {
         vm.Observe();
-        NoteErrandsRun();
-        FixturesAfterPlacing();
         using (fonts.Push(Face.Sans, 14))
         {
             // (Setting the fixtures: its Continue and Stop are in Ready's Finish stage and on Done.)
@@ -204,13 +202,15 @@ public sealed partial class MainWindow : Window
     /// <summary>Do the floor switches or "Near me" leave pieces out?</summary>
     private bool Narrowed => config.NearMe || !config.ShowBasement || !config.ShowGround || !config.ShowUpper;
 
+    /// <param name="clearOut">
+    /// The pieces put away first (Ready's Clear out or Swap), or null. Always given by the caller: only
+    /// a start the player confirmed for clearing out (Ready's button, its Preview, Done's) passes them.
+    /// </param>
     /// <param name="onStarted">Runs once the run has started (the Done view goes then, not when it can't start).</param>
     /// <param name="keepAs">A swap: the name its backup is kept under.</param>
-    private void StartRun(bool dryRun, List<PlanEntry>? entries = null, Action? onStarted = null, string? keepAs = null)
+    private void StartRun(bool dryRun, List<PlanEntry>? entries, IReadOnlyList<PlacedPiece>? clearOut, Action? onStarted = null, string? keepAs = null)
     {
         entries ??= Filtered().ToList();
-        // Clear out, when it's on for this design (Ready): the pieces not in it go to the storeroom first.
-        var clearOut = ChosenClearOut();
         vm.Starting(entries);
         OnFramework(() =>
         {

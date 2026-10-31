@@ -219,8 +219,6 @@ public sealed partial class MainWindow
         return getWords = (shop, things, $"{things} missing", shop.TotalGil > 0 ? $"about {ShoppingList.Gil(shop.TotalGil)}" : null, sources.ToArray());
     }
 
-    /// <summary>"Get them for me first" is on and there's something to get: the brass button opens the errands.</summary>
-    private bool GettingFirst(ShoppingPlan shop) => config.GetFirst && Errands.Enabled && session.Plan != null && !shop.IsEmpty;
 
     /// <summary>Get: what's missing (pieces and dyes) with the gil, where it comes from, Get them for me first, and See the list.</summary>
     private void DrawGetStage(Plan? plan, ShoppingPlan shop, StageState state)
@@ -339,7 +337,17 @@ public sealed partial class MainWindow
 
     private string DesignKey => FixtureTicks.DesignKey(session.FilePath, session.Title);
 
-    private int FixturesDone(Layout layout) => FixtureTicks.CountDone(config.FixturesDone, DesignKey, Fixtures(layout).Select(FixtureKey));
+    private (Layout? Layout, DateTime Until, int Done) fixturesDone = (null, DateTime.MinValue, 0);
+
+    /// <summary>How many of the design's fixtures are ticked (counted again once a second, or when you tick one: the fixtures run ticks them too).</summary>
+    private int FixturesDone(Layout layout)
+    {
+        var now = DateTime.UtcNow;
+        if (ReferenceEquals(fixturesDone.Layout, layout) && now < fixturesDone.Until) return fixturesDone.Done;
+        var done = FixtureTicks.CountDone(config.FixturesDone, DesignKey, Fixtures(layout).Select(FixtureKey));
+        fixturesDone = (layout, now + TimeSpan.FromSeconds(1), done);
+        return done;
+    }
 
     /// <summary>"Walls, floors and lights on 3 floors, plus the window and door".</summary>
     private static string FixtureSummary(Layout layout)
@@ -462,6 +470,7 @@ public sealed partial class MainWindow
             FixtureTicks.Set(config.FixturesDone, design, key, !on);
             config.Save();
             on = !on;
+            fixturesDone.Until = DateTime.MinValue;
         }
         if (hovered) Kit.RowFill(at, at + new Vector2(w, h), Palette.RowHover, false, false);
         Kit.TickBox(new Vector2(at.X + S(20), at.Y + (h - S(18)) / 2), on, hovered);
@@ -521,8 +530,44 @@ public sealed partial class MainWindow
     // The footer: one brass button that says what it does, Preview, and how long.
 
     private (ReadyMode Mode, int Things, int Clear, bool Getting, bool Fixtures, string Label) goLabel = (ReadyMode.Keep, -1, 0, false, false, string.Empty);
-    private (TimeSpan Time, Pace Pace, bool Getting, int Trips, string Hint) goHint = (TimeSpan.Zero, Pace.Quick, false, -1, string.Empty);
+    private (TimeSpan Time, Pace Pace, bool Getting, int Trips, string? NotGetting, string Hint) goHint = (TimeSpan.Zero, Pace.Quick, false, -1, null, string.Empty);
     private (Side Side, bool Apartment, bool Backup, string Tip) goTip = (Side.Interior, false, false, string.Empty);
+
+    /// <summary>What the brass button does now (Ready's, and Done's after a preview), with its words.</summary>
+    /// <param name="Getting">It opens the errands' estimate (Get first is on and they can get something and go now).</param>
+    /// <param name="NotGetting">Get first is on but the errands can't go (why); the button places what you have.</param>
+    private readonly record struct GoPlan(bool Getting, string? NotGetting, ReadyMode Mode, IReadOnlyList<PlacedPiece>? Clear, bool FixturesAfter, string Label);
+
+    /// <summary>
+    /// The brass button as it stands: with "Get them for me first" on, it opens the errands only when
+    /// their estimate gets something and they can set out now (both cached as the errands' screen caches
+    /// them); else it places (Keep, Clear out or Swap), and says so.
+    /// </summary>
+    private GoPlan ReadyGo()
+    {
+        var shop = ShopPlan();
+        string? notGetting = null;
+        if (config.GetFirst && Errands.Enabled && session.Plan != null && !shop.IsEmpty)
+            notGetting = Plugin.FixtureRun.Active ? "Wait until the fixtures are set." : ErrandsBlocked(ErrandEstimate().Plan);
+        var getting = config.GetFirst && Errands.Enabled && session.Plan != null && !shop.IsEmpty && notGetting == null;
+        var mode = ModeNow;
+        var clear = ChosenClearOut();
+        var things = getting ? GetWords(shop).Things : 0;
+        var fixturesAfter = config.FixturesAfterPlacing && Plugin.FixtureRun.Enabled && session.Layout is { } layout
+                            && FixtureCount(layout) > 0 && FixturesDone(layout) < FixtureCount(layout);
+        var g = goLabel;
+        if (g.Mode != mode || g.Things != things || g.Clear != (clear?.Count ?? 0) || g.Getting != getting || g.Fixtures != fixturesAfter)
+            g = goLabel = (mode, things, clear?.Count ?? 0, getting, fixturesAfter, ReadyWords.Go(mode, things, clear?.Count ?? 0, getting, fixturesAfter));
+        return new GoPlan(getting, notGetting, mode, clear, fixturesAfter, g.Label);
+    }
+
+    /// <summary>The brass button pressed: the errands' estimate, else Swap (asks first), else Start (asks before a clear out).</summary>
+    private void Go(GoPlan g, List<PlanEntry> entries)
+    {
+        if (g.Getting) errandsOpen = true;
+        else if (g.Mode == ReadyMode.Swap && g.Clear != null) AskSwap(KeepAsName(), g.Clear.Count);
+        else StartFromReady(entries);
+    }
 
     /// <summary>The brass button's tooltip: what Start does to the game while it runs (the old note under Ready).</summary>
     private string StartTip(Side side)
@@ -542,47 +587,37 @@ public sealed partial class MainWindow
         Frame.BeginFooter("ready-foot", 18, 22);
         var at = Kit.At;
         var w = Kit.Width;
-        var shop = ShopPlan();
-        var getting = GettingFirst(shop);
-        var mode = ModeNow;
-        var clear = ChosenClearOut();
-        var nothing = session.Plan != null && s.Moves.Count + s.Places + s.Dyes == 0 && clear == null;
+        var g = ReadyGo();
+        var nothing = session.Plan != null && s.Moves.Count + s.Places + s.Dyes == 0 && g.Clear == null;
         // Getting first opens the errands' estimate, which says itself why they can't go yet.
-        var blocked = getting ? null : runner.CanStart(false) ?? (nothing ? "Nothing to do: every piece you have is in place" : null);
+        var blocked = g.Getting ? null : runner.CanStart(false) ?? (nothing ? "Nothing to do: every piece you have is in place" : null);
         var previewBlocked = runner.CanStart(true) ?? (nothing ? "Nothing to preview" : null);
-
-        var things = getting ? GetWords(shop).Things : 0;
-        var fixturesAfter = config.FixturesAfterPlacing && Plugin.FixtureRun.Enabled && session.Layout is { } layout
-                            && FixtureCount(layout) > 0 && FixturesDone(layout) < FixtureCount(layout);
-        var g = goLabel;
-        if (g.Mode != mode || g.Things != things || g.Clear != (clear?.Count ?? 0) || g.Getting != getting || g.Fixtures != fixturesAfter)
-            g = goLabel = (mode, things, clear?.Count ?? 0, getting, fixturesAfter, ReadyWords.Go(mode, things, clear?.Count ?? 0, getting, fixturesAfter));
 
         const string preview = "Preview";
         var pw = Kit.ButtonWidth(preview, BtnSize.Lg, Icon.Eye);
         // Side by side when the button's words fit beside Preview; else Preview goes under it.
         var beside = Kit.ButtonWidth(g.Label, BtnSize.Lg, Icon.Play, Btn.Primary) <= w - pw - S(10);
         var goW = beside ? w - pw - S(10) : w;
-        var tip = getting ? "Opens what the errands would get, the trips and the gil, before anything is bought. They place it all after." : StartTip(ReadySide);
+        var tip = g.Getting ? "Opens what the errands would get, the trips and the gil, before anything is bought. They place it all after." : StartTip(ReadySide);
         if (Kit.Button("##start", at, g.Label, Btn.Primary, BtnSize.Lg, Icon.Play, goW, blocked != null, blocked ?? tip))
-        {
-            if (getting) errandsOpen = true;
-            else if (mode == ReadyMode.Swap && clear != null) AskSwap(KeepAsName(), clear.Count);
-            else StartFromReady(entries);
-        }
+            Go(g, entries);
         var previewAt = beside ? new Vector2(at.X + w - pw, at.Y) : new Vector2(at.X, at.Y + S(46) + S(10));
         if (Kit.Button("##preview", previewAt, preview, Btn.Glass, BtnSize.Lg, Icon.Eye, beside ? 0 : w, previewBlocked != null,
                 previewBlocked ?? "Walks through every piece, marking each spot in your home, and moves nothing."))
-            StartRun(true, entries);
+            StartRun(true, entries, g.Clear);
         Kit.Reserve(at, w, beside ? S(46) : S(46) * 2 + S(10));
         Kit.Gap(12);
 
         var time = Estimate(s, entries);
-        var trips = getting ? ErrandEstimate().Plan.Trips.Count : 0;
+        var trips = g.Getting ? ErrandEstimate().Plan.Trips.Count : 0;
         var hint = goHint;
-        if (hint.Time != time || hint.Pace != config.Pace || hint.Getting != getting || hint.Trips != trips)
-            hint = goHint = (time, config.Pace, getting, trips, ReadyWords.Hint(Words.About(time), PaceSetting.Word(config.Pace), getting, trips));
-        Txt.Para(new[] { Run.Note(blocked ?? hint.Hint) });
+        if (hint.Time != time || hint.Pace != config.Pace || hint.Getting != g.Getting || hint.Trips != trips || hint.NotGetting != g.NotGetting)
+            hint = goHint = (time, config.Pace, g.Getting, trips, g.NotGetting,
+                ReadyWords.Hint(Words.About(time), PaceSetting.Word(config.Pace), g.Getting, trips, g.NotGetting));
+        footNote[0] = Run.Note(blocked ?? hint.Hint);
+        Txt.Para(footNote);
         Frame.EndFooter();
     }
+
+    private readonly Run[] footNote = new Run[1];
 }

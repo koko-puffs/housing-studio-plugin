@@ -81,8 +81,15 @@ public static class ReadyWords
     /// </summary>
     /// <param name="about">"about 25 minutes" (<see cref="Words.About"/>).</param>
     /// <param name="trips">The errands' trips, 0 when not known.</param>
-    public static string Hint(string about, string pace, bool getFirst, int trips = 0)
+    /// <param name="notGetting">Get first is on but the errands can't go (why): the button places what you have, and says so first.</param>
+    public static string Hint(string about, string pace, bool getFirst, int trips = 0, string? notGetting = null)
     {
+        if (!getFirst && notGetting != null)
+        {
+            var why = notGetting.TrimEnd();
+            if (why.Length > 0 && why[^1] is not ('.' or '!' or '?')) why += ".";
+            return $"Not getting first: {why} {Words.Capital(about)} at a {pace} pace";
+        }
         if (!getFirst) return $"{Words.Capital(about)} at a {pace} pace";
         return trips > 0 ? $"{Words.Count(trips, "trip")} first, then {about} at a {pace} pace" : $"The errands first, then {about} at a {pace} pace";
     }

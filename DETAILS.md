@@ -156,15 +156,18 @@ its exact spot, then dyes everything to match.
   that design is loaded in that home Ready's banner says "A run was cut off at piece N of M." with
   **Carry on** or **Forget**.
   Carrying on starts a run on those pieces as they're matched now, so the ones done are in place and
-  nothing is done twice; its numbers go on from the run cut off. A file that's cut short or edited
+  nothing is done twice; its numbers go on from the run cut off. It only places: it never clears out
+  or swaps, whatever the Place stage has picked (that's the brass button's, which asks first, and a
+  swap keeps what's here); the banner's tooltip says so while Clear out or Swap is picked. A file that's cut short or edited
   reads as none (and is dropped). A restore's pieces to put away aren't carried on.
 - **Check for changes** (`Core/Drift.cs`): after every run (not a preview), what's placed is kept as
   a snapshot of the home (`snapshots/<home>.build`, the same file a backup is; the home is told by
   side, world, territory, house and plot). It's dropped when the next run starts and made again when
   it ends in the home, so a run that ended away (a zone change) leaves none rather than a stale one.
   On Start, in a home you may decorate with a snapshot, the **This house** card has a chip for
-  what changed since your last run there ("Check for changes" until checked, then "3 changed" or
-  "Nothing changed"); pressing it checks, and opens the changes under the card: what's placed now
+  what changed since your last run there ("Check for changes" until checked, "Checking…" while it
+  checks, then "3 changed" or "Nothing changed"); pressing it checks, and opens the changes under the
+  card (they close by themselves in another home, after a run, or when there's no check to show): what's placed now
   against the snapshot, paired as the matching pairs pieces (the
   same item, the same dye, the nearest; within 0.05 yalms and 0.03 radians counts as unmoved): moved,
   added, taken away, in another dye, with **Show where they were**. Nothing is touched by checking.
@@ -199,7 +202,8 @@ its exact spot, then dyes everything to match.
 
 **Clear out** (Ready's Place stage, one choice of **Keep what's here / Clear out N / Swap**; Keep
 until you choose another, and only for the design loaded; Clear out is greyed when there's nothing
-to clear). The pieces placed in your home that the design doesn't use
+to clear, and a choice that can't apply any more, nothing being left to clear, goes back to Keep for
+good rather than coming back by itself). The pieces placed in your home that the design doesn't use
 (`Plan.Extras`) are put away in the storeroom before the design is placed, with the editor's Store
 mode, the same steps Put them back uses (`PlacementRunner.StoreSteps`: the Store button, each piece
 picked with the editor's own pick, a yes/no answered, the piece watched leaving the furniture list).
@@ -231,8 +235,12 @@ from Recent, choose Clear out, and press the brass button.
 
 Settings → Beta → **Set the fixtures for me** (with Experimental features on) gives Done a card for
 the fixtures left with **Set them** (Beta; it asks first, as Ready's does), and Ready's Finish
-stage **Set them for me after placing** (Beta; when a placing run started from Ready, or the
-errands' placing, finishes and fixtures are left, setting them starts by itself, once) and, under
+stage **Set them for me after placing** (Beta; when the placing run started from Ready finishes, or
+the errands finish with every placing run of theirs finished and their summary put away, and fixtures
+are left, setting them starts by itself, once, for that design, opening the window. Never after a run
+stopped, failed or previewed, the errands stopped, a different run, or another design loaded. It's
+followed every framework tick (`UI/Model/AfterPlacing`, tested), whether the window is open or not)
+and, under
 **Tick off**, a **Set them for me** button: the design's fixtures for the side you're on (inside, each floor's
 wall, flooring and light; on your plot, the outside's parts) that are in your bags are set through
 the game's own fixtures window (`Session/FixtureRunner`, with `Core/FixtureJobs` for the plan,
@@ -302,7 +310,9 @@ One window, no tabs: what it shows follows what you're doing.
   off**: tick them as you set them, kept per design). The stage in hand has a brass number, done ones
   a tick. One brass button says what it does ("Get 12, then place", "Clear out 14, then place",
   "Swap and place", "Start placing", with " · fixtures" when they follow), beside **Preview**, with
-  about how long it takes at your pace (and the errands' trips first). Its tooltip says what it does
+  about how long it takes at your pace (and the errands' trips first). With Get them for me first on,
+  it opens the errands only when they can get something and set out now; otherwise it places what you
+  have, and the line under it starts "Not getting first:" and why. Its tooltip says what it does
   to the game (stay in the house, the editor, the backup). The header has **Pieces**, **Settings**
   and **×** (close this design).
 - **Running** (a run or a preview): the pieces done, the three phases, the piece in hand with its dye
@@ -310,14 +320,15 @@ One window, no tabs: what it shows follows what you're doing.
   **Resume** and **Stop**. In step-by-step mode a brass callout says what the next click does, with
   **Continue**; when the run needs you to do something, the same callout says what.
 - **Done** (until you press Done): "<design> is in" and one line of what happened ("445 of 447
-  pieces", and, after the errands, "12 got on 2 trips for 58,920 gil"), what was moved, placed and
+  pieces"; after the errands their own summary says what they got), what was moved, placed and
   dyed, what **needs you** (each with why, and **Show**, **Copy** or, for the pieces you don't have,
   **Shopping list**), one undo card, "Not what you wanted?" (**Swap back** after a swap, else **Put
   them back**, which restores the backup the run saved; both ask first), a card for the fixtures
   left (**Set them**, Beta, with the fixtures run on; else where to set them), and **Try the N
-  again** (or **Carry on** when you stopped it). After a preview, the brass button does what Ready's
-  choice says ("Start placing", "Clear out 14, then place", "Swap and place"), asking first as Ready
-  does.
+  again** (or **Carry on** when you stopped it; it clears out again only if the run stopped was
+  clearing out). After a preview, the brass button is Ready's ("Get 12, then place", "Start placing",
+  "Clear out 14, then place", "Swap and place", " · fixtures"), and does what it does there, asking
+  first as Ready does.
 - **Pieces** (from Ready): every piece by floor, the same item in the same dye stacked
   ("Hingan Bookshelf ×9"), filtered by **To do / In place / Missing / All**, **Find a piece** and
   **Near me**; each with its state and a **Show where** button that lights its spot in your home (and

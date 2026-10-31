@@ -299,6 +299,11 @@ public static partial class Kit
     /// With <paramref name="maxWidth"/>, the items' padding shrinks so the pill fits.
     /// </summary>
     public static int Segmented(string id, Vector2 pos, IReadOnlyList<string> items, int selected, int disabledMask = 0, float maxWidth = 0,
+        IReadOnlyList<string?>? tips = null) =>
+        SegmentedPress(id, pos, items, selected, disabledMask, maxWidth, tips) is var pressed and >= 0 ? pressed : selected;
+
+    /// <summary>As <see cref="Segmented"/>, but returns the item pressed (the one already picked too), or -1 when none was.</summary>
+    public static int SegmentedPress(string id, Vector2 pos, IReadOnlyList<string> items, int selected, int disabledMask = 0, float maxWidth = 0,
         IReadOnlyList<string?>? tips = null)
     {
         var dl = Dl;
@@ -307,7 +312,7 @@ public static partial class Kit
         var h = S(40);
         dl.AddRect(pos + new Vector2(0.5f), pos + new Vector2(total, h) - new Vector2(0.5f), Palette.U32(Palette.LineStrong), h / 2, ImDrawFlags.None, 1f);
         var x = pos.X + S(1) + S(3);
-        var result = selected;
+        var result = -1;
         for (var i = 0; i < items.Count; i++)
         {
             var w = Txt.Measure(items[i], Face.Sans, 13).X + pad * 2;

@@ -65,73 +65,75 @@ public sealed partial class MainWindow
         Kit.Gap(10);
     }
 
-    /// <summary>"4 fixtures to set from your bags · 2 not in your bags · 1 yours to set", for where you are.</summary>
+    private (List<FixtureTask>? Tasks, string Words) bagWords = (null, string.Empty);
+
+    /// <summary>"4 fixtures to set from your bags · 2 not in your bags · 1 yours to set", for where you are (made once per read of the fixtures).</summary>
     private string FixtureBagWords()
     {
         if (session.Context.Side == null) return "Go to your home to see which the plugin can set";
         var tasks = FixturePlan();
+        if (ReferenceEquals(bagWords.Tasks, tasks)) return bagWords.Words;
         var toSet = tasks.Count(t => t.State == FixtureState.ToSet);
         var notOwned = tasks.Count(t => t.State == FixtureState.NotOwned);
         var byHand = tasks.Count(t => t.State == FixtureState.ByHand);
         var parts = new List<string> { toSet == 0 ? "None to set from your bags here" : $"{Words.Count(toSet, "fixture")} to set from your bags" };
         if (notOwned > 0) parts.Add($"{notOwned} not in your bags");
         if (byHand > 0) parts.Add($"{byHand} yours to set");
-        return string.Join(" · ", parts);
+        bagWords = (tasks, string.Join(" · ", parts));
+        return bagWords.Words;
     }
 
     // ---------------------------------------------------------------------------------------------
     // After placing: a placing run started from Ready (or the errands' placing) that finishes starts
     // setting the fixtures, when "Set them for me after placing" is on.
 
-    private enum AfterPlacing
-    {
-        Off,
-
-        /// <summary>Waiting for the placing run to start (the errands go first).</summary>
-        Armed,
-
-        /// <summary>The placing run is going.</summary>
-        Placing,
-
-        /// <summary>It finished: the fixtures start once nothing else runs.</summary>
-        Due,
-    }
-
-    private AfterPlacing afterPlacing;
+    private readonly AfterPlacing afterPlacing = new();
 
     /// <summary>
-    /// Call when a placing run is started on Ready's behalf (its brass button, Carry on, a swap; the
-    /// errands once they're sent out, as their placing comes after): when that run finishes, the
-    /// fixtures are set if "Set them for me after placing" is on. Once per run.
+    /// Call when a placing run has started on Ready's behalf (its brass button, a swap, Done's start
+    /// after a preview): when that very run finishes, the fixtures are set if "Set them for me after
+    /// placing" is on. Framework thread, from <see cref="StartRun"/>'s onStarted (the run is going).
     /// </summary>
-    private void ArmFixturesAfterPlacing() => afterPlacing = runner.Active ? AfterPlacing.Placing : AfterPlacing.Armed;
+    private void ArmFixturesAfterPlacing() => afterPlacing.ArmRun(runner.RunNumber, DesignId);
 
-    /// <summary>Every frame: follows the armed run, and starts setting the fixtures once it has finished.</summary>
+    /// <summary>Call once the errands are sent out: when they finish, and every placing run they started finished, the fixtures follow.</summary>
+    private void ArmFixturesAfterErrands() => afterPlacing.ArmErrands(DesignId);
+
+    private DateTime afterPlacingFailedAt;
+
+    /// <summary>
+    /// Every framework tick (Plugin's update), whether the window is open or not: follows the armed
+    /// run (<see cref="AfterPlacing"/>) and, when it's due, starts setting the fixtures for the design
+    /// it was armed for, opening the window (its Continue and Stop are there).
+    /// </summary>
+    internal void Tick()
+    {
+        try
+        {
+            FixturesAfterPlacing();
+        }
+        catch (Exception ex)
+        {
+            afterPlacing.Disarm();
+            if (DateTime.UtcNow - afterPlacingFailedAt > TimeSpan.FromSeconds(30)) Services.Log.Error(ex, "Housing Studio couldn't follow the run for the fixtures");
+            afterPlacingFailedAt = DateTime.UtcNow;
+        }
+    }
+
     private void FixturesAfterPlacing()
     {
-        switch (afterPlacing)
-        {
-            case AfterPlacing.Armed:
-                if (runner.Active) afterPlacing = AfterPlacing.Placing;
-                else if (!Errands.Active) afterPlacing = AfterPlacing.Off;
-                return;
-            case AfterPlacing.Placing:
-                if (runner.Active) return;
-                afterPlacing = runner.State == RunState.Finished && !runner.DryRun ? AfterPlacing.Due : AfterPlacing.Off;
-                return;
-            case AfterPlacing.Due:
-                if (runner.Active || Errands.Active) return;
-                afterPlacing = AfterPlacing.Off;
-                var run = Plugin.FixtureRun;
-                if (!config.FixturesAfterPlacing || !run.Enabled || run.Active || session.Layout is not { } layout) return;
-                if (FixturesDone(layout) >= FixtureCount(layout)) return;
-                OnFramework(() =>
-                {
-                    run.Start();
-                    Notify(run.Active ? "Setting the fixtures…" : run.StopReason ?? "Couldn't start setting the fixtures");
-                });
-                return;
-        }
+        if (!afterPlacing.Armed) return;
+        var e = Plugin.Errands;
+        var run = Plugin.FixtureRun;
+        var seen = new AfterPlacingSeen(runner.Active, runner.RunNumber, runner.State == RunState.Finished && !runner.DryRun, e.Active,
+            e.State == RunState.Finished, e.ResultWaiting, run.Active, DesignId);
+        if (!afterPlacing.Step(seen)) return;
+        if (!config.FixturesAfterPlacing || !run.Enabled || session.Layout is not { } layout) return;
+        var all = FixtureCount(layout);
+        if (all == 0 || FixtureTicks.CountDone(config.FixturesDone, DesignKey, Fixtures(layout).Select(FixtureKey)) >= all) return;
+        run.Start();
+        Notify(run.Active ? "Setting the fixtures…" : run.StopReason ?? "Couldn't start setting the fixtures");
+        if (run.Active) IsOpen = true;
     }
 
     private void DrawFixturesIdle(FixtureRunner run)

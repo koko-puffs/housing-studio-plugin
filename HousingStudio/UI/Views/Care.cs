@@ -252,7 +252,11 @@ public sealed partial class MainWindow
         return clashCache.List;
     }
 
-    private (RunProgress? Of, DateTime Day, string Text, string? When, string Tip) carryOnWords = (null, DateTime.MinValue, string.Empty, null, string.Empty);
+    private (RunProgress? Of, DateTime Day, string Text, string? When, string Tip, string TipKeeping) carryOnWords =
+        (null, DateTime.MinValue, string.Empty, null, string.Empty, string.Empty);
+
+    /// <summary>After the cut-off line, while Clear out or Swap is picked below: Carry on doesn't do it (the brass button does, after asking).</summary>
+    private const string CarryOnKeeps = " Carry on only places what's left: nothing is put away, whatever is picked below (the button at the bottom does that, after asking).";
 
     /// <summary>Ready's banner when a run of this design was cut off: Carry on (from where it stopped) or Forget.</summary>
     private void DrawCarryOnBanner()
@@ -262,11 +266,13 @@ public sealed partial class MainWindow
         if (!ReferenceEquals(carryOnWords.Of, progress) || carryOnWords.Day != DateTime.Today)
         {
             var when = progress.SavedUtc == DateTime.MinValue ? null : When.Relative(progress.SavedUtc.ToLocalTime(), DateTime.Now, Clock);
-            carryOnWords = (progress, DateTime.Today, CareWords.CutOffShort(progress), when != null ? $"({when})" : null, CareWords.CutOff(progress, when));
+            var tip = CareWords.CutOff(progress, when);
+            carryOnWords = (progress, DateTime.Today, CareWords.CutOffShort(progress), when != null ? $"({when})" : null, tip, tip + CarryOnKeeps);
         }
         var w = carryOnWords;
         var blocked = runner.CanStart(false);
-        var pressed = Kit.Banner("##carry-on", Icon.Refresh, w.Text, w.When, "Carry on", "Forget", blocked != null, blocked ?? w.Tip,
+        var pressed = Kit.Banner("##carry-on", Icon.Refresh, w.Text, w.When, "Carry on", "Forget", blocked != null,
+            blocked ?? (ModeNow == ReadyMode.Keep ? w.Tip : w.TipKeeping),
             "Forgets the run that was cut off. Start placing still does what's left.");
         if (pressed == 1) CarryOn(progress, plan);
         else if (pressed == 2) OnFramework(care!.Forget);
@@ -285,7 +291,8 @@ public sealed partial class MainWindow
         else
         {
             care!.CarryingOn(progress);
-            StartRun(false, again, ArmFixturesAfterPlacing);
+            // Never a clear out or a swap: those go from the brass button, which asks first (and a swap keeps what's here).
+            StartRun(false, again, null, ArmFixturesAfterPlacing);
         }
     }
 
@@ -295,6 +302,7 @@ public sealed partial class MainWindow
     private bool driftChecking;
     private (DateTime? Kept, DateTime Day, string Tip) changesTip = (null, DateTime.MinValue, string.Empty);
     private (DriftCheck? Check, List<string> Lines) driftLines = (null, new List<string>());
+    private readonly Run[] driftHead = new Run[1];
 
     /// <summary>The changes chip's tooltip: when the snapshot was kept (made again only when it or the day changes).</summary>
     private string ChangesTip(DateTime kept)
@@ -352,7 +360,8 @@ public sealed partial class MainWindow
             if (r.Added.Count > 0) made.Add($"Added since: {CareWords.Names(r.Added.Select(p => p.ItemId), data.ItemName)} (these stay)");
             driftLines = (check, made);
         }
-        Txt.Para(new[] { new Run(driftLines.Lines[0], Face.SansMedium, 13, r.Unchanged ? Palette.Success : Palette.Ivory) });
+        driftHead[0] = new Run(driftLines.Lines[0], Face.SansMedium, 13, r.Unchanged ? Palette.Success : Palette.Ivory);
+        Txt.Para(driftHead);
         for (var i = 1; i < driftLines.Lines.Count; i++)
         {
             Kit.Gap(2);

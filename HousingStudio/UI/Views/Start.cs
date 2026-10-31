@@ -133,6 +133,9 @@ public sealed partial class MainWindow
     /// <summary>The changes since your last run show under the card (its chip pressed).</summary>
     private bool changesOpen;
 
+    /// <summary>The home and the run count the changes were opened for: another home, or a run since, closes them.</summary>
+    private (string? Home, int Run) changesFor;
+
     private (Side Side, string? Size, int? Placed, int? Limit, string Line) houseLine = (Side.Interior, null, null, null, string.Empty);
 
     private (DriftCheck? Check, string Label) changedChip = (null, string.Empty);
@@ -158,11 +161,15 @@ public sealed partial class MainWindow
         var home = care?.CurrentHome;
         var kept = care != null && !runner.Active ? care.SnapshotAt(home) : null;
         var check = kept != null && care?.LastCheck is { } last && last.Home == home ? last : null;
-        if (kept == null) changesOpen = false;
+        // Open only for the home and the run it was opened for, and only while there's a check to show or
+        // one under way: else the chip says "Check for changes" again and pressing it checks.
+        if (changesOpen && (kept == null || changesFor.Home != home || changesFor.Run != runner.RunNumber || (check == null && !driftChecking)))
+            changesOpen = false;
         string? chip = null;
         if (kept != null)
         {
-            if (check == null) chip = "Check for changes";
+            if (driftChecking) chip = "Checking…";
+            else if (check == null) chip = "Check for changes";
             else
             {
                 if (!ReferenceEquals(changedChip.Check, check)) changedChip = (check, CareWords.Changed(check.Report));
@@ -203,6 +210,7 @@ public sealed partial class MainWindow
                 else
                 {
                     changesOpen = true;
+                    changesFor = (home, runner.RunNumber);
                     CheckForChanges();
                 }
             }

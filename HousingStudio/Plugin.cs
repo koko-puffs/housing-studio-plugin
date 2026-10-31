@@ -153,6 +153,8 @@ public sealed class Plugin : IDalamudPlugin
             runner.Tick(ctx);
             Errands.Tick(ctx);
             FixtureRun.Tick(ctx);
+            // "Set them for me after placing" follows its run here, whether the window is open or not.
+            window.Tick();
             care.Tick(ctx);
             recorder.Tick();
             Shop.Tick();

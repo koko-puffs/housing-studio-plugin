@@ -427,12 +427,12 @@ public sealed partial class MainWindow
             }
             Errands.Start(shown, session.Context, clear, keepAs);
             if (!Errands.Active && Errands.StopReason != null) Notify(Errands.StopReason);
-            // Their placing comes after: Ready's "Set them for me after placing" follows it.
+            // Their placing comes after: Ready's "Set them for me after placing" follows them.
             if (Errands.Active)
             {
                 errandLimitsOpen = false;
                 errandChipOpen = null;
-                ArmFixturesAfterPlacing();
+                ArmFixturesAfterErrands();
             }
         });
     }
@@ -662,6 +662,8 @@ public sealed partial class MainWindow
         return r;
     }
 
+    private readonly Run[] errandNote = new Run[1];
+
     /// <summary>The Got and Spent cards' words, made again only when the numbers change.</summary>
     private (int Got, int Of, long Spent, long Agreed, string GotV, string GotOf, string SpentV, string SpentOf) errandCards = (-1, 0, -1, 0, "", "", "", "");
 
@@ -763,7 +765,12 @@ public sealed partial class MainWindow
         var dl = Kit.Dl;
         var x = at.X + S(34) + S(12);
         var tw = at.X + w - x;
-        var noteRuns = r.Note != null ? new[] { new Run(r.Note, Face.Sans, 12, Palette.Dim) } : null;
+        Run[]? noteRuns = null;
+        if (r.Note != null)
+        {
+            errandNote[0] = new Run(r.Note, Face.Sans, 12, Palette.Dim);
+            noteRuns = errandNote;
+        }
         var noteH = noteRuns != null ? Txt.Flow(Vector2.Zero, tw, noteRuns, 18, out _, draw: false) : 0;
         var wordsH = S(20) + (noteRuns != null ? S(2) + noteH : 0);
         var h = MathF.Max(S(34), wordsH);
@@ -859,8 +866,10 @@ public sealed partial class MainWindow
     // ---------------------------------------------------------------------------------------------
     // The summary, as Done: the mark, one line of what happened, Got, Not got.
 
-    private (int Got, int Trip, ErrandPlan? Plan, long Spent, string Sentence, List<(uint ItemId, string Words)> Rows, List<LeftRow> Left) errandSummary =
-        (-1, 0, null, 0, string.Empty, new(), new());
+    private (int Got, int Trip, ErrandPlan? Plan, long Spent, string? Why, string Sentence, List<(uint ItemId, string Words)> Rows, List<LeftRow> Left) errandSummary =
+        (-1, 0, null, 0, null, string.Empty, new(), new());
+
+    private readonly Run[] summaryLine = new Run[1];
 
     private void DrawErrandsSummary()
     {
@@ -868,9 +877,14 @@ public sealed partial class MainWindow
         var stopped = e.State == RunState.Stopped;
         var byYou = e.StopReason?.StartsWith("Stopped by you", StringComparison.Ordinal) == true;
         var s = errandSummary;
-        if (s.Got != e.GotCount || s.Trip != e.Trip || !ReferenceEquals(s.Plan, e.Plan) || s.Spent != e.Spent)
-            errandSummary = s = (e.GotCount, e.Trip, e.Plan, e.Spent, ErrandWords.Summary(e.GotCount, e.Trip, e.Spent),
+        // The sentence says why it stopped, unless you stopped it.
+        var why = stopped && !byYou ? e.StopReason : null;
+        if (s.Got != e.GotCount || s.Trip != e.Trip || !ReferenceEquals(s.Plan, e.Plan) || s.Spent != e.Spent || s.Why != why)
+        {
+            var said = ErrandWords.Summary(e.GotCount, e.Trip, e.Spent);
+            errandSummary = s = (e.GotCount, e.Trip, e.Plan, e.Spent, why, why != null ? $"{said}. {why}" : said + ".",
                 ErrandWords.GotList(e.Got, data.AnyItemName), ErrandWords.LeftRows(e.Plan.Left, data.AnyItemName));
+        }
 
         Frame.BeginHeader(28);
         var at = Kit.At;
@@ -882,8 +896,8 @@ public sealed partial class MainWindow
         var y = at.Y + S(48) + S(10);
         y += stopped ? Title(new Vector2(at.X, y), "Errands", "stopped", w) : Title(new Vector2(at.X, y), "Errands", "done", w);
         y += S(10);
-        var sentence = stopped && !byYou && e.StopReason != null ? $"{s.Sentence}. {e.StopReason}" : s.Sentence + ".";
-        y += Txt.Flow(new Vector2(at.X, y), w, new[] { new Run(sentence, Face.Sans, 14, Palette.Ash) }, 21, out _);
+        summaryLine[0] = new Run(s.Sentence, Face.Sans, 14, Palette.Ash);
+        y += Txt.Flow(new Vector2(at.X, y), w, summaryLine, 21, out _);
         Kit.Reserve(at, w, y - at.Y);
         Frame.EndHeader();
 

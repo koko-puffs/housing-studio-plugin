@@ -33,8 +33,18 @@ public sealed partial class MainWindow
         set => readyMode = (value == ReadyMode.Keep ? null : DesignId, value);
     }
 
-    /// <summary>A swap keeps what's here under a name; a backup loaded as the design is already such a one.</summary>
-    private bool SwapAllowed => !(session.FilePath is { } path && ViewModel.IsBackup(path));
+    private (string? Path, bool Allowed) swapAllowed;
+
+    /// <summary>A swap keeps what's here under a name; a backup loaded as the design is already such a one (asked once per design file).</summary>
+    private bool SwapAllowed
+    {
+        get
+        {
+            if (session.FilePath is not { } path) return true;
+            if (swapAllowed.Path != path) swapAllowed = (path, !ViewModel.IsBackup(path));
+            return swapAllowed.Allowed;
+        }
+    }
 
     /// <summary>The choice as it stands: Clear out and Swap need pieces to clear, and Swap a design that isn't a backup; else Keep.</summary>
     private ReadyMode ModeNow
@@ -91,6 +101,9 @@ public sealed partial class MainWindow
         var canSwap = pieces > 0 && SwapAllowed;
         var keep = canSwap ? KeepAsName() : string.Empty;
         var mode = ModeNow;
+        // A choice that can't apply here (nothing to clear out, a swap of a backup) shows as Keep, and is
+        // Keep from now on: it doesn't come back by itself when pieces come in reach again.
+        if (Mode != mode) Mode = mode;
         var c = placeChoice;
         if (c.Items == null || c.Pieces != pieces || c.Extras != plan.Extras.Count || c.Swap != canSwap || c.Keep != keep || c.Mode != mode)
         {
@@ -110,12 +123,16 @@ public sealed partial class MainWindow
         var at = Kit.At;
         var w = Kit.Width;
         var mask = (pieces == 0 ? 1 << 1 : 0) | (canSwap ? 0 : 1 << 2);
-        var picked = Kit.Segmented("##ready-mode", at, c.Items!, (int)mode, mask, w, c.Tips);
-        if (picked != (int)mode) Mode = (ReadyMode)picked;
+        // Any press counts, the one already picked too (Keep what's here sets Keep).
+        var pressed = Kit.SegmentedPress("##ready-mode", at, c.Items!, (int)mode, mask, w, c.Tips);
+        if (pressed >= 0) Mode = (ReadyMode)pressed;
         Kit.Reserve(at, w, S(40));
         Kit.Gap(8);
-        Txt.Para(new[] { new Run(c.Note, Face.Sans, 13, Palette.Dim) });
+        modeNote[0] = new Run(c.Note, Face.Sans, 13, Palette.Dim);
+        Txt.Para(modeNote);
     }
+
+    private readonly Run[] modeNote = new Run[1];
 
     private (Plan? Plan, string Title, DateTime Until, string Name) keepAs = (null, string.Empty, DateTime.MinValue, string.Empty);
 
@@ -141,7 +158,7 @@ public sealed partial class MainWindow
             "Swap", "Not now", () =>
             {
                 Mode = ReadyMode.Swap;
-                StartRun(false, keepAs: keep, onStarted: ArmFixturesAfterPlacing);
+                StartRun(false, null, ChosenClearOut(), ArmFixturesAfterPlacing, keep);
             });
     }
 
@@ -151,13 +168,13 @@ public sealed partial class MainWindow
         var clear = ChosenClearOut();
         if (clear == null)
         {
-            StartRun(false, entries, ArmFixturesAfterPlacing);
+            StartRun(false, entries, null, ArmFixturesAfterPlacing);
             return;
         }
         Ask("Clear out first?",
             $"The {Words.Count(clear.Count, "piece")} in your home that {(clear.Count == 1 ? "isn't" : "aren't")} in this design {(clear.Count == 1 ? "goes" : "go")} to the storeroom first, then the design is placed."
             + (config.BackupBeforePlacing ? " A backup of what's placed is saved before." : " No backup is saved first (Settings)."),
-            "Start placing", "Not now", () => StartRun(false, entries, ArmFixturesAfterPlacing));
+            "Start placing", "Not now", () => StartRun(false, entries, ChosenClearOut(), ArmFixturesAfterPlacing));
     }
 
     // ---------------------------------------------------------------------------------------------
