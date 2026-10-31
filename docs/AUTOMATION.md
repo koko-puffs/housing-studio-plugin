@@ -339,7 +339,11 @@ first, gets `DyeSteps` as a stand-in `RunJob` (in `standIns`: its `Would` isn't 
 **Chambers for the errands**: `ErrandGame.HomeHere` marks a room in a house (`RoomNumber > 0`, not an
 apartment or the workshop) as `HomeRef.Chamber`, yours (`CompanyHouse`) when the company's estate has
 its ward and plot and you may decorate. `EnterSteps` then waits for the house's hall
-(`ErrandGame.InHouseOf`) and asks you to go up to the chambers.
+(`ErrandGame.InHouseOf`), and `ChamberSteps` goes up (0.7.4, from 0.7.2's chamber recording): the
+door found by `ErrandTable.ChamberDoorWords` in its name (`ErrandGame.NearestContaining`; a guess),
+walked to (vnavmesh), used; its SelectString's `ChamberMenuWords` ("Move to your private chambers");
+yes only to `ChamberYesWords` ("Retire to your own chambers?", through `Rehearsals.Allow()` as the
+front door's). Anything else hands over to you (logged), and the run waits for you to be in.
 
 **Clear out and the storeroom's room**: `InventoryReader.StoreroomRoom(side)` (the loaded pages' `Size`
 less the occupied slots), `ClearOutSplit.Split` at the start, `PutOffClearOut` before each first store

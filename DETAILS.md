@@ -8,7 +8,12 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.7.3. Placing works in the game; the newer features haven't all been tried in it yet.**
+> **Status: 0.7.4. Placing works in the game; the newer features haven't all been tried in it yet.**
+> 0.7.4: the errands go up to **private chambers** themselves, from a recording of doing it by hand:
+> into the company's hall, to the door to the chambers (found by "Chambers" in its name, a guess: its
+> name isn't in the recording, and the names near you are logged if it isn't found), its menu's "Move
+> to your private chambers", and yes to "Retire to your own chambers?". Anything not as expected hands
+> the rest to you, and the errands go on once you're in.
 > 0.7.3, from a rehearsal and recordings in a company chamber: **the storeroom button was the wrong
 > one.** The editor's bar is Move [i:0], Rotate [i:1], "Place selected object in your inventory"
 > [i:2] and "Place selected item into your storeroom" [i:3]; the plugin pressed [i:2], so Clear out
@@ -18,7 +23,7 @@ its exact spot, then dyes everything to match.
 > it comes to each dye, a piece placed here that takes a dye gets every dye step (Furnishing Color, the
 > piece picked, the dye window, the dye found and chosen) but Dye, and is checked to keep its own.
 > **Private chambers** in your company's house count as your home for the errands ("go home" is the
-> company's house; at its hall you walk up to your chambers, as that menu hasn't been recorded), and
+> company's house; at its hall you walked up to your chambers, until 0.7.4), and
 > Settings → Getting has **Home is**, for a home the game doesn't say is yours. A rehearsal that
 > leaves the getting out says why, in its report. **The ask** ("Clear out first?") draws its own dark
 > backdrop and a solid card: ImGui's dim took the game style's pale colour, over the whole screen and

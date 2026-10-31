@@ -130,6 +130,22 @@ public static class ErrandTable
     /// <summary>The door's question, answered yes only when it starts so. [Recording 2: "Enter the estate hall?"; going out, "Leave the estate hall?"]</summary>
     public static readonly string[] EnterWords = { "Enter" };
 
+    /// <summary>
+    /// In a company's hall, the door to the chambers and the workshop: an object whose name has this in
+    /// it. [Guess: the 0.7.2 recording shows its menu, not its name; the plugin logs the names near you
+    /// when it can't find it]
+    /// </summary>
+    public static readonly string[] ChamberDoorWords = { "Chambers" };
+
+    /// <summary>
+    /// That door's menu (a SelectString): "Move to the company workshop | Move to your private chambers |
+    /// Move to specified private chambers | Quit". [0.7.2's chamber recording]
+    /// </summary>
+    public static readonly string[] ChamberMenuWords = { "Move to your private chambers" };
+
+    /// <summary>Its question, answered yes only when it starts so. [0.7.2's chamber recording: "Retire to your own chambers?"]</summary>
+    public static readonly string[] ChamberYesWords = { "Retire to your own chambers" };
+
     // ---------- objects by name ----------
 
     /// <summary>EObjName rows: a summoning bell (2000401, as AutoRetainer looks for it) and the board's (a guess); their names in your client's language are read from these.</summary>

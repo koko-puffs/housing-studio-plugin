@@ -221,6 +221,24 @@ public static unsafe class ErrandGame
         return best;
     }
 
+    /// <summary>The nearest object (of those kinds) whose name has one of <paramref name="words"/> in it.</summary>
+    public static IGameObject? NearestContaining(IReadOnlyCollection<string> words, Vector3 from, float within, params ObjectKind[] kinds)
+    {
+        IGameObject? best = null;
+        var bestD = within;
+        foreach (var o in Services.Objects)
+        {
+            if (o == null || !o.IsTargetable || (kinds.Length > 0 && Array.IndexOf(kinds, o.ObjectKind) < 0)) continue;
+            var d = Vector3.Distance(o.Position, from);
+            if (d > bestD) continue;
+            var name = o.Name.TextValue;
+            if (!words.Any(w => name.Contains(w, StringComparison.OrdinalIgnoreCase))) continue;
+            best = o;
+            bestD = d;
+        }
+        return best;
+    }
+
     /// <summary>The NPC with that ENpcBase row, nearest you within reach.</summary>
     public static IGameObject? Npc(uint npcId, float within)
     {

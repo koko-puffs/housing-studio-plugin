@@ -1399,6 +1399,8 @@ public sealed partial class ErrandRunner : IDisposable
     private List<Step> EnterSteps()
     {
         if (Inside()) return ReadAgainSteps();
+        // In the hall of the house your chambers are in already: up to them.
+        if (home is { Chamber: true } && ErrandGame.InHouseOf(home)) return ChamberSteps().Concat(ReadAgainSteps()).ToList();
         var steps = new List<Step>();
         Vector3? door = null;
         if (homeKind != HomeKind.Apartment && ErrandGame.Me is { } me)
@@ -1443,12 +1445,129 @@ public sealed partial class ErrandRunner : IDisposable
                 ? WaitFor("Inside the house", () => Inside() || ErrandGame.InHouseOf(home), TimeSpan.FromSeconds(30), "Didn't get inside the house.")
                 : WaitFor("Inside your home", Inside, TimeSpan.FromSeconds(30), "Didn't get inside your home.")));
         }
-        // Private chambers: the door goes into the house's hall; up to the room is yours to walk (its
-        // menu, "Move to your private chambers", hasn't been recorded from the plugin).
-        if (home is { Chamber: true })
-            steps.Add(Arriving(You("Go up to your private chambers (the hall's door to them, then \"Move to your private chambers\")", Inside)));
+        // Private chambers: the door goes into the house's hall; then up to the room.
+        if (home is { Chamber: true }) steps.AddRange(ChamberSteps());
         steps.AddRange(ReadAgainSteps());
         return steps;
+    }
+
+    /// <summary>
+    /// From the company's hall up to your private chambers, as 0.7.2's recording did by hand: the door
+    /// to the chambers (found by name: <see cref="ErrandTable.ChamberDoorWords"/>), walked to and used;
+    /// its menu's "Move to your private chambers"; yes to "Retire to your own chambers?". Anything not
+    /// as expected (no door, no way there, another menu or question) hands the rest to you: you walk up,
+    /// and the errands go on once you're in.
+    /// </summary>
+    private List<Step> ChamberSteps()
+    {
+        var handed = false;
+        Vector3? door = null;
+        var navAsked = DateTime.MinValue;
+        var walking = DateTime.MinValue;
+        bool Up() => handed || Inside();
+        StepOutcome HandOver(string why)
+        {
+            handed = true;
+            Nav.Stop();
+            log.Warn($"  {why} Going up to your chambers is left for you.");
+            return StepOutcome.Done;
+        }
+        return new List<Step>
+        {
+            Step.Act("Find the door to your private chambers", () =>
+            {
+                if (Up()) return StepOutcome.Done;
+                if (ErrandGame.Me is not { } me) return HandOver("Couldn't read where you are.");
+                door = ErrandGame.NearestContaining(ErrandTable.ChamberDoorWords, me, 80, UsableKinds)?.Position;
+                return door == null ? HandOver($"Couldn't find the door to the chambers. Near you: {ErrandGame.NamesNear(40)}.") : StepOutcome.Done;
+            }),
+            new Step
+            {
+                Label = "Walk to it (vnavmesh)",
+                IsAction = true,
+                Run = () =>
+                {
+                    if (Up() || door == null) return StepOutcome.Done;
+                    if (ErrandGame.DistanceTo(door.Value) <= Reach + 1) return StepOutcome.Done;
+                    if (navAsked == DateTime.MinValue) navAsked = DateTime.UtcNow;
+                    if (!Nav.Ready)
+                        return DateTime.UtcNow - navAsked > TimeSpan.FromSeconds(20) ? HandOver("vnavmesh has no map of the hall.") : StepOutcome.Waiting;
+                    if (!Nav.MoveTo(door.Value)) return HandOver("vnavmesh wouldn't walk to the door.");
+                    walkTarget = door;
+                    walking = DateTime.UtcNow;
+                    return StepOutcome.Done;
+                },
+            },
+            new Step
+            {
+                Label = "Arrive at the door",
+                Timeout = TimeSpan.FromSeconds(60),
+                OnTimeout = StepStatus.Done, // decided next
+                Run = () =>
+                {
+                    if (Up() || door == null) return StepOutcome.Done;
+                    if (ErrandGame.DistanceTo(door.Value) <= Reach + 1)
+                    {
+                        Nav.Stop();
+                        walkTarget = null;
+                        return StepOutcome.Done;
+                    }
+                    if (Nav.Busy || DateTime.UtcNow - walking < TimeSpan.FromSeconds(2)) return StepOutcome.Waiting;
+                    walkTarget = null;
+                    return HandOver($"vnavmesh stopped {ErrandGame.DistanceTo(door.Value):0} yalms from the door.");
+                },
+            },
+            new Step
+            {
+                Label = "Use the door",
+                IsAction = true,
+                Run = () =>
+                {
+                    walkTarget = null;
+                    if (Up()) return StepOutcome.Done;
+                    if (ErrandGame.Me is not { } p || ErrandGame.NearestContaining(ErrandTable.ChamberDoorWords, p, Reach + 2, UsableKinds) is not { } o)
+                        return HandOver("The door isn't within reach.");
+                    return ErrandGame.Interact(o) ? StepOutcome.Done : HandOver("Couldn't use the door.");
+                },
+            },
+            Step.Wait("Its menu opens", () => Up() || ErrandGame.MenuEntries() != null, TimeSpan.FromSeconds(5), StepStatus.Done),
+            new Step
+            {
+                Label = $"Choose \"{ErrandTable.ChamberMenuWords[0]}\"",
+                IsAction = true,
+                Run = () =>
+                {
+                    if (Up()) return StepOutcome.Done;
+                    if (ErrandGame.MenuEntries() is not { } menu) return HandOver("The door's menu didn't open.");
+                    var i = ErrandGame.Find(menu.Entries, ErrandTable.ChamberMenuWords);
+                    if (i < 0)
+                    {
+                        GameUi.Close(menu.Addon);
+                        return HandOver($"The door's menu has no \"{ErrandTable.ChamberMenuWords[0]}\" (it shows: {string.Join(" | ", menu.Entries)}).");
+                    }
+                    var call = menu.Addon == ErrandTable.SelectIconString ? ErrandTable.IconMenuPick : ErrandTable.MenuPick;
+                    return GameUi.Fire(call, UiCallValues.Of(("index", i))) ? StepOutcome.Done : HandOver("The door's menu closed.");
+                },
+            },
+            Step.Wait("The game asks to go up", () => Up() || GameUi.YesNoText() != null, TimeSpan.FromSeconds(5), StepStatus.Done),
+            new Step
+            {
+                Label = "Answer yes (go up)",
+                IsAction = true,
+                Run = () =>
+                {
+                    if (Up()) return StepOutcome.Done;
+                    if (GameUi.YesNoText() is not { } question) return HandOver("The game didn't ask to go up.");
+                    if (!ErrandTable.ChamberYesWords.Any(w => question.TrimStart().StartsWith(w, StringComparison.OrdinalIgnoreCase)))
+                        return HandOver($"The game asked \"{question}\".");
+                    // Going up is part of the trip, in a rehearsal too: the guard lets this one Yes through.
+                    using (Rehearsals.Allow())
+                        return GameUi.Fire(UiTable.YesNoYes) ? StepOutcome.Done : HandOver("The yes/no closed.");
+                },
+            },
+            Arriving(WaitFor("Inside your chambers", () => Up(), TimeSpan.FromSeconds(30), "Didn't get to your chambers.", StepStatus.Done)),
+            Arriving(You("Go up to your private chambers (the hall's door to them, then \"Move to your private chambers\")", Inside)),
+        };
     }
 
     /// <summary>A wait that ends a zone change: travel is over once it's done.</summary>
