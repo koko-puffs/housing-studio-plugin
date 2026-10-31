@@ -404,27 +404,51 @@ moves or is bought until you've seen the estimate and said yes to the gil it nam
 
 With both on, the Shopping list's foot gets **Get everything for me**, and Ready's Get stage **Get
 them for me first** (when something's missing): with it on, Ready's brass button ("Get 12, then
-place") opens the same screen. Its screen is an estimate first:
+place") opens the same screen, **Get, before setting out**:
 
-- **Plugins it uses**: [vnavmesh](https://github.com/awgil/ffxiv_navmesh) (walking) and
-  [Lifestream](https://github.com/NightmareXIV/Lifestream) (teleports, going home, other worlds) are
-  needed; AutoRetainer, if you have it, is asked to keep out of the way while a bell is used.
-- **You already have**: what's placed, in your storeroom and bags (what the design is matched
-  against), and what's on your retainers (fetched first).
-- **The trips**: what each stop gets (a retainer, a vendor with where they stand and what they
-  cost, a market board on a world with the most it may cost and the dearest price for one). A trip
-  takes no more than your free bag slots (less the **slots to keep free**, 2 by default), counting
-  stacks from the game's stack sizes; a market listing is sold whole, so it's never split.
-- **Not got this way**: crafted, not known, vendors it doesn't go to (another residential
-  district's, or a zone whose aetheryte you haven't), past the market ceiling, not listed on the
-  worlds it buys on, or no room.
-- **How it goes**: the **market board ceiling** (100,000 gil by default; the market's estimate, tax
-  included, never goes past it, and neither does what's really spent), **buy on other worlds**
-  (off: your home world only), **home is** (your house, your company's, your apartment: where
-  Lifestream's "go home" goes), and **trust the new clicks** (below).
+- **The plugins it needs**, as chips: [vnavmesh](https://github.com/awgil/ffxiv_navmesh) (walking)
+  and [Lifestream](https://github.com/NightmareXIV/Lifestream) (teleports, going home, other worlds)
+  with a green tick, or a red "not installed" chip (press it for what it does and its page);
+  AutoRetainer only when retainers are involved, and only optional: if you have it, it's asked to keep
+  out of the way while a bell is used.
+- **What you already have**, in one line: what's placed, in your storeroom and bags (what the design
+  is matched against), and what's on your retainers (fetched first).
+- **The route, trip by trip**: "Trip 1" with the bag slots it fills, then one line per stop: the bell
+  ("Bell in your house", else Limsa's) with each retainer's things, each vendor ("Mist · Material
+  Supplier") with what's bought there and its gil, the market board ("Limsa · Market board", with the
+  world when it isn't yours) with the most it may cost ("≤ 53,000"), and **Home, and place** ("11
+  pieces go in"). A trip takes no more than your free bag slots (less the **slots to keep free**, 2 by
+  default), counting stacks from the game's stack sizes; a market listing is sold whole, so it's never
+  split. The trips after the first are worked out again after the one before, from what's still missing.
+- **Ready's choice for what's here**: with Clear out or Swap picked on Ready, one line says so ("Then
+  clears out 14 before placing", "Then swaps, keeping what's here as “…”"), and the errands' **first
+  placing** does it: the pieces chosen are put away first (as far as they're still where they were when
+  it comes home: matched again by item and spot, never more than were chosen), and for a swap what's
+  here is kept under that name, as Ready's own start does. Later trips' placing doesn't clear out.
+- **Not got this way**, one row per reason: to craft (with **Teamcraft**), not known, vendors it doesn't
+  go to (another residential district's, or a zone whose aetheryte you haven't), past the market
+  ceiling, not listed on the worlds it buys on, or no room.
+- **Limits**, one line ("Market up to 100,000 · home world only · 2 slots spare") and **Change**,
+  which opens them in place: the **market ceiling** (100,000 gil by default; the market's estimate, tax
+  included, never goes past it, and neither does what's really spent), **other worlds** (off: your home
+  world only), **home is** (your house, your company's, your apartment: where Lifestream's "go home"
+  goes), **bag slots to keep free**, and **trust the new clicks** (below).
 
-**Send them out** asks first, naming the gil (vendors, and the market board up to its estimate and
-your ceiling). The plan (`Core/Errands.cs`, `ErrandPlanner`, tested in `ErrandTests.cs`) is pure:
+**Set out · up to 61,400 gil** is the confirmation: there's no question after it, so the button names
+the most it spends (vendors, and the market board up to its estimate under your ceiling), and is
+greyed out, saying why, while it can't start (`ErrandRunner.CanStart`). It starts the very plan shown,
+whose total is the gil agreed; just before, the estimate is worked out once more, and if it no longer
+says the same (your bags, prices or limits changed: `ErrandPlanner.Same`, tested), nothing starts and
+the screen shows the new one.
+
+While it goes, the screen says where it is ("At the *market board*", "On the way *home*") with the
+trip's **journey** (Bell → Vendors → Market → Home → Place, the stops the trip has), what it's doing
+("Buying Riviera Table ×2", the price for one, "the game asked, and the price matched"), **Got** and
+**Spent** against what you agreed, the log, Pause and Stop; while it places, the usual figure and phases
+under the journey. After, a summary as Done's: what it got on how many trips for how much gil, what
+wasn't got, and why it stopped.
+
+The plan (`Core/Errands.cs`, `ErrandPlanner`, tested in `ErrandTests.cs`) is pure:
 from the shopping plan (`ShoppingPlanner`), units of each line, ordered retainers → vendors (by
 district, zone, NPC) → the market (by world), packed into trips by bag slots. The run
 (`Session/ErrandRunner.cs`) is steps on the framework thread like the placing run's, every one logged:

@@ -32,6 +32,46 @@ public static class ClearOut
         }
         return list;
     }
+
+    /// <summary>
+    /// The pieces chosen to clear out earlier that are still here now, as read again (the errands
+    /// clear out on coming home, after their first trip): each chosen piece matched to one of
+    /// <paramref name="extrasNow"/> by its item and spot (within <paramref name="within"/> yalms), and
+    /// given as read now (its furniture slot may have changed). Never more than was chosen: what
+    /// isn't found is left where it is.
+    /// </summary>
+    public static List<PlacedPiece> StillHere(IReadOnlyList<PlacedPiece> chosen, IReadOnlyList<PlacedPiece> extrasNow, float within = 0.05f)
+    {
+        var list = new List<PlacedPiece>();
+        var taken = new bool[extrasNow.Count];
+        foreach (var c in chosen)
+        {
+            var best = -1;
+            var bestD = float.MaxValue;
+            for (var i = 0; i < extrasNow.Count; i++)
+            {
+                var e = extrasNow[i];
+                if (taken[i] || e.ItemId != c.ItemId) continue;
+                var d = Vector3.Distance(e.Position, c.Position);
+                if (d > within) continue;
+                // The same slot at the same spot is the piece; else the nearest of that item there.
+                if (e.Key == c.Key)
+                {
+                    best = i;
+                    break;
+                }
+                if (d < bestD)
+                {
+                    best = i;
+                    bestD = d;
+                }
+            }
+            if (best < 0) continue;
+            taken[best] = true;
+            list.Add(extrasNow[best]);
+        }
+        return list;
+    }
 }
 
 /// <summary>

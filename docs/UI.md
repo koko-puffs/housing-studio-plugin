@@ -18,7 +18,7 @@ Paths are under `HousingStudio/UI/`.
 | Text | `Kit/Txt.cs` | CSS line boxes (half-leading), letter-spacing glyph by glyph, ellipses, wrapped runs of mixed styles with inline links and dye swatches. |
 | Icons | `Kit/Icons.cs` | Lucide icons parsed from the mockups' SVG path data, stroked at 1.8 in the 24-unit grid (1.6 at 24px), round caps. The flow mock-up's (`docs/mockups/flow.html`) are there too: Bell, Store, Scale, Hammer, Flask, Brick, Sofa, Undo, Send, Save, File, Link, AlertTriangle. |
 | Controls | `Kit/Kit.cs` | Buttons (primary, glass, quiet, danger, picked; 30/34/40/46 tall), icon buttons, switch (40×24, animated), segmented pill (items can be greyed out, and it shrinks its padding to fit a width), filter chip, status pill, chip, state pill, swatch, round icon well, thumbnail, tick box, stepper, field, progress bar, eyebrow, dashed border, panels, row fills, tooltips, menus. Hover (edges to the 0.34 line), press, keyboard focus ring (2px brass-soft, 2px out) and disabled (50% buttons, 40% small controls). |
-| The flow's controls | `Kit/Flow.cs` (`Kit` is partial) | From the 0.6 flow mock-up: `Wrap` (lays things left to right, wrapping), `CheckChip` / `CheckChips` (30px pill: an icon or a 64×6 `Meter`, its words; `ChipTone` Normal / Warn / Brass; the open one's edge lit) with `BeginDetail` / `EndDetail` (the dashed detail under the row), `BeginStage` / `EndStage` (a glass card with a 34px number column, a 1px line joining it to the card above), `StageNumber` (`StageState` Todo / Now / Done), `StageHead` (mono label, serif 22 words, an aside on the right), `CountChip` ("4 retainers"), `BetaTag`, `LabeledSwitch` (a switch with its words and Beta tag), `MoreButton` (quiet, "See the list ›"), `Banner` (one brass line with up to two small buttons; returns which was pressed), `StatCells` (serif numbers over their words; 0 dim), `Journey` (stops in a row on a 2px track, brass up to the one in hand; for the errands' run). |
+| The flow's controls | `Kit/Flow.cs` (`Kit` is partial) | From the 0.6 flow mock-up: `Wrap` (lays things left to right, wrapping), `CheckChip` / `CheckChips` (30px pill: an icon or a 64×6 `Meter`, its words; `ChipTone` Normal / Warn / Brass; the open one's edge lit; `IconInk` colours the icon alone, as the errands' plugins' green tick) with `BeginDetail` / `EndDetail` (the dashed detail under the row), `BeginStage` / `EndStage` (a glass card with a 34px number column, a 1px line joining it to the card above), `StageNumber` (`StageState` Todo / Now / Done), `StageHead` (mono label, serif 22 words, an aside on the right), `CountChip` ("4 retainers"), `BetaTag`, `LabeledSwitch` (a switch with its words and Beta tag), `MoreButton` (quiet, "See the list ›"), `Banner` (one brass line with up to two small buttons; returns which was pressed), `StatCells` (serif numbers over their words; 0 dim), `Journey` (stops in a row on a 2px track, brass up to the one in hand; for the errands' run). |
 | Markers in the world | `Overlay.cs` | Markers, plus `Highlight` for Show where: a pulsing ring and label, or an arrow at the screen's edge when the spot is out of view. |
 
 ## Start (`Views/Start.cs`)
@@ -49,6 +49,49 @@ Paths are under `HousingStudio/UI/`.
 | Stage numbers | `DrawStages`: the first stage not done is Now (brass), done ones a tick (`Kit.StageState`) |
 | The brass button, Preview, the estimate | `DrawReadyFooter`: words `ReadyWords.Go` (cached), tooltip `StartTip` (the old note: stay in the house, the editor, the backup); with Get on it opens the errands (`errandsOpen`), Swap asks (`AskSwap`), else `StartFromReady` (asks before a clear out). Preview goes under it when the words don't fit beside it. The line: `ReadyWords.Hint` (`Core/RunEstimate`, cached; with Get on, the errands' trips first). When Start can't run it's at 50% and the line says why (`runner.CanStart`). |
 | Fixtures after placing | `ArmFixturesAfterPlacing` (Ready's starts, Carry on, a swap, the errands once sent out) and `FixturesAfterPlacing` (each frame from `DrawBody`): when that run finishes (not a preview), with the switch on and fixtures left, `Plugin.FixtureRun.Start()` once, after the errands too (`Views/SetFixtures.cs`) |
+
+## Errands (`Views/Errands.cs`, experimental; the 0.6 flow's "Get, before setting out" and "Running")
+
+Get, before setting out (opened by Ready's brass button with Get them for me first on, and by Shopping's
+Get everything for me):
+
+| Mockup | Code |
+| --- | --- |
+| Eyebrow "KOKOMED2 · GET" + Beta, "12 things, *2 trips*", Back | `DrawErrandsEstimate` header (`Kit.Eyebrow`, `Kit.BetaTag`, `FitTitle`; words `ErrandWords.Title`); Back on the right as the mock has it |
+| The plugins as check chips | `ErrandChips` (made again only when one comes or goes): vnavmesh and Lifestream with a green tick (`CheckChipSpec.IconInk`), or a warn chip "… · not installed"; AutoRetainer only when the trips use retainers, neutral when missing (it's optional). Pressing one opens `ErrandChipDetail` (what it does, Its page) |
+| What you already have | `DimLine` with `ErrandWords.Have` ("Already here: … · 3 on your retainers, fetched first") |
+| "TRIP 1 · 28 of 32 bag slots" and its legs | `SectionLabel` + `LegRow` per `RouteLeg` from `ErrandWords.Route` / `Legs` / `TripRest`: the pin (bell / store / scale / house; home's in brass), where ("Bell in your house", "Mist · Material Supplier", "Limsa · Market board · Lich" off your world), what's got there (cut to one line, all of it as a tooltip), the gil in mono ("free", "8,400", "≤ 53,000"), a 1px line to the next pin; "Home, and place" with "11 pieces go in" (`GoIn`). Later trips: "worked out again after trip 1" |
+| Ready's choice | `ErrandThen` → `ErrandWords.Then`: "Then clears out 14 before placing" / "Then swaps, keeping what's here as “X”" (from `ModeNow`, `ChosenClearOut()`, `SwapKeepAs`) |
+| "1 to craft · Teamcraft" | `LeftRowDraw`, one row per reason (`ErrandWords.LeftRows`): its icon, "N to craft" / "N past the market ceiling" / …, the things; Teamcraft (`Core/Teamcraft.ImportUrl`) on the crafted row; why as a tooltip |
+| Limits row + Change | `DrawErrandLimits` (`ErrandWords.Limits`); Change opens `DrawErrandLimitRows` in the same panel: market ceiling, other worlds, home is, bag slots to keep free, trust the new clicks |
+| "Set out · up to 61,400 gil" + the hint | footer: `ErrandWords.SetOut(plan.TotalGil)`, disabled with `ErrandsBlocked` (`ErrandRunner.CanStart`, every half second) as its tooltip and the line under it; else "You can stop at any time. Nothing is bought above the price shown." beside it (under it when narrow) |
+
+Everything drawn from one estimate is made once per plan (`GetScreen`); the estimate itself is worked
+out every 2 s or when what it's built from changes, and keeps its object while it says the same
+(`ErrandPlanner.Same`). **The button is the confirmation** (no pop-up): `SetOut` starts the very plan
+drawn (its total is the gil agreed), and on the framework thread first works the estimate out once more:
+if it doesn't say the same (`ErrandPlanner.Same`: trips, stops, items, counts, gil, the market's dearest
+price for one, what's left out), nothing starts and the screen shows the new one.
+
+Running (the errands, `DrawErrandsRunning`):
+
+| Mockup | Code |
+| --- | --- |
+| "GETTING KOKOMED2 · TRIP 1 OF 2", the live pill | header, eyebrow left and `Kit.StatusPill` right (Running / Paused / Waiting for you, as the placing run's) |
+| "At the *market board*" | `ErrandWords.Where(runner.Leg, Going, Who, Replanning)`, from the runner's segment |
+| The journey | `Kit.Journey`: `ErrandWords.Journey(CurrentTrip)` (Bell, Vendors, Market as the trip has them, then Home and Place), the stop in hand `JourneyAt` |
+| The current card | `DrawErrandCurrent`: the item's icon (or the stop's), "Buying Riviera Table ×2" (`ErrandWords.Doing`), one dim line (`DoingNote`: the price, "the game asked, and the price matched", or the step) |
+| Got / Spent | `DrawErrandCards` → `KvCard`: "6 of 12" (`GotCount` of `CountAtStart`), "4,000 of 61,400" (`Spent` of `AgreedGil`), each with its bar |
+| Step by step, Waiting for you | `DrawErrandCallout` (the click it holds before with Continue, or what you do) |
+| "What it's doing" | `DrawLog` (Running's) |
+| Placing | the journey on Place over Running's `DrawFigure`, `DrawPhases` and `DrawCurrent` |
+| Pause / Resume, Stop, the hint | footer: "About N minutes left" while it places (`runner.TimeLeft`), else what Pause does |
+
+Its words are made once per segment and step (`ErrandRunWords`), the cards' once per change of the
+numbers. The summary (`DrawErrandsSummary`) is as Done: the mark (tick, a neutral square when you stopped
+it, danger when it stopped for safety), "Errands *done*" / "*stopped*", one line
+(`ErrandWords.Summary`: "12 got on 2 trips for 58,920 gil", and why it stopped), Got (icon and name
+×count per thing, `ErrandWords.GotList`), Not got (the reasons' rows), the log, and Done.
 
 ## Running (`Views/Running.cs`)
 
@@ -145,6 +188,14 @@ Paths are under `HousingStudio/UI/`.
   isn't known. The mock's 36×22 switch is the kit's 40×24, its 12.5px words 13px, and the Beta tag's
   9.5px mono 10px. Tick off shows a chevron, as it opens and closes the tick list. With the fixtures
   run on, Tick off also has Set them for me (now, without placing), which the mock leaves out.
+
+- Errands (the 0.6 flow mock-up): Back is an arrow (the kit's), on the right as the mock has it. The
+  route's later trips are drawn in full (the estimate knows them) with "worked out again after trip 1"
+  instead of the mock's single "Whatever's left" leg. A missing plugin's chip opens a detail with its
+  page rather than an Install button (vnavmesh and Lifestream come from their own repositories, which
+  Dalamud's installer can't open to). The Limits' Change opens the rows in place and also holds Trust the
+  new clicks. Running's title names the vendor as the game does ("At *Material Supplier*") rather than
+  lower-casing it. The Got and Spent figures are serif 22 (the kit's nearest to the mock's 20).
 
 ## What the runner could add
 

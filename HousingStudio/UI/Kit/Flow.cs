@@ -22,8 +22,9 @@ public enum StageState
     Done,
 }
 
-/// <summary>One check chip of a row: its id, words, tone, and an icon or a meter (0–1, past 1 when over).</summary>
-public readonly record struct CheckChipSpec(string Id, string Label, ChipTone Tone = ChipTone.Normal, Icon? Icon = null, float? Meter = null, string? Tip = null);
+/// <summary>One check chip of a row: its id, words, tone, and an icon or a meter (0–1, past 1 when over); the icon in its own colour when given (a green tick).</summary>
+public readonly record struct CheckChipSpec(string Id, string Label, ChipTone Tone = ChipTone.Normal, Icon? Icon = null, float? Meter = null, string? Tip = null,
+    Vector4? IconInk = null);
 
 /// <summary>
 /// The 0.6 flow's controls (docs/mockups/flow.html), drawn from the same tokens as the rest of the
@@ -93,10 +94,11 @@ public static partial class Kit
     /// <summary>
     /// A check chip: a 30px pill in glass with the line edge, an icon or a meter, and its words; warn
     /// in danger, brass in brass-soft. Pointed at, or <paramref name="open"/> (its detail shows), the
-    /// edge goes to the 0.34 line. Returns true when pressed.
+    /// edge goes to the 0.34 line. <paramref name="iconInk"/> colours the icon alone (the plugins'
+    /// green tick). Returns true when pressed.
     /// </summary>
     public static bool CheckChip(string id, Vector2 pos, string label, ChipTone tone = ChipTone.Normal, Icon? icon = null, float? meter = null,
-        bool open = false, string? tip = null)
+        bool open = false, string? tip = null, Vector4? iconInk = null)
     {
         var w = CheckChipWidth(label, icon, meter != null);
         var h = S(30);
@@ -123,7 +125,7 @@ public static partial class Kit
         }
         else if (icon is { } ic)
         {
-            Icons.Draw(dl, ic, new Vector2(x, pos.Y + (h - S(14)) / 2), S(14), ink);
+            Icons.Draw(dl, ic, new Vector2(x, pos.Y + (h - S(14)) / 2), S(14), iconInk ?? ink);
             x += S(14 + 8);
         }
         Txt.Line(dl, new Vector2(x, pos.Y), label, Face.Sans, 13, ink, 30);
@@ -144,7 +146,7 @@ public static partial class Kit
         {
             var c = chips[i];
             var p = row.Next(CheckChipWidth(c.Label, c.Icon, c.Meter != null), S(30));
-            if (CheckChip(c.Id, p, c.Label, c.Tone, c.Icon, c.Meter, c.Id == openId, c.Tip)) pressed = i;
+            if (CheckChip(c.Id, p, c.Label, c.Tone, c.Icon, c.Meter, c.Id == openId, c.Tip, c.IconInk)) pressed = i;
         }
         row.End();
         return pressed;
