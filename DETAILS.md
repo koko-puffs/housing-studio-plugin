@@ -8,7 +8,11 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.7.0. Placing works in the game; the newer features haven't all been tried in it yet.**
+> **Status: 0.7.1. Placing works in the game; the newer features haven't all been tried in it yet.**
+> 0.7.1: the rehearsal, from a report and a recording of one. After closing a storeroom row's menu it
+> waits only for the menu (the game keeps the row's preview, as the piece it holds, until another row
+> is picked, so 0.7.0 waited 3 s a piece and reported each one); a preview left at the end isn't called
+> a piece held; and the let-go of a moved piece is confirmed, so it no longer waits for Continue.
 > 0.7.0: the plugin and the site, closer, with the token from Settings → Getting (none of it yet
 > tried in the game). **From the site** on Start: builds and designs sent with the site's Send to
 > game wait there (checked about once a minute; a new one is said in chat and a notification),
