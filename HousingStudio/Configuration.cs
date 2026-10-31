@@ -7,7 +7,7 @@ using HousingStudio.Core;
 namespace HousingStudio;
 
 [Serializable]
-public sealed class Configuration : IPluginConfiguration
+public sealed partial class Configuration : IPluginConfiguration
 {
     public int Version { get; set; } = 6;
 

@@ -123,7 +123,12 @@ public sealed partial class MainWindow : Window
         {
             // (Setting the fixtures: its Continue and Stop are in Ready.)
             if (runner.Active || Plugin.FixtureRun.Active) sub = Sub.None;
-            if (sub == Sub.Settings)
+            if (ErrandsShown())
+            {
+                // Errands (experimental): their estimate, run (its placing too) and summary.
+                DrawErrands();
+            }
+            else if (sub == Sub.Settings)
             {
                 DrawSettings();
             }

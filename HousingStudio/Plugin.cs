@@ -25,6 +25,9 @@ public sealed class Plugin : IDalamudPlugin
     /// <summary>"Set them for me" (Settings → Experimental): the design's fixtures, through the game's fixtures windows.</summary>
     internal static FixtureRunner FixtureRun { get; private set; } = null!;
 
+    /// <summary>"Get everything for me" (Settings → Experimental): fetching what's missing, and placing it.</summary>
+    internal static ErrandRunner Errands { get; private set; } = null!;
+
     private readonly Configuration config;
     private readonly GameData data;
     private readonly ActivityLog log = new();
@@ -70,8 +73,11 @@ public sealed class Plugin : IDalamudPlugin
         session = new LayoutSession(data, furniture, Plots, log);
         runner = new PlacementRunner(config, session, editor, actions, furniture, anywhere, data, log);
         FixtureRun = new FixtureRunner(config, session, data, log);
-        runner.OtherRunActive = () => FixtureRun.Active;
-        FixtureRun.OtherRunActive = () => runner.Active;
+        Errands = new ErrandRunner(config, session, runner, data, log, Shop);
+        // One run acts at a time; the errands start the placing run themselves.
+        runner.OtherRunActive = () => FixtureRun.Active || (Errands.Active && !Errands.LetsPlace);
+        FixtureRun.OtherRunActive = () => runner.Active || Errands.Active;
+        Errands.OtherRunActive = () => FixtureRun.Active;
         care = new Care(config, session, runner, data, log);
 
         fonts = new Fonts();
@@ -115,6 +121,7 @@ public sealed class Plugin : IDalamudPlugin
             Safely(() => runner.Pause("The window couldn't be drawn (see /xllog); /hstudio resume or stop."));
             // Setting fixtures waits for Continue in the window: without it, it stops.
             Safely(() => FixtureRun.Stop("The window couldn't be drawn (see /xllog)."));
+            Safely(() => Errands.Pause("The window couldn't be drawn (see /xllog); /hstudio resume or stop."));
             Safely(runner.CancelPending);
             Safely(care.Cancel);
         }
@@ -144,6 +151,7 @@ public sealed class Plugin : IDalamudPlugin
             var ctx = HousingContext.Read(Plots);
             runner.Update();
             runner.Tick(ctx);
+            Errands.Tick(ctx);
             FixtureRun.Tick(ctx);
             care.Tick(ctx);
             recorder.Tick();
@@ -159,6 +167,7 @@ public sealed class Plugin : IDalamudPlugin
             Services.Log.Error(ex, "Housing Studio update failed");
             Safely(() => runner.Stop("Something went wrong reading the game; stopped to be safe."));
             Safely(() => FixtureRun.Stop("Something went wrong reading the game; stopped to be safe."));
+            Safely(() => Errands.Stop("Something went wrong reading the game; stopped to be safe."));
             Safely(anywhere.Disable);
         }
     }
@@ -174,6 +183,7 @@ public sealed class Plugin : IDalamudPlugin
     {
         runner.Stop("You logged out.");
         FixtureRun.Stop("You logged out.");
+        Errands.Stop("You logged out.");
     }
 
     private void OnCommand(string command, string args)
@@ -181,6 +191,7 @@ public sealed class Plugin : IDalamudPlugin
         switch (args.Trim().ToLowerInvariant())
         {
             case "stop":
+                Errands.Stop("Stopped by you (/hstudio stop).");
                 runner.Stop("Stopped by you (/hstudio stop).");
                 FixtureRun.Stop("Stopped by you (/hstudio stop).");
                 runner.CancelPending();
@@ -188,13 +199,16 @@ public sealed class Plugin : IDalamudPlugin
                 break;
             case "pause":
                 runner.Pause("Paused by you (/hstudio pause).");
+                Errands.Pause("Paused by you (/hstudio pause).");
                 break;
             case "resume":
                 runner.Resume();
+                Errands.Resume();
                 break;
             case "continue":
             case "next":
-                runner.Continue();
+                if (Errands.Active) Errands.Continue();
+                else runner.Continue();
                 FixtureRun.Continue();
                 break;
             case "settings":
@@ -211,6 +225,7 @@ public sealed class Plugin : IDalamudPlugin
     {
         // The game's code is put back first, whatever else fails on the way out.
         Safely(anywhere.Dispose);
+        Safely(Errands.Dispose);
         Safely(() => runner.Stop("The plugin was unloaded."));
         Safely(() => FixtureRun.Stop("The plugin was unloaded."));
         Services.Framework.Update -= OnUpdate;

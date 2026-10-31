@@ -345,6 +345,85 @@ be walked to), `Market` and `MarketCost` (the listings to buy: world, price, qua
 The live plan is `Plugin.Shop.Plan(...)` (`Session/Shopping.cs`), and every vendor for an item is
 `Plugin.Shop.Vendors.Offers(itemId)`, best first.
 
+## Getting everything for you (experimental)
+
+**Nothing of this has been tried in the game.** It drives your character and spends gil, so it's
+behind two switches (Settings → Experimental, and **Get everything for me** under it), and nothing
+moves or is bought until you've seen the estimate and said yes to the gil it names.
+
+With both on, the Shopping list's foot and Ready (when something's missing) get **Get everything
+for me**. Its screen is an estimate first:
+
+- **Plugins it uses**: [vnavmesh](https://github.com/awgil/ffxiv_navmesh) (walking) and
+  [Lifestream](https://github.com/NightmareXIV/Lifestream) (teleports, going home, other worlds) are
+  needed; AutoRetainer, if you have it, is asked to keep out of the way while a bell is used.
+- **You already have**: what's placed, in your storeroom and bags (what the design is matched
+  against), and what's on your retainers (fetched first).
+- **The trips**: what each stop gets (a retainer, a vendor with where they stand and what they
+  cost, a market board on a world with the most it may cost and the dearest price for one). A trip
+  takes no more than your free bag slots (less the **slots to keep free**, 2 by default), counting
+  stacks from the game's stack sizes; a market listing is sold whole, so it's never split.
+- **Not got this way**: crafted, not known, vendors it doesn't go to (another residential
+  district's, or a zone whose aetheryte you haven't), past the market ceiling, not listed on the
+  worlds it buys on, or no room.
+- **How it goes**: the **market board ceiling** (100,000 gil by default; the market's estimate, tax
+  included, never goes past it, and neither does what's really spent), **buy on other worlds**
+  (off: your home world only), **home is** (your house, your company's, your apartment: where
+  Lifestream's "go home" goes), and **trust the new clicks** (below).
+
+**Send them out** asks first, naming the gil (vendors, and the market board up to its estimate and
+your ceiling). The plan (`Core/Errands.cs`, `ErrandPlanner`, tested in `ErrandTests.cs`) is pure:
+from the shopping plan (`ShoppingPlanner`), units of each line, ordered retainers → vendors (by
+district, zone, NPC) → the market (by world), packed into trips by bag slots. The run
+(`Session/ErrandRunner.cs`) is steps on the framework thread like the placing run's, every one logged:
+
+1. **Retainers**: a summoning bell in your house if there is one (looked for within 60 yalms when it
+   starts), else Limsa Lominsa Lower Decks (its aetheryte, then Hawkers' Alley's bells). The bell,
+   the retainer chosen in the list, their greeting (you click it through), **Entrust or withdraw
+   items**, then each stack's menu (`AgentInventoryContext`) and **Retrieve** (the whole stack).
+2. **Vendors**: your own district's housing vendors are walked to from your home's teleport (it lands
+   you outside your door); others by teleporting to their zone's aetheryte. Talk to them, choose the
+   shop in their menu by its name, buy in lots of up to 99 (the row found by the item's name in the
+   window), answering the yes/no if one comes.
+3. **The market board**: Limsa's aetheryte (a world visit first, if the listing is on another world),
+   the nearest board. **You** search for each item and open its listings (that click isn't known yet);
+   the plugin then reads the listings from the game (`InfoProxyItemSearch`) and buys, cheapest first,
+   only those at or under the planned price for one, within what's left of the item's planned gil,
+   of the ceiling and of your gil (`MarketRule`, tested).
+4. **Home**: back to your home world, Lifestream's home teleport, your door (the nearest object
+   called "Entrance") and the yes/no; if it can't find the door (or for an apartment), you go in.
+5. **Placing**: the usual run (`PlacementRunner`, unchanged) on what's now in your bags, then the home
+   is matched again, and the next trip worked out afresh. It ends when nothing's left that it can get.
+
+**Safety, in code.** Every frame (outside its placing run, which has its own): combat, a duty or a
+duty pop, a cutscene, a logout, a zone change no travel asked for: it stops. Before each purchase:
+your gil, your free slots, the gil you agreed to (all trips together) and the market ceiling; after
+it, what was really spent (a vendor dearer than planned, or a listing dearer than shown, stops it).
+A trip that got nothing, more trips than planned (+3), or a next trip that would go past the gil
+agreed: it stops. A window that doesn't open, a menu without the expected entry, a path vnavmesh
+can't find, a plugin that stops answering: it stops, saying which. **Stop** (or `/hstudio stop`)
+stops walking and travel, its placing run if it's going, and closes the windows it opened; AutoRetainer
+is let be again. Placing, fixtures and errands never run at once (the errands start their own placing).
+
+**The clicks not yet seen working** are all in `Automation/ErrandTable.cs`, with where each came
+from. Until **trust the new clicks** is on, each waits for **Continue** (step by step) so you can
+watch it. To confirm them, a recording (Settings → Something not working? → Start recording) of, by hand:
+
+- buying one furnishing from the Material Supplier (the `Shop` window's purchase: guessed `[0, row, count]`);
+- opening a summoning bell and choosing a retainer (`RetainerList`: guessed `[2, index]`), and
+  right-clicking a furnishing in their bags and taking it (the menu's words: "Retrieve" / "Retrieve All");
+- buying one listing on the market board, with its listings open (`ItemSearchResult`: guessed `[2, index]`),
+  and the search itself (not done by the plugin yet);
+- going in at your front door (the door's name, and the yes/no).
+
+Words are matched in English only so far. IPC names used (`Game/Vnavmesh.cs`, `Game/Lifestream.cs`,
+`Game/AutoRetainer.cs`): `vnavmesh.Nav.IsReady`, `vnavmesh.SimpleMove.PathfindAndMoveTo`,
+`vnavmesh.SimpleMove.PathfindInProgress`, `vnavmesh.Path.IsRunning`, `vnavmesh.Path.Stop`;
+`Lifestream.IsBusy`, `Abort`, `Teleport`, `TeleportToHome`, `TeleportToFC`, `TeleportToApartment`,
+`ChangeWorld`, `CanVisitSameDC`, `ExecuteCommand` (the "/li" text when a typed call fails);
+`AutoRetainer.GetSuppressed` / `SetSuppressed`. Each is wrapped: missing, another version or a
+throw means "can't" (logged once), and the run stops where it needed it.
+
 ## Sending a house to the site
 
 **Send to my builds** (Start, beside Save this house as a build) puts the home you're in straight

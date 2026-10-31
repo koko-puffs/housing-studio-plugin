@@ -253,10 +253,13 @@ public sealed partial class MainWindow
         var cw = Kit.ButtonWidth(copy, BtnSize.Md, Icon.Clipboard);
         if (Kit.Button("##shop-copy", at, copy, Btn.Glass, BtnSize.Md, Icon.Clipboard, 0, !known, known ? null : "Go to your home to see what you have"))
             CopyShoppingList();
+        // Errands (experimental): fetch it all, on the right.
+        var ew = ErrandsOffered(shop) ? ErrandsButtonWidth + S(10) : 0;
+        if (ew > 0) ErrandsButton(new Vector2(at.X + w - ew + S(10), at.Y));
         if (known && shop.TotalGil > 0)
         {
             var total = Words.Capital(ShoppingList.TotalWords(shop));
-            Txt.Line(Kit.Dl, new Vector2(at.X + cw + S(10), at.Y), Txt.Fit(total, Face.Sans, 13, w - cw - S(10)), Face.Sans, 13, Palette.Ash, 40);
+            Txt.Line(Kit.Dl, new Vector2(at.X + cw + S(10), at.Y), Txt.Fit(total, Face.Sans, 13, w - cw - S(10) - ew), Face.Sans, 13, Palette.Ash, 40);
         }
         Kit.Reserve(at, w, S(40));
         Frame.EndFooter();

@@ -35,6 +35,13 @@ public sealed partial class MainWindow
             config.PutBackChanges = !config.PutBackChanges;
             config.Save();
         }
+        if (SwitchRow(i++, "##errands", "Get everything for me",
+                "Shopping and Ready get \"Get everything for me\": it fetches what's missing from your retainers, vendors and the market board (vnavmesh and Lifestream walk and travel), then places it. You see the gil first.",
+                config.ErrandsForYou))
+        {
+            config.ErrandsForYou = !config.ErrandsForYou;
+            config.Save();
+        }
         _ = i;
     }
 }
