@@ -256,9 +256,9 @@ public sealed partial class ErrandRunner : IDisposable
         if (gil < plan.TotalGil && !rehearse) return $"You have {gil:N0} gil; the errands need about {plan.TotalGil:N0}.";
         if (plan.Needs(StopKind.Market) || (plan.Needs(StopKind.Retainer) && !BellNearby()))
         {
-            var (hubTerritory, hubName) = ErrandGame.Hub(config.ErrandsHub);
-            var hub = ErrandGame.AetheryteOf(hubTerritory);
-            if (hub == 0 || !ErrandGame.Attuned(hub)) return $"The market board and the summoning bells are reached through {hubName}'s aetheryte, which you haven't attuned to (Settings → Getting → Market city).";
+            var city = ErrandGame.Hub(config.ErrandsHub);
+            var hub = ErrandGame.AetheryteOf(city.AetheryteTerritory);
+            if (hub == 0 || !ErrandGame.Attuned(hub)) return $"The market board and the summoning bells are reached through {city.Name}'s aetheryte, which you haven't attuned to (Settings → Getting → Market city).";
         }
         return null;
     }
@@ -627,12 +627,71 @@ public sealed partial class ErrandRunner : IDisposable
     {
         Step.Act("To a market city", () =>
         {
-            if (ErrandGame.InAHub && (near == null || (ErrandGame.Me is { } me && ErrandGame.Nearest(near, me, 150, UsableKinds) != null))) return StepOutcome.Done;
-            var (territory, name) = ErrandGame.Hub(config.ErrandsHub);
-            queue.InsertNext(TeleportSteps(territory, name));
+            var city = ErrandGame.Hub(config.ErrandsHub);
+            if (near == null)
+            {
+                // A world visit leaves from a city's aetheryte (Limsa's, Ul'dah's).
+                if (!ErrandGame.AtAWorldVisitAetheryte) queue.InsertNext(TeleportSteps(city.AetheryteTerritory, city.Name));
+                return StepOutcome.Done;
+            }
+            if (ErrandGame.AtABoardCity && ErrandGame.Me is { } me && ErrandGame.Nearest(near, me, 150, UsableKinds) != null) return StepOutcome.Done;
+            var steps = new List<Step>();
+            if (ErrandGame.Territory != city.BoardTerritory)
+            {
+                if (ErrandGame.Territory != city.AetheryteTerritory) steps.AddRange(TeleportSteps(city.AetheryteTerritory, city.Name));
+                if (city.Aethernet != null) steps.AddRange(AethernetSteps(city.Aethernet, city.BoardTerritory, city.BoardPlace));
+            }
+            queue.InsertNext(steps);
             return StepOutcome.Done;
         }),
     };
+
+    /// <summary>
+    /// The city's aethernet, from its aetheryte to a shard (Lifestream): Ul'dah's Sapphire Avenue
+    /// Exchange, where its boards are. Asked again every 2 s for 20 s, as a teleport.
+    /// </summary>
+    private List<Step> AethernetSteps(string shard, uint territory, string where)
+    {
+        var firstTry = DateTime.MinValue;
+        var lastTry = DateTime.MinValue;
+        return new List<Step>
+        {
+            new Step
+            {
+                Label = $"Aethernet to {shard} (Lifestream)",
+                IsAction = true,
+                Run = () =>
+                {
+                    if (ErrandGame.Territory == territory) return StepOutcome.Done;
+                    var now = DateTime.UtcNow;
+                    if (firstTry == DateTime.MinValue) firstTry = now;
+                    if (ErrandGame.Settled && !Travel.Busy && now - lastTry > TimeSpan.FromSeconds(2))
+                    {
+                        lastTry = now;
+                        travelling = true;
+                        if (Travel.Aethernet(shard)) return StepOutcome.Done;
+                        travelling = false;
+                    }
+                    return now - firstTry > TimeSpan.FromSeconds(20)
+                        ? StepOutcome.Halt($"Lifestream wouldn't take the aethernet to {shard} (asked for 20 s).")
+                        : StepOutcome.Waiting;
+                },
+            },
+            new Step
+            {
+                Label = $"Arrive at {where}",
+                Run = () =>
+                {
+                    if (ErrandGame.Territory != territory || !ErrandGame.Settled || Travel.Busy) return StepOutcome.Waiting;
+                    travelling = false;
+                    lastTerritory = territory;
+                    return StepOutcome.Done;
+                },
+                Timeout = TravelWait,
+                TimeoutMessage = $"Didn't arrive at {where} within {TravelWait.TotalMinutes:0} minutes.",
+            },
+        };
+    }
 
     private List<Step> TeleportSteps(uint territory, string where)
     {
@@ -1542,8 +1601,12 @@ public sealed partial class ErrandRunner : IDisposable
         if (home is { Chamber: true } && ErrandGame.InHouseOf(home)) return ChamberSteps().Concat(ReadAgainSteps()).ToList();
         var steps = new List<Step>();
         Vector3? door = null;
-        if (homeKind != HomeKind.Apartment && ErrandGame.Me is { } me)
-            door = ErrandGame.Nearest(ErrandTable.EntranceWords, me, 30, UsableKinds)?.Position;
+        Vector3? spot = null;
+        if (homeKind != HomeKind.Apartment && ErrandGame.Me is { } me && ErrandGame.Nearest(ErrandTable.EntranceWords, me, 30, UsableKinds) is { } entrance)
+        {
+            door = entrance.Position;
+            spot = ErrandGame.InFrontOf(entrance);
+        }
         if (door == null)
         {
             if (homeKind != HomeKind.Apartment) log.Warn($"  Couldn't find your door. Near you: {ErrandGame.NamesNear(30)}.");
@@ -1551,7 +1614,8 @@ public sealed partial class ErrandRunner : IDisposable
         }
         else
         {
-            steps.AddRange(WalkSteps("your door", () => door is { } d ? ErrandGame.InFrontOf(d) : null));
+            // To the spot straight out in front of the door, and all the way to it.
+            steps.AddRange(WalkSteps("your door", () => spot, within: 1f));
             steps.Add(new Step
             {
                 Label = "Use your door",
@@ -1602,9 +1666,17 @@ public sealed partial class ErrandRunner : IDisposable
         var handed = false;
         var answered = false;
         Vector3? door = null;
+        Vector3? spot = null;
+        Vector3? closer = null;
         var navAsked = DateTime.MinValue;
         var walking = DateTime.MinValue;
+        var usedAt = DateTime.MinValue;
+        var approachAt = DateTime.MinValue;
+        var stepped = false;
+        var approaching = false;
         bool Up() => handed || Inside();
+        Dalamud.Game.ClientState.Objects.Types.IGameObject? Door(float within) =>
+            ErrandGame.Me is { } p ? ErrandGame.NearestContaining(ErrandTable.ChamberDoorWords, p, within, UsableKinds) : null;
         StepOutcome HandOver(string why)
         {
             handed = true;
@@ -1617,9 +1689,14 @@ public sealed partial class ErrandRunner : IDisposable
             Step.Act("Find the door to your private chambers", () =>
             {
                 if (Up()) return StepOutcome.Done;
-                if (ErrandGame.Me is not { } me) return HandOver("Couldn't read where you are.");
-                door = ErrandGame.NearestContaining(ErrandTable.ChamberDoorWords, me, 80, UsableKinds)?.Position;
-                return door == null ? HandOver($"Couldn't find the door to the chambers. Near you: {ErrandGame.NamesNear(40)}.") : StepOutcome.Done;
+                if (ErrandGame.Me is null) return HandOver("Couldn't read where you are.");
+                if (Door(80) is not { } d) return HandOver($"Couldn't find the door to the chambers. Near you: {ErrandGame.NamesNear(40)}.");
+                door = d.Position;
+                // Straight out in front of it (its facing), close: 0.7.9 stopped 4 yalms off, still
+                // running, and the game said "Unable to execute action from this location".
+                spot = ErrandGame.InFrontOf(d, 1.5f);
+                closer = ErrandGame.InFrontOf(d, 0.8f);
+                return StepOutcome.Done;
             }),
             new Step
             {
@@ -1627,14 +1704,14 @@ public sealed partial class ErrandRunner : IDisposable
                 IsAction = true,
                 Run = () =>
                 {
-                    if (Up() || door == null) return StepOutcome.Done;
-                    if (ErrandGame.DistanceTo(door.Value) <= Reach + 1) return StepOutcome.Done;
+                    if (Up() || spot == null) return StepOutcome.Done;
+                    if (ErrandGame.DistanceTo(spot.Value) <= 0.8f) return StepOutcome.Done;
                     if (navAsked == DateTime.MinValue) navAsked = DateTime.UtcNow;
                     if (!Nav.Ready)
                         return DateTime.UtcNow - navAsked > TimeSpan.FromSeconds(20) ? HandOver("vnavmesh has no map of the hall.") : StepOutcome.Waiting;
-                    if (!Nav.MoveTo(ErrandGame.InFrontOf(door.Value))) return HandOver("vnavmesh wouldn't walk to the door.");
+                    if (!Nav.MoveTo(spot.Value)) return HandOver("vnavmesh wouldn't walk to the door.");
                     Movement.TrySprint(log.Info);
-                    walkTarget = ErrandGame.InFrontOf(door.Value);
+                    walkTarget = spot;
                     walking = DateTime.UtcNow;
                     return StepOutcome.Done;
                 },
@@ -1646,8 +1723,9 @@ public sealed partial class ErrandRunner : IDisposable
                 OnTimeout = StepStatus.Done, // decided next
                 Run = () =>
                 {
-                    if (Up() || door == null) return StepOutcome.Done;
-                    if (ErrandGame.DistanceTo(door.Value) <= Reach + 1)
+                    if (Up() || spot == null || door == null) return StepOutcome.Done;
+                    // All the way to the spot (not "near the door"), then stopped.
+                    if (ErrandGame.DistanceTo(spot.Value) <= 0.8f)
                     {
                         Nav.Stop();
                         walkTarget = null;
@@ -1655,7 +1733,7 @@ public sealed partial class ErrandRunner : IDisposable
                     }
                     if (Nav.Busy || DateTime.UtcNow - walking < TimeSpan.FromSeconds(2)) return StepOutcome.Waiting;
                     walkTarget = null;
-                    // Stopped a little short: the door may still be in reach (the game says, when it's used).
+                    // Stopped short: the door may still answer (tried, and a step closer if it doesn't).
                     if (ErrandGame.DistanceTo(door.Value) <= 8) return StepOutcome.Done;
                     return HandOver($"vnavmesh stopped {ErrandGame.DistanceTo(door.Value):0} yalms from the door.");
                 },
@@ -1668,12 +1746,43 @@ public sealed partial class ErrandRunner : IDisposable
                 {
                     walkTarget = null;
                     if (Up()) return StepOutcome.Done;
-                    if (ErrandGame.Me is not { } p || ErrandGame.NearestContaining(ErrandTable.ChamberDoorWords, p, 8, UsableKinds) is not { } o)
-                        return HandOver("The door isn't within reach.");
+                    if (Door(8) is not { } o) return HandOver("The door isn't within reach.");
+                    usedAt = DateTime.UtcNow;
                     return ErrandGame.Interact(o) ? StepOutcome.Done : HandOver("Couldn't use the door.");
                 },
+                Delay = TimeSpan.FromMilliseconds(300), // standing still first
             },
-            Step.Wait("Its menu opens", () => Up() || ErrandGame.MenuEntries() != null, TimeSpan.FromSeconds(5), StepStatus.Done),
+            new Step
+            {
+                // The menu, or (once) a step closer and the door again: the game says "Unable to execute
+                // action from this location" when it's out of reach.
+                Label = "Its menu opens",
+                Timeout = TimeSpan.FromSeconds(12),
+                OnTimeout = StepStatus.Done, // the next step says it didn't
+                Run = () =>
+                {
+                    if (Up() || ErrandGame.MenuEntries() != null) return StepOutcome.Done;
+                    var now = DateTime.UtcNow;
+                    if (approaching)
+                    {
+                        if (closer is { } c && ErrandGame.DistanceTo(c) > 0.6f && (Nav.Busy || now - approachAt < TimeSpan.FromSeconds(1.5))) return StepOutcome.Waiting;
+                        Nav.Stop();
+                        walkTarget = null;
+                        approaching = false;
+                        usedAt = now;
+                        if (Door(8) is { } o) ErrandGame.Interact(o);
+                        return StepOutcome.Waiting;
+                    }
+                    if (now - usedAt < TimeSpan.FromSeconds(2.5)) return StepOutcome.Waiting;
+                    if (stepped || closer == null) return StepOutcome.Done;
+                    stepped = true;
+                    approaching = true;
+                    approachAt = now;
+                    log.Info("  The door didn't answer from here: a step closer, and again.");
+                    if (Nav.MoveTo(closer.Value)) walkTarget = closer;
+                    return StepOutcome.Waiting;
+                },
+            },
             new Step
             {
                 Label = $"Choose \"{ErrandTable.ChamberMenuWords[0]}\"",

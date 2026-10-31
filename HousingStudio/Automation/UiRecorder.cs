@@ -164,7 +164,7 @@ public sealed unsafe class UiRecorder : IDisposable
         var a = (AtkUnitBase*)args.Addon.Address;
         // The windows the automation reads get all their words written down (the dye window's list,
         // the furnishing list's rows); the rest, the first few.
-        var full = args.AddonName is UiTable.DyeWindow or UiTable.FurnishingList or UiTable.DyeList or UiTable.ContextMenu;
+        var full = args.AddonName is UiTable.DyeWindow or UiTable.FurnishingList or UiTable.DyeList or UiTable.ContextMenu or ErrandTable.Shop;
         var strings = a != null ? GameUi.Strings(a, full ? 600 : 12) : new List<string>();
         Add($"OPEN {args.AddonName}{(strings.Count > 0 ? " " + string.Join(" ", strings) : string.Empty)}");
     }

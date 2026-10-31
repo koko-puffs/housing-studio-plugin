@@ -8,7 +8,16 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.7.9. Placing works in the game; the newer features haven't all been tried in it yet.**
+> **Status: 0.7.10. Placing works in the game; the newer features haven't all been tried in it yet.**
+> 0.7.10: **Ul'dah's market boards** are at the Sapphire Avenue Exchange, in the Steps of Thal, not by
+> the Steps of Nald's aetheryte (0.7.9 looked there and found none): the errands teleport to the
+> aetheryte and take the aethernet to the Sapphire Avenue Exchange (Lifestream's AethernetTeleport, or
+> "/li" and its name), as a recording of doing it by hand showed. **Doors**: the spot walked to is
+> straight out in front of the door, by the way the door faces (0.7.9 went out towards you, slantwise
+> from the side), and walked all the way to before the door is used. The chambers' door: 1.5 yalms out,
+> stood still a moment, used; if no menu comes in 2.5 s ("Unable to execute action from this
+> location"), a step closer and again. Recordings now keep the shop window's values in full (its
+> prices), for the vendor prices that differ from the game data's.
 > 0.7.9, the errands, from a full rehearsal from private chambers: **Market city** (Settings → Getting):
 > Limsa Lominsa or Ul'dah (Steps of Nald, by the Sapphire Avenue Exchange) for the market board, the
 > summoning bells and world visits; already in either with a board (or bell) in sight, no teleport (a

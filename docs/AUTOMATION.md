@@ -338,14 +338,17 @@ else Sprint (4); Sprint again while walking on foot every 3 s if ready; `GetDown
 the end of `WalkSteps`. Each only when `ActionManager.GetActionStatus` is 0; the GeneralAction row's name
 is logged on first use. Switch: `ErrandsRide`.
 
-**The market city** (0.7.9): `ErrandGame.Hub(config.ErrandsHub)` (129 Limsa Lominsa Lower Decks, 130
-Ul'dah - Steps of Nald); `HubSteps(near)` skips the teleport when `ErrandGame.InAHub` with a board or bell
-in sight (or for a world visit). `TeleportSteps` waits for `Settled` and `!Travel.Busy`, and asks
+**The market city** (0.7.9, 0.7.10): `ErrandGame.Hub(config.ErrandsHub)` → `MarketCity`: Limsa (aetheryte
+and boards in 129) or Ul'dah (aetheryte in 130, boards at the Sapphire Avenue Exchange in 131, an
+aethernet hop: `AethernetSteps`, `Lifestream.Aethernet`). `HubSteps(near)` skips it all when
+`AtABoardCity` with a board or bell in sight; for a world visit, when `AtAWorldVisitAetheryte`. `TeleportSteps` waits for `Settled` and `!Travel.Busy`, and asks
 Lifestream again every 2 s for 20 s. `WalkSteps`' last step waits for `Movement.Landed` (not mounted,
 mounting or jumping) 0.9 s after Dismount; a vendor's `Opens` talks to them again (twice) when nothing
 opened in 2.5 s. A vendor's question with another price: no, and `Finished()` for that item. The
 board's results: `SearchResultIndex` can't read them (the names aren't in the window's values), so
-index 0, checked by `ListingsItem()`. Doors: `ErrandGame.InFrontOf(door, 2)`.
+index 0, checked by `ListingsItem()`. Doors: `ErrandGame.InFrontOf(door, before)`: straight out along the
+door's yaw (`Rotation`), on your side, walked all the way (within 1 yalm); the chambers' door at 1.5,
+then 0.8 if it doesn't answer in 2.5 s.
 
 **Vendors in a ward's divisions**: `VendorData` keeps every spot of a selling NPC
 (`SpotsOf(name, territory)`), not only the offer's (the first per territory). `VendorTravelSteps` walks to

@@ -24,6 +24,9 @@ namespace HousingStudio.Game;
 /// <param name="Chamber">Private chambers in a free company's house: "go home" takes you to the house, and you go up to the room.</param>
 public sealed record HomeRef(uint Territory, ulong HouseId, uint WardTerritory, int Ward, int? Plot, string? District, HomeKind Kind, bool Owned, bool Chamber = false);
 
+/// <summary>A market city: the aetheryte's territory and name, the boards' territory, the aethernet shard between (or null), and the boards' place.</summary>
+public readonly record struct MarketCity(uint AetheryteTerritory, string Name, uint BoardTerritory, string? Aethernet, string BoardPlace);
+
 /// <summary>
 /// What the errand runner reads and does in the game beyond windows: your bags and gil, stack sizes,
 /// worlds, aetherytes, the objects around you, talking to one, the retainers' bags, the board's
@@ -43,13 +46,24 @@ public static unsafe class ErrandGame
     /// <summary>Ul'dah - Steps of Nald: its aetheryte stands by the Sapphire Avenue Exchange's market boards and summoning bells.</summary>
     public const uint UldahTerritory = 130;
 
-    /// <summary>The city the errands use for the market, the bells and world visits (Settings → Getting → Market city): its territory and name.</summary>
-    public static (uint Territory, string Name) Hub(int choice) => choice == 1
-        ? (UldahTerritory, "Ul'dah - Steps of Nald")
-        : (HubTerritory, "Limsa Lominsa Lower Decks");
+    /// <summary>Ul'dah - Steps of Thal: the Sapphire Avenue Exchange, its market boards and bells (an aethernet hop from the aetheryte).</summary>
+    public const uint UldahBoardTerritory = 131;
 
-    /// <summary>In one of the cities the errands use for the market (whichever is chosen).</summary>
-    public static bool InAHub => Territory is HubTerritory or UldahTerritory;
+    /// <summary>
+    /// The city the errands use for the market, the bells and world visits (Settings → Getting → Market
+    /// city): the aetheryte's territory, and where its boards are, with the aethernet shard between.
+    /// Ul'dah's boards are at the Sapphire Avenue Exchange, in the Steps of Thal: 0.7.9 looked for them by
+    /// the aetheryte (you took the aethernet there, in its recording).
+    /// </summary>
+    public static MarketCity Hub(int choice) => choice == 1
+        ? new MarketCity(UldahTerritory, "Ul'dah - Steps of Nald", UldahBoardTerritory, "Sapphire Avenue Exchange", "the Sapphire Avenue Exchange")
+        : new MarketCity(HubTerritory, "Limsa Lominsa Lower Decks", HubTerritory, null, "Limsa Lominsa Lower Decks");
+
+    /// <summary>Where a market city's boards and bells are (Limsa's Hawkers' Alley, Ul'dah's Sapphire Avenue).</summary>
+    public static bool AtABoardCity => Territory is HubTerritory or UldahBoardTerritory;
+
+    /// <summary>At a city aetheryte a world visit leaves from (Limsa's, Ul'dah's).</summary>
+    public static bool AtAWorldVisitAetheryte => Territory is HubTerritory or UldahTerritory;
 
     /// <summary>Free slots in your four bags.</summary>
     public static int FreeSlots()
@@ -130,6 +144,16 @@ public static unsafe class ErrandGame
     /// A spot <paramref name="before"/> yalms in front of a door, on your side of it: a door stands in
     /// its wall, and walking to the door itself sent vnavmesh round odd ways (0.7.6).
     /// </summary>
+    public static Vector3 InFrontOf(IGameObject door, float before = 2f)
+    {
+        // Straight out from the door, by the way it faces (its yaw), on your side of it: 0.7.9 went out
+        // towards you instead, which is slantwise when you come at it from the side.
+        var forward = new Vector3(MathF.Sin(door.Rotation), 0, MathF.Cos(door.Rotation));
+        if (Me is not { } me) return door.Position + forward * before;
+        var side = Vector3.Dot(me - door.Position, forward) < 0 ? -1f : 1f;
+        return door.Position + forward * (side * before);
+    }
+
     public static Vector3 InFrontOf(Vector3 door, float before = 2f)
     {
         if (Me is not { } me) return door;

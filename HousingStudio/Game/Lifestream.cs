@@ -33,6 +33,8 @@ public enum HomeKind
 /// <item><c>Lifestream.ChangeWorld</c> (string world) → bool: a world visit on your data centre. [fairly sure]</item>
 /// <item><c>Lifestream.CanVisitSameDC</c> (string world) → bool. [fairly sure]</item>
 /// <item><c>Lifestream.ExecuteCommand</c> (string): as if "/li" and the text were typed. [sure]</item>
+/// <item><c>Lifestream.AethernetTeleport</c> (string destination) → bool: a city's aethernet from its
+/// aetheryte ("Sapphire Avenue Exchange"). [fairly sure; else "/li" and the name]</item>
 /// </list>
 /// When a typed call fails, the matching "/li" text is tried through ExecuteCommand ("home", "fc",
 /// "apartment", a world's name).
@@ -50,6 +52,7 @@ public sealed class Lifestream
     private readonly ICallGateSubscriber<string, bool> changeWorld;
     private readonly ICallGateSubscriber<string, bool> canVisitSameDc;
     private readonly ICallGateSubscriber<string, object> executeCommand;
+    private readonly ICallGateSubscriber<string, bool> aethernet;
     private readonly HashSet<string> failed = new();
 
     public Lifestream()
@@ -64,6 +67,7 @@ public sealed class Lifestream
         changeWorld = pi.GetIpcSubscriber<string, bool>("Lifestream.ChangeWorld");
         canVisitSameDc = pi.GetIpcSubscriber<string, bool>("Lifestream.CanVisitSameDC");
         executeCommand = pi.GetIpcSubscriber<string, object>("Lifestream.ExecuteCommand");
+        aethernet = pi.GetIpcSubscriber<string, bool>("Lifestream.AethernetTeleport");
     }
 
     public bool Installed => Plugins.Loaded(InternalName);
@@ -92,6 +96,9 @@ public sealed class Lifestream
         };
         return Call(name, () => sub.InvokeFunc(), false) || Command(words);
     }
+
+    /// <summary>The city's aethernet to a shard, by its name (standing at the aetheryte). False when Lifestream wouldn't.</summary>
+    public bool Aethernet(string destination) => Call("AethernetTeleport", () => aethernet.InvokeFunc(destination), false) || Command(destination);
 
     /// <summary>A world visit on your data centre (or back to your home world).</summary>
     public bool ChangeWorld(string world) => Call("ChangeWorld", () => changeWorld.InvokeFunc(world), false) || Command(world);
