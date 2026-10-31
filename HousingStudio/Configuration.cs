@@ -83,6 +83,9 @@ public sealed class Configuration : IPluginConfiguration
 
     public bool ChatMessages { get; set; } = true;
 
+    /// <summary>The shopping list asks Universalis (a request over the internet) what the market board asks for what no vendor sells.</summary>
+    public bool LookUpMarketPrices { get; set; } = true;
+
     /// <summary>
     /// Settings → Experimental: features not yet tried in the game (or that act further on your
     /// behalf). Off by default; each has its own switch under it, which only counts while this is on.

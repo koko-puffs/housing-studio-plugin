@@ -65,7 +65,7 @@ Paths are under `HousingStudio/UI/`.
 | --- | --- |
 | Check mark, "<name> is *in*", sentence | `DrawDone` header; "Stopped at N of M" (neutral square, or danger when stopped for safety); "Preview *done*" after a preview |
 | Tally cells | `DrawTally` |
-| Needs you (icon, name, reason, Show where / Copy list) | `Issues` → `IssueRow`: each problem from `runner.Problems`; "N pieces left undyed" grouped with Copy list; "N pieces you don't have" grouped with Copy list (the shopping list) |
+| Needs you (icon, name, reason, Show where / Copy list) | `Issues` → `IssueRow`: each problem from `runner.Problems`; "N pieces left undyed" grouped with Copy list; "N pieces you don't have" grouped with Shopping list (opens the Shopping view) |
 | "Not what you wanted?" + Put them back | `DrawPutBack` → a confirmation (`MainWindow.Ask`) → `runner.RestoreBackup` |
 | Fixtures note | the bottom block of `DrawDone` (hidden when all are ticked) |
 | Try the N again / Carry on / Done | `DrawDoneFooter` (`runner.RetryProblems`; Carry on starts again with what's left; a preview offers Start placing; nothing needs you → Done alone, in brass) |
@@ -78,7 +78,18 @@ Paths are under `HousingStudio/UI/`.
 | Chips To do / In place / Missing / All (0 → 40%) | `Kit.FilterChip`, counts from `PieceRows.Counts` |
 | Find a piece, Near me | `Kit.Field`; Near me toggles `Configuration.NearMe` (reach in Settings → More options) |
 | Floor groups, stacked rows, notes, state pills, Show where | `FloorHeader`, `PieceRow`, `PieceRows.Build`; the floor you're on opens first |
-| Copy shopping list + summary, Copy checklist | `DrawPiecesFooter` |
+| Shopping list + summary, Copy checklist | `DrawPiecesFooter`; Shopping list opens the Shopping view. A missing piece on a retainer: `RetainerNote` and a neutral RETAINER pill (`Views/Shopping.cs`). |
+
+## Shopping (`Views/Shopping.cs`, no mockup)
+
+| Part | Code |
+| --- | --- |
+| Back arrow, eyebrow, "N things to get" | `DrawShopping` header; back goes where it was opened from (`shoppingFrom`: Pieces or the main view) |
+| Status ("Reading the game's vendors…", "Asking Universalis…", why there are no prices) | `Shopping.Status` as an `AlertNote` |
+| Groups: On your retainers, Buy from vendors, Market board, Craft, Not known (eyebrow with gil and count) | `ShopGroups`, from `ShoppingPlan` (`ShopPlan()`, cached in `Session/Shopping.cs`) |
+| Row: icon (a dye's swatch), name ×count, where from, gil, flag on the map | `ShopRow`, `ShopNote`, `FlagOnMap` |
+| Open in Teamcraft | `TeamcraftRow` (`Core/Teamcraft.ImportUrl`) |
+| Copy list + the total | `DrawShoppingFooter`, `CopyShoppingList` (`ShoppingList.WithSources`) |
 
 ## Settings (`Views/Settings.cs`)
 
@@ -86,7 +97,7 @@ Paths are under `HousingStudio/UI/`.
 | --- | --- |
 | Start does: Place pieces for me, Dye, Backup, Pace | `DrawSettings` → `SwitchRow`, `SetRow` + `Kit.Segmented`. Place pieces for me sets both `StoreroomAutomatic` and `BagsAutomatic`. Pace: Steady, Quick (the default) or Daring, the `Pacing.Profiles` (`Model/PaceSetting`), with a line under it saying what the one chosen does. |
 | In the world: Show where pieces go | `ShowMarkers` |
-| More options (12) | `DrawMoreOptions`: place anywhere, pace variation (±5% steps), when to stop, chat, Near me reach, storeroom / bags separately, floors to place, marker labels, placed markers, marker range, save what's placed as a build, good to know |
+| More options (13) | `DrawMoreOptions`: place anywhere, pace variation (±5% steps), when to stop, chat, market prices (Universalis), Near me reach, storeroom / bags separately, floors to place, marker labels, placed markers, marker range, save what's placed as a build, good to know |
 | Something not working? | `DrawTrouble`: step by step, move the preview before Place (old method), the recorder, the "Place" words, windows and clicks used |
 | "Housing Studio 0.3.0" + What's new | the bottom block of `DrawSettings` |
 

@@ -19,6 +19,9 @@ public sealed class Plugin : IDalamudPlugin
     /// <summary>The bundled plot table (gardens), read once.</summary>
     internal static PlotTable Plots { get; private set; } = null!;
 
+    /// <summary>Where the missing pieces and dyes come from (retainers, vendors, the market board).</summary>
+    internal static Shopping Shop { get; private set; } = null!;
+
     private readonly Configuration config;
     private readonly GameData data;
     private readonly ActivityLog log = new();
@@ -50,6 +53,8 @@ public sealed class Plugin : IDalamudPlugin
         Plots = PlotTable.LoadEmbedded();
         data = new GameData();
         data.WarmUp();
+        Shop = new Shopping(config, data);
+        Shop.WarmUp();
         editor = new HousingEditor();
         actions = new HousingActions();
         recorder = new Automation.UiRecorder();
@@ -127,6 +132,7 @@ public sealed class Plugin : IDalamudPlugin
             runner.Update();
             runner.Tick(ctx);
             recorder.Tick();
+            Shop.Tick();
             if (DateTime.UtcNow >= nextRefresh)
             {
                 nextRefresh = DateTime.UtcNow + (runner.Active ? RefreshWhileRunning : RefreshEvery);
@@ -193,5 +199,6 @@ public sealed class Plugin : IDalamudPlugin
         Safely(recorder.Dispose);
         Safely(anywhere.Dispose);
         Safely(fonts.Dispose);
+        Safely(Shop.Dispose);
     }
 }

@@ -28,6 +28,7 @@ public sealed partial class MainWindow : Window
         None,
         Pieces,
         Settings,
+        Shopping,
     }
 
     private readonly Configuration config;
@@ -124,6 +125,10 @@ public sealed partial class MainWindow : Window
             if (sub == Sub.Settings)
             {
                 DrawSettings();
+            }
+            else if (sub == Sub.Shopping && vm.View is MainView.Ready or MainView.Done)
+            {
+                DrawShopping();
             }
             else
             {

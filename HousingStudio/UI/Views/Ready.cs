@@ -283,6 +283,7 @@ public sealed partial class MainWindow
             if (plan.Extras.Count > 0)
                 parts.Add(plan.Extras.Count == 1 ? "1 piece in your home isn't in this design and stays where it is." : $"{plan.Extras.Count} pieces in your home aren't in this design and stay where they are.");
             if (s.Missing > 0) parts.Add(s.Missing == 1 ? "You don't have 1 piece, so it's skipped (Pieces lists it)." : $"You don't have {s.Missing} pieces, so they're skipped (Pieces lists them).");
+            if (ShopPlan() is { TotalGil: > 0 } shop) parts.Add($"Buying what's missing: {ShoppingList.TotalWords(shop)}.");
             if (config.NearMe) parts.Add($"Near me is on: only the {Words.Count(shown, "piece")} within {config.NearMeRadius:0} yalms of you.");
             var off = new[] { (config.ShowBasement, "basement"), (config.ShowGround, "ground floor"), (config.ShowUpper, "upper floor") }.Where(f => !f.Item1).Select(f => f.Item2).ToList();
             if (off.Count > 0 && ReadySide == Side.Interior) parts.Add($"The {Words.List(off)} {(off.Count == 1 ? "is" : "are")} left out (Settings → More options).");
