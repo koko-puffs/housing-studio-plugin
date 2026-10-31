@@ -350,6 +350,14 @@ index 0, checked by `ListingsItem()`. Doors: `ErrandGame.InFrontOf(door, before)
 door's yaw (`Rotation`), on your side, walked all the way (within 1 yalm); the chambers' door at 1.5,
 then 0.8 if it doesn't answer in 2.5 s.
 
+**The board's listings** (0.7.11): `BoardListings` listens to `IMarketBoard.OfferingsReceived` (each
+batch's `ItemListings`: `PricePerUnit`, `ItemQuantity`, `TotalTax`, `ListingId`, `IsHq`), rows in the order
+received; `Expect(item)` before the result is opened; a batch more than 1.5 s after the last starts the
+list afresh. `ErrandGame.Listings` uses them once settled (0.6 s), else the item search proxy;
+`BoardListings.Open` gives none 6 s after asking when nothing came. A vendor's other price:
+`MarketRule.AskedCost(question, n)` (the largest number besides the quantity), yes while `Spent + asked <=
+agreedGil`. The front door: `ErrandGame.OutsideOf(door)`, the nearest of four spots around it.
+
 **Vendors in a ward's divisions**: `VendorData` keeps every spot of a selling NPC
 (`SpotsOf(name, territory)`), not only the offer's (the first per territory). `VendorTravelSteps` walks to
 the NPC in sight (`ErrandGame.NpcOrNamed`: by id, else by name), else the nearest such spot.

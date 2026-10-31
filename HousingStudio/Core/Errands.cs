@@ -411,6 +411,19 @@ public static class MarketRule
         return false;
     }
 
+    /// <summary>
+    /// The gil a shop's question asks for <paramref name="quantity"/> of something ("Purchase 1 stage panel
+    /// for 4,000 gil?" → 4,000), or null when it doesn't read so (no quantity in it, or nothing else).
+    /// The largest number besides the quantity: the price, in any order the language puts them.
+    /// </summary>
+    public static long? AskedCost(string? question, int quantity)
+    {
+        if (string.IsNullOrEmpty(question)) return null;
+        var numbers = Numbers(question);
+        if (!numbers.Remove(quantity) || numbers.Count == 0) return null;
+        return numbers.Max();
+    }
+
     /// <summary>The whole numbers in a text, a digit group's separators (, . space, no-break spaces) left out.</summary>
     public static List<long> Numbers(string text)
     {

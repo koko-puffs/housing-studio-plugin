@@ -96,7 +96,10 @@ public sealed partial class ErrandRunner
     /// <summary>Reads the game's yes/no, checks it names the price planned, and says Cancel (closes it): never yes.</summary>
     private void CheckAndCancel(string where, string? question, uint unit, int quantity, long cost, bool board = false)
     {
-        var then = board ? "say no and stop" : "say no, and leave it";
+        // A vendor asking another price: a real run says yes while the run stays within the gil agreed.
+        var then = board ? "say no and stop"
+            : MarketRule.AskedCost(question, quantity) is { } asked && Spent + asked <= agreedGil ? $"buy it at {asked:N0} gil, still within the {agreedGil:N0} agreed"
+            : "say no, and leave it";
         var matched = MarketRule.QuestionMatches(question, unit, quantity, cost);
         Rehearsals.Report.Question(matched);
         log.Info($"  The game asks: \"{question}\": {(matched ? "it names the price planned" : $"it doesn't name {quantity} for {cost:N0} gil (a real run would {then})")} → Cancel (a rehearsal never says yes).");
@@ -216,7 +219,7 @@ public sealed partial class ErrandRunner
             IsAction = true,
             Run = () =>
             {
-                if (ErrandGame.Listings(item.ItemId) is not { } listings) return StepOutcome.Halt($"{name}'s listings closed.");
+                if (BoardListings.Open(item.ItemId) is not { } listings) return StepOutcome.Halt($"{name}'s listings closed.");
                 var gil = ErrandGame.Gil();
                 string? firstWhy = null;
                 foreach (var l in listings.OrderBy(l => l.UnitPrice))

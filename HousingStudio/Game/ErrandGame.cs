@@ -154,6 +154,21 @@ public static unsafe class ErrandGame
         return door.Position + forward * (side * before);
     }
 
+    /// <summary>
+    /// A house's front door, from outside: of the four spots <paramref name="before"/> yalms out from it
+    /// (ahead, behind and to either side, by its yaw), the one nearest you. The front door's yaw didn't
+    /// read as "straight out" in 0.7.10 (a quarter turn off, it seems), while the chambers' door's did;
+    /// coming from the gate, the nearest of the four is the one out front whichever way the yaw counts.
+    /// </summary>
+    public static Vector3 OutsideOf(IGameObject door, float before = 2f)
+    {
+        var forward = new Vector3(MathF.Sin(door.Rotation), 0, MathF.Cos(door.Rotation));
+        var right = new Vector3(forward.Z, 0, -forward.X);
+        var spots = new[] { door.Position + forward * before, door.Position - forward * before, door.Position + right * before, door.Position - right * before };
+        if (Me is not { } me) return spots[0];
+        return spots.OrderBy(s => Vector3.Distance(new Vector3(s.X, me.Y, s.Z), me)).First();
+    }
+
     public static Vector3 InFrontOf(Vector3 door, float before = 2f)
     {
         if (Me is not { } me) return door;
@@ -515,6 +530,8 @@ public static unsafe class ErrandGame
     /// <summary>The listings the board has loaded for an item (in the order shown), or null while it isn't that item's or they're still loading.</summary>
     public static List<BoardListing>? Listings(uint itemId)
     {
+        // As received (Dalamud's market board service), once a batch has settled; else the game's proxy.
+        if (BoardListings.For(itemId, TimeSpan.FromMilliseconds(600)) is { } received) return received;
         var p = InfoProxyItemSearch.Instance();
         if (p == null || p->SearchItemId != itemId || p->WaitingForListings) return null;
         var list = new List<BoardListing>();

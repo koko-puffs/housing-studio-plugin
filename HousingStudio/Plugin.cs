@@ -77,6 +77,7 @@ public sealed class Plugin : IDalamudPlugin
         runner = new PlacementRunner(config, session, editor, actions, furniture, anywhere, data, log);
         FixtureRun = new FixtureRunner(config, session, data, log);
         Errands = new ErrandRunner(config, session, runner, data, log, Shop);
+        BoardListings.Hook();
         // One run acts at a time; the errands start the placing run themselves.
         runner.OtherRunActive = () => FixtureRun.Active || (Errands.Active && !Errands.LetsPlace);
         FixtureRun.OtherRunActive = () => runner.Active || Errands.Active;
@@ -249,6 +250,7 @@ public sealed class Plugin : IDalamudPlugin
         // The game's code is put back first, whatever else fails on the way out.
         Safely(anywhere.Dispose);
         Safely(Errands.Dispose);
+        Safely(BoardListings.Unhook);
         Safely(() => runner.Stop("The plugin was unloaded."));
         Safely(() => FixtureRun.Stop("The plugin was unloaded."));
         Services.Framework.Update -= OnUpdate;

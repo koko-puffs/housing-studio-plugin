@@ -412,3 +412,18 @@ public class RecordedQuestionTests
         Assert.False(MarketRule.QuestionMatches(q, 30000, 1, MarketRule.Cost(30000, 1, 1500)));
     }
 }
+
+public class AskedCostTests
+{
+    [Fact]
+    public void TheShopsQuestionSaysWhatItAsks()
+    {
+        Assert.Equal(4000, HousingStudio.Core.MarketRule.AskedCost("Purchase 1 stage panel for 4,000 gil?", 1));
+        Assert.Equal(21000, HousingStudio.Core.MarketRule.AskedCost("Purchase 7 white screens for 21,000 gil?", 7));
+        Assert.Equal(2000, HousingStudio.Core.MarketRule.AskedCost("2.000 Gil für 1 Stück ausgeben?", 1));
+        Assert.Null(HousingStudio.Core.MarketRule.AskedCost("Purchase 2 stage panels for 8,000 gil?", 1));
+        Assert.Null(HousingStudio.Core.MarketRule.AskedCost("Leave the estate hall?", 1));
+        Assert.Null(HousingStudio.Core.MarketRule.AskedCost(null, 1));
+    }
+}
+

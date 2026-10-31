@@ -27,4 +27,5 @@ internal sealed class Services
     [PluginService] internal static IDragDropManager DragDrop { get; private set; } = null!;
     [PluginService] internal static IGameInteropProvider GameInterop { get; private set; } = null!;
     [PluginService] internal static IAddonLifecycle AddonLifecycle { get; private set; } = null!;
+    [PluginService] internal static IMarketBoard MarketBoard { get; private set; } = null!;
 }

@@ -1230,6 +1230,7 @@ public sealed partial class ErrandRunner : IDisposable
         var before = 0;
         long gilBefore = 0;
         var n = 0;
+        long allowed = 0;
         var stack = ErrandGame.StackSize(item.ItemId);
         List<Step> Once() => new()
         {
@@ -1275,12 +1276,21 @@ public sealed partial class ErrandRunner : IDisposable
                         // riviera table for 2,000 gil?"; the item's name in it may be a plural or "lump of …").
                         if (!MarketRule.QuestionMatches(question, v.Price, n, (long)v.Price * n))
                         {
-                            // Another price than planned (0.7.6: "Purchase 1 stage panel for 4,000 gil?" with
-                            // 1,000 planned): no, and this item is left; the rest of the shop goes on.
+                            // Another price than the game's data has (0.7.6: "Purchase 1 stage panel for 4,000
+                            // gil?" with 1,000 planned): yes when the whole run still stays within the gil you
+                            // agreed to (and you have it), else no, and this item is left.
+                            if (MarketRule.AskedCost(question, n) is { } asked && Spent + asked <= agreedGil && ErrandGame.Gil() >= asked)
+                            {
+                                log.Info($"  The shop asks {asked:N0} gil for {n} × {Name(item.ItemId)}, not the {(long)v.Price * n:N0} planned: still within the {agreedGil:N0} gil you agreed to, so yes.");
+                                allowed = asked;
+                                queue.InsertNext(new[] { Yes(question), Bought() });
+                                return StepOutcome.Done;
+                            }
                             GameUi.Close(UiTable.YesNo);
-                            log.Warn($"  The shop asked \"{question}\", not {n} × {Name(item.ItemId)} for {(long)v.Price * n:N0} gil as planned ({v.NpcName}, NPC {v.NpcId}, shop {v.ShopId}): said no, and {Name(item.ItemId)} is left for you.");
+                            log.Warn($"  The shop asked \"{question}\", not {n} × {Name(item.ItemId)} for {(long)v.Price * n:N0} gil as planned ({v.NpcName}, NPC {v.NpcId}, shop {v.ShopId}), and it would go past the {agreedGil:N0} gil you agreed to: said no, and {Name(item.ItemId)} is left for you.");
                             return Finished();
                         }
+                        allowed = (long)v.Price * n;
                         queue.InsertNext(new[] { Yes(question), Bought() });
                         return StepOutcome.Done;
                     }
@@ -1290,7 +1300,7 @@ public sealed partial class ErrandRunner : IDisposable
                 VendorSpent += spent;
                 Count(item.ItemId, now - before);
                 bought += now - before;
-                if (spent > (long)v.Price * n) return StepOutcome.Halt($"{Name(item.ItemId)} cost {spent:N0} gil, more than the {(long)v.Price * n:N0} planned.");
+                if (spent > Math.Max(allowed, (long)v.Price * n)) return StepOutcome.Halt($"{Name(item.ItemId)} cost {spent:N0} gil, more than the {Math.Max(allowed, (long)v.Price * n):N0} agreed.");
                 if (bought < item.Count) queue.InsertNext(Once());
                 return StepOutcome.Done;
             },
@@ -1367,7 +1377,7 @@ public sealed partial class ErrandRunner : IDisposable
                 Run = () =>
                 {
                     if (bought >= wanted) return Finished();
-                    if (ErrandGame.Listings(item.ItemId) is not { } listings) return StepOutcome.Halt($"{name}'s listings closed.");
+                    if (BoardListings.Open(item.ItemId) is not { } listings) return StepOutcome.Halt($"{name}'s listings closed.");
                     var gil = ErrandGame.Gil();
                     string? firstWhy = null;
                     foreach (var l in listings.OrderBy(l => l.UnitPrice))
@@ -1448,7 +1458,10 @@ public sealed partial class ErrandRunner : IDisposable
     {
         var index = -1;
         DateTime? searchedAt = null;
-        bool Opened() => GameUi.IsOpen(ErrandTable.ItemSearchResult) && ErrandGame.Listings(itemId) != null;
+        // The listings window open for the item, and its listings come (or none, 6 s after it opened:
+        // an item nobody sells there has none to send).
+        bool Opened() => GameUi.IsOpen(ErrandTable.ItemSearchResult)
+                         && (ErrandGame.Listings(itemId) != null || (DateTime.UtcNow - BoardListings.AskedAt(itemId)).TotalSeconds > 6);
         Step YouOpen(string what) => You($"{what} {name} and open its listings", Opened);
         return new List<Step>
         {
@@ -1503,6 +1516,7 @@ public sealed partial class ErrandRunner : IDisposable
                 Run = () =>
                 {
                     if (Opened() || index < 0) return StepOutcome.Done;
+                    BoardListings.Expect(itemId);
                     if (!GameUi.Fire(ErrandTable.SearchResultPick, UiCallValues.Of(("index", index))))
                         queue.InsertNext(new[] { YouOpen("Search the board for") });
                     return StepOutcome.Done;
@@ -1605,7 +1619,8 @@ public sealed partial class ErrandRunner : IDisposable
         if (homeKind != HomeKind.Apartment && ErrandGame.Me is { } me && ErrandGame.Nearest(ErrandTable.EntranceWords, me, 30, UsableKinds) is { } entrance)
         {
             door = entrance.Position;
-            spot = ErrandGame.InFrontOf(entrance);
+            spot = ErrandGame.OutsideOf(entrance);
+            log.Info($"  Your door is at ({entrance.Position.X:0.0}, {entrance.Position.Z:0.0}), facing {entrance.Rotation * 180 / MathF.PI:0}°; walking to ({spot.Value.X:0.0}, {spot.Value.Z:0.0}), {ErrandGame.DistanceTo(spot.Value):0} yalms away.");
         }
         if (door == null)
         {

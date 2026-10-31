@@ -8,7 +8,16 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.7.10. Placing works in the game; the newer features haven't all been tried in it yet.**
+> **Status: 0.7.11. Placing works in the game; the newer features haven't all been tried in it yet.**
+> 0.7.11: **the market board's listings** are read as the game receives them (Dalamud's market board
+> service, `Game/BoardListings.cs`): 0.7.10 read the game's item search proxy, which never said they'd
+> come, so every item waited 15 s and was left. A batch that comes later (the list sent again, after a
+> purchase) is taken afresh; an item with nothing listed shows none after 6 s. **A vendor's price**
+> other than the game data's ("Purchase 1 stage panel for 4,000 gil?", 1,000 in the data) is said yes
+> to while the whole run stays within the gil you agreed to (and you have it), else no and the item
+> left. **The front door**: of four spots 2 yalms around the door (ahead, behind, either side, by its
+> yaw), the one nearest you, as the door's yaw outside didn't read as "straight out"; the log says the
+> door's place and facing and the spot.
 > 0.7.10: **Ul'dah's market boards** are at the Sapphire Avenue Exchange, in the Steps of Thal, not by
 > the Steps of Nald's aetheryte (0.7.9 looked there and found none): the errands teleport to the
 > aetheryte and take the aethernet to the Sapphire Avenue Exchange (Lifestream's AethernetTeleport, or
