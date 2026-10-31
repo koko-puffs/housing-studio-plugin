@@ -66,8 +66,8 @@ its exact spot, then dyes everything to match.
   or pick from Recent (your files and the backups runs saved). The last one reopens when the game starts.
 - **Match** every piece to what you have, nearest first and the right dye first: **in place**,
   **to move**, **in the storeroom** (the design's dye preferred), **in your bags** (bag, row, slot),
-  or **missing**, with a **copyable shopping list** (pieces, the dyes to apply and the dyes to buy)
-  and a checklist.
+  or **missing**, with a **shopping list** of where to get what's missing (your retainers, vendors,
+  the market board, crafting; see [Shopping](#shopping)) and a checklist.
 - **Start placing** runs three phases, one piece at a time at the [pace](#pace) you set (Quick, the
   default: 0.15 s between pieces ± 25 % and 0.3 s between any two clicks in the game's windows):
   1. **Move**: placed pieces are picked up and set at their spot with the editor's own functions.
@@ -135,22 +135,94 @@ One window, no tabs: what it shows follows what you're doing.
   **Resume** and **Stop**. In step-by-step mode a brass callout says what the next click does, with
   **Continue**; when the run needs you to do something, the same callout says what.
 - **Done** (until you press Done): how many pieces are where the design has them, what was moved,
-  placed and dyed, what **needs you** (each with why, and **Show where** or **Copy list**), **Put them
+  placed and dyed, what **needs you** (each with why, and **Show where**, **Copy list** or, for the
+  pieces you don't have, **Shopping list**), **Put them
   back** (restores the backup the run saved, after asking), and **Try the N again** (or **Carry on**
   when you stopped it).
 - **Pieces** (from Ready): every piece by floor, the same item in the same dye stacked
   ("Hingan Bookshelf ×9"), filtered by **To do / In place / Missing / All**, **Find a piece** and
   **Near me**; each with its state and a **Show where** button that lights its spot in your home (and
-  points at it when it's off screen). **Copy shopping list** and **Copy checklist** at the foot.
+  points at it when it's off screen); a missing piece that's on a retainer says "On Momo (seen today
+  05.24)" with a RETAINER pill instead of MISSING. **Shopping list** and **Copy checklist** at the foot.
+- **Shopping list** (from Pieces' foot and Done): what's still to get by where it comes from, with
+  the gil; see [Shopping](#shopping).
 - **Settings** (from the header, or Dalamud's settings button): what Start does (place for me, dye,
   backup, [pace](#pace): Steady, Quick or Daring), markers in the world,
-  **More options** (place anywhere, pace variation, when to stop, chat, how far Near me reaches,
+  **More options** (place anywhere, pace variation, when to stop, chat, market prices (asks
+  Universalis), how far Near me reaches,
   storeroom and bags separately, floors to place, marker options, save what's placed as a build) and
   **Something not working?** (step by step, the old preview method, the recorder, the "Place" menu
   words, the windows and clicks used).
 
 While a run goes, Pieces and Settings are hidden, so nothing that steers the run changes under it.
 [docs/UI.md](docs/UI.md) maps each part of the design to the code that draws it.
+
+## Shopping
+
+What a design needs that you don't have (its missing pieces, and the dyes it needs beyond those in your
+bags) and where each comes from. Ready's summary says what buying it costs in one line ("Buying what's
+missing: about 98,400 gil (12,000 gil at vendors, about 86,400 gil on the market board)."); the
+**Shopping list** view (Pieces' foot, Done) lists it by source, and **Copy list** copies the same,
+with each source and price, to paste anywhere.
+
+Each thing is taken from the first source that has it, in this order (`Core/Sourcing.cs`,
+`ShoppingPlanner`, tested in `ShoppingTests.cs`):
+
+1. **On your retainers** ("On Momo · seen today 05.24"): the retainer holding most of it first. Two
+   records, put together (`RetainerStocks.Merge`, the plugin's own first as it knows when):
+   - **The plugin's own**: whenever a retainer's inventory window (`InventoryRetainer` or
+     `InventoryRetainerLarge`) is open, its seven bag pages are counted (HQ and collectable copies as
+     the item) with the retainer's name and the time, per character, in `retainers.json` in the
+     plugin's config folder (written in the background; again when the counts change, or at most every
+     5 minutes). A retainer's market listings and equipped gear aren't counted. Open each retainer once
+     and the list knows it (`Game/Retainers.cs`, `RetainerRecord`).
+   - **Allagan Tools**, when it's installed, through its IPC (asked once a minute while there's
+     something to get, and when the design's match changes): `AllaganTools.IsInitialized` → `bool`,
+     `AllaganTools.GetCharactersOwnedByActive(false)` → `HashSet<ulong>` (the retainers' ids), and
+     `AllaganTools.GetCharacterItems(id)` → `HashSet<ulong[]>`, each array item id then quantity. Every
+     call is wrapped: not installed, not ready, other signatures or a throw all mean "nothing from it"
+     (logged once). Its retainers are named from the game's retainer list when that's been sent this
+     session, else from **AutoRetainer** (below); once either names them, only those ids are kept, so
+     a company chest isn't taken for a retainer.
+   - **AutoRetainer**, when it's installed: `AutoRetainer.GetOfflineCharacterData(contentId)` (its own
+     `OfflineCharacterData`, taken as an object and read by name: `RetainerData`, each `Name` and
+     `RetainerID`) gives your retainers' names and ids before the game's list is sent. It keeps no
+     record of what retainers hold, so it names, it doesn't count. Wrapped like Allagan Tools
+     (`Game/AutoRetainer.cs`).
+2. **Buy from vendors** ("Material Supplier, Mist (10.9, 11.4) · 1,500 gil each"), with a map-pin button
+   that flags the NPC on the map (`IGameGui.OpenMapWithMapLink`). `Game/VendorData.cs` reads the game's
+   data once, in the background, when the plugin starts: every gil shop's items (`GilShopItem`; only
+   furnishings and dyes kept), every NPC's shops (`ENpcBase.ENpcData`: a `GilShop` row, or one reached
+   through a `TopicSelect` menu, a `PreHandler` or a `CustomTalk`'s script arguments), each NPC's name
+   (`ENpcResident`) and spot (its `Level` rows; for the residential districts, whose NPCs have none, the
+   wards' own layout files `planevent.lgb`, `planlive.lgb` and `bg.lgb`, so the housing vendors are
+   always placed). The price is the item's `PriceMid`; a shop item behind a quest or achievement is
+   marked. Of the NPCs selling an item, `VendorChoice` picks the residential districts' (the district of
+   the house you're in first), then any whose spot is known, then the rest; the cheapest of those.
+3. **Market board** ("About 12,000 gil each on Light"): for what no retainer or vendor covers and can be
+   traded, Universalis (`https://universalis.app/api/v2/{dataCentre}/{ids}?listings=20&entries=0`,
+   up to 100 ids a request) for the data centre you're on. The estimate buys whole stacks, cheapest
+   first, or the one stack that covers the rest for less, tax included (`MarketQuote.CostFor`); if
+   fewer are listed than needed, the rest falls through. Answers are kept 15 minutes (and shown up to
+   an hour while a new one is asked); a request times out after 10 seconds and fails quietly (asked
+   again after 2 minutes, the list says so). Off with Settings → More options → **Look up market
+   prices (asks Universalis)**, on by default: it's the plugin's only request over the internet.
+4. **Craft** ("Carpenter, level 50"), from `RecipeLookup`, with **Open in Teamcraft**: opens
+   `https://ffxivteamcraft.com/import/<base64>`, the base64 of `itemId,null,count` joined by `;` (the
+   format Allagan Tools' and Artisan's exports use), which makes a Teamcraft list of them.
+5. **Not known**: no vendor sells it and none is listed (or it can't be traded).
+
+### For an errand runner
+
+`ShoppingPlan.Lines` is the errand list: each `ShoppingLine` is how many (`Count`) of a `Need`
+(`ItemId`, `Kind` piece or dye, `Stain`) come from one `Source`, with the source itself:
+`Retainer` (a `RetainerStock`: `RetainerId`, `Name`, `SeenAt`, item counts), `Vendor` (a `VendorOffer`:
+`ItemId`, `Price`, `NpcId`, `NpcName`, `ShopId`, `ShopName`, `TerritoryId`, `PlaceName`, `MapId`,
+`MapPosition`, world `Position`, residential `District`, `NeedsUnlock`; `Located` says whether it can
+be walked to), `Market` and `MarketCost` (the listings to buy: world, price, quantity), `Craft`
+(`RecipeId`, job, level), and `Gil`. `ShoppingPlan.VendorGil` / `MarketGil` / `TotalGil` are the totals.
+The live plan is `Plugin.Shop.Plan(...)` (`Session/Shopping.cs`), and every vendor for an item is
+`Plugin.Shop.Vendors.Offers(itemId)`, best first.
 
 ## Pace
 
@@ -230,18 +302,21 @@ HousingStudio/
   Core/        game-free, unit-tested: reading .build/.json, axes and turns, plots, floors,
                dyes, matching, the shopping list, pacing, backups; and for the automation the
                step queue (StepQueue), the run's order and dye planning (RunSequence),
-               callbacks as data (UiCall) and menu/list helpers (Menus).
+               callbacks as data (UiCall) and menu/list helpers (Menus); where to get what's
+               missing (Sourcing: the shopping planner; Vendors, Market, Teamcraft).
   Automation/  UiTable (every window and click, with sources), GameUi (reading and clicking
                windows), UiRecorder (diagnostics recording).
   Game/        GameData (Lumina sheets), HousingContext (where you are), HousingEditor (the
                editor's state, pick up / set down), HousingActions (item menus, the dye window,
-               aiming the held piece), FurnitureReader, FixtureReader (the home's fixtures, inside and out, for saving it), InventoryReader, PlaceAnywhere.
+               aiming the held piece), FurnitureReader, FixtureReader (the home's fixtures, inside and out, for saving it), InventoryReader, PlaceAnywhere;
+               VendorData (who sells what, where), MarketPrices (Universalis), Retainers
+               (the retainer record, Allagan Tools' IPC), AutoRetainer (retainers' names over IPC).
   Session/     LayoutSession (the design matched to the game), PlacementRunner (the run: each
-               piece's steps), Backups, ActivityLog.
+               piece's steps), Backups, ActivityLog, Shopping (the shopping plan, kept up to date).
   UI/          the window: Kit/ (the design system's tokens, fonts, icons and controls drawn with
                ImGui's draw lists), Model/ (game-free, unit-tested: words, the Pieces list, pace,
                fixture ticks, SVG icon paths), Views/ (Start, Ready, Running, Done, Pieces,
-               Settings), ViewModel, MainWindow, Overlay (markers in the world). See docs/UI.md.
+               Shopping, Settings), ViewModel, MainWindow, Overlay (markers in the world). See docs/UI.md.
 HousingStudio.Tests/   xUnit tests for Core and UI/Model
 tools/         make-plots.mjs, icon.svg + make-icon.mjs
 docs/          AUTOMATION.md, RESEARCH.md, PUBLISHING.md

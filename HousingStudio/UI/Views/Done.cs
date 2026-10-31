@@ -149,7 +149,7 @@ public sealed partial class MainWindow
             var names = vm.RunMissing.GroupBy(e => e.Target.ItemId).OrderByDescending(g => g.Count())
                 .Select(g => g.Count() > 1 ? $"{data.ItemName(g.Key)} ×{g.Count()}" : data.ItemName(g.Key)).ToList();
             issues.Add(new Issue(Icon.Package, vm.RunMissing.Count == 1 ? "1 piece you don't have" : $"{vm.RunMissing.Count} pieces you don't have",
-                Words.Some(names), "Copy list", CopyShoppingList));
+                Words.Some(names), "Shopping list", () => OpenShopping(Sub.None)));
         }
         return issues;
     }

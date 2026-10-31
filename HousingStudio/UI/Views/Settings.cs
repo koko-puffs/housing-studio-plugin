@@ -27,7 +27,7 @@ public sealed partial class MainWindow
     private string? placeWords;
 
     /// <summary>The number of settings under More options (shown on its row).</summary>
-    private const int MoreCount = 12;
+    private const int MoreCount = 13;
 
     private void DrawSettings()
     {
@@ -197,6 +197,14 @@ public sealed partial class MainWindow
         if (SwitchRow(i++, "##chat", "Say what's needed in chat", "When the run pauses, stops or waits for you", config.ChatMessages))
         {
             config.ChatMessages = !config.ChatMessages;
+            config.Save();
+        }
+
+        if (SwitchRow(i++, "##market-prices", "Look up market prices (asks Universalis)",
+                "For what no vendor sells, the shopping list asks universalis.app over the internet what your data centre's market board wants",
+                config.LookUpMarketPrices))
+        {
+            config.LookUpMarketPrices = !config.LookUpMarketPrices;
             config.Save();
         }
 

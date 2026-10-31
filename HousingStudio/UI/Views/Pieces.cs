@@ -24,6 +24,9 @@ public sealed partial class MainWindow
     };
 
     private PieceFilter pieceFilter = PieceFilter.ToDo;
+
+    /// <summary>Where the missing pieces come from, for this frame's rows (a piece on a retainer says so).</summary>
+    private ShoppingPlan shopForRows = ShoppingPlan.Empty;
     private string pieceSearch = string.Empty;
     private readonly Dictionary<Floor, bool> floorOpen = new();
     private (Layout? Layout, Side Side, PlotSpot? Plot) targetsFor;
@@ -104,6 +107,7 @@ public sealed partial class MainWindow
             Kit.EndPanel();
         }
         var myFloor = MyFloor();
+        shopForRows = known ? ShopPlan() : ShoppingPlan.Empty;
         var missingStains = known ? vm.MissingStains : new HashSet<byte>();
         for (var g = 0; g < groups.Count; g++)
         {
@@ -179,7 +183,9 @@ public sealed partial class MainWindow
         x += S(34) + S(12);
 
         var pinX = at.X + w - S(18) - S(32);
-        var stateW = row.State is { } st ? Kit.StatePillWidth(st) : 0;
+        var onRetainer = row.State == PieceState.Missing ? RetainerNote(row.ItemId, row.Count, shopForRows) : null;
+        var retainerOnly = onRetainer != null && onRetainer.StartsWith("On ", StringComparison.Ordinal);
+        var stateW = retainerOnly ? RetainerPillWidth : row.State is { } st ? Kit.StatePillWidth(st) : 0;
         var stateX = pinX - S(12) - stateW;
         var textW = (row.State != null ? stateX : pinX) - S(12) - x;
 
@@ -194,7 +200,11 @@ public sealed partial class MainWindow
                 note.Add(Run.Note("Where the design has it"));
                 break;
             default:
-                if (row.State == PieceState.Missing) note.Add(Run.Note(row.Stain != 0 ? "Not in your storeroom or bags · " : "Not in your storeroom or bags"));
+                if (row.State == PieceState.Missing)
+                {
+                    var why = onRetainer ?? "Not in your storeroom or bags";
+                    note.Add(Run.Note(row.Stain != 0 ? why + " · " : why));
+                }
                 if (row.Stain != 0)
                 {
                     note.Add(Run.Dot(data.DyeRgb(row.Stain)));
@@ -219,7 +229,8 @@ public sealed partial class MainWindow
             note = new List<Run> { Run.Note(Txt.Fit(noteText, Face.Sans, 13, textW)) };
         Txt.Flow(new Vector2(x, top + nameH + S(2)), textW + S(40), note, 19.5f, out _);
 
-        if (row.State is { } state) Kit.StatePill(new Vector2(stateX, mid - Kit.StatePillHeight / 2), state);
+        if (retainerOnly) RetainerPill(new Vector2(stateX, mid - Kit.StatePillHeight / 2));
+        else if (row.State is { } state) Kit.StatePill(new Vector2(stateX, mid - Kit.StatePillHeight / 2), state);
         var away = session.Context.Side == null || (session.PlanSide != null && session.Context.Side != session.PlanSide);
         var tip = away ? "Go to your home to see where it goes" : row.Count > 1 ? "Show where they go" : row.State == PieceState.InPlace ? "Show where it is" : "Show where it goes";
         if (Kit.IconButton($"##where{row.ItemId}-{row.Stain}-{row.State}-{row.Floor}", new Vector2(pinX, mid - S(16)), Icon.MapPin, tip, 32, Btn.Glass, away))
@@ -232,13 +243,14 @@ public sealed partial class MainWindow
         Frame.BeginFooter("pieces-foot", 16, 20);
         var at = Kit.At;
         var w = Kit.Width;
-        const string shop = "Copy shopping list";
+        const string shop = "Shopping list";
         const string check = "Copy checklist";
-        var sw = Kit.ButtonWidth(shop, BtnSize.Md, Icon.Clipboard);
+        var sw = Kit.ButtonWidth(shop, BtnSize.Md, Icon.Package);
         var cw = Kit.ButtonWidth(check, BtnSize.Md, null, Btn.Quiet);
         var plan = session.Plan;
-        if (Kit.Button("##shop", at, shop, Btn.Glass, BtnSize.Md, Icon.Clipboard, 0, plan == null, plan == null ? "Go to your home to see what you have" : null))
-            CopyShoppingList();
+        if (Kit.Button("##shop", at, shop, Btn.Glass, BtnSize.Md, Icon.Package, 0, plan == null,
+                plan == null ? "Go to your home to see what you have" : "Where to get what's missing: your retainers, vendors, the market board"))
+            OpenShopping(Sub.Pieces);
         if (known)
         {
             var summary = Words.ToBuy(plan!.Entries.Count(e => e.State == PieceState.Missing), vm.MissingDyes.Count);
@@ -257,7 +269,9 @@ public sealed partial class MainWindow
     private void CopyShoppingList()
     {
         if (session.Plan is not { } plan) return;
-        ImGui.SetClipboardText(ShoppingList.Build(plan, data.ItemName, data.DyeName, session.Title, s => HousingActions.DyesOwned(data, s)));
+        var shop = ShopPlan();
+        ImGui.SetClipboardText(ShoppingList.WithSources(plan, shop, data.AnyItemName, data.DyeName,
+            t => t is { } at ? When.Relative(at.ToLocalTime(), DateTime.Now, Clock) : null, session.Title));
         Notify("Shopping list copied");
     }
 
