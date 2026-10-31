@@ -112,7 +112,7 @@ public sealed class Visit
 public sealed partial class GameLink
 {
     /// <summary>A home's address is read again after a second, at most this often, while the game settles.</summary>
-    private const int AddressTriesMost = 10;
+    public const int AddressTriesMost = 10;
 
     /// <summary>A visit's address waits this long after you're in (the house id is set as you arrive).</summary>
     private static readonly TimeSpan VisitSettle = TimeSpan.FromSeconds(2);

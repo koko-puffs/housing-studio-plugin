@@ -130,7 +130,7 @@ public sealed partial class MainWindow
         }
         else if (h.Address == null)
         {
-            if (h.AddressWhy == null || h.AddressTries < 10) return;
+            if (h.AddressWhy == null || h.AddressTries < GameLink.AddressTriesMost) return;
             Kit.Gap(12);
             clicked = IconLine(Icon.Info, Palette.Dim, Run.Note(h.AddressWhy + " ", Palette.Dim), Run.Note("Try again", Palette.BrassSoft) with { Link = "retry" });
         }
