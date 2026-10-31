@@ -25,12 +25,16 @@ public sealed class Shopping : IDisposable
         Market = new MarketPrices();
         Record = new RetainerRecord();
         Allagan = new AllaganTools();
+        AutoRetainer = new AutoRetainer();
     }
 
     public VendorData Vendors { get; }
     public MarketPrices Market { get; }
     public RetainerRecord Record { get; }
     public AllaganTools Allagan { get; }
+
+    /// <summary>AutoRetainer: your retainers' names (it doesn't keep what they hold).</summary>
+    public AutoRetainer AutoRetainer { get; }
 
     /// <summary>Starts reading the vendors off the framework thread.</summary>
     public void WarmUp() => Vendors.WarmUp();
@@ -42,7 +46,11 @@ public sealed class Shopping : IDisposable
         try
         {
             Record.Tick();
-            if (!last.Shop.IsEmpty) Allagan.Refresh();
+            if (!last.Shop.IsEmpty)
+            {
+                AutoRetainer.Refresh();
+                Allagan.Refresh();
+            }
         }
         catch (Exception ex)
         {
@@ -104,11 +112,17 @@ public sealed class Shopping : IDisposable
         if (k == key) return last.Shop;
         var firstForPlan = !ReferenceEquals(key.Plan, plan);
         key = k;
-        if (firstForPlan) Allagan.Refresh(soon: true);
+        if (firstForPlan)
+        {
+            AutoRetainer.Refresh();
+            Allagan.Refresh(soon: true);
+        }
 
         var needs = ShoppingPlanner.NeedsOf(plan, dyesToBuy.Select(d => (d.Stain, d.Count)), s => data.DyeItems(s).FirstOrDefault());
+        // Retainers' names: the game's list (once it's been sent this session), else AutoRetainer's.
         var names = RetainerRecord.Names();
-        // With the game's retainer list known, only its retainers count from Allagan Tools (not a company chest).
+        foreach (var (id, name) in AutoRetainer.Names) names.TryAdd(id, name);
+        // With the retainers known, only they count from Allagan Tools (not a company chest).
         var allagan = names.Count > 0 ? Allagan.Stocks.Where(s => names.ContainsKey(s.RetainerId)) : Allagan.Stocks;
         var retainers = RetainerStocks.Merge(Record.Stocks(), allagan, names);
 

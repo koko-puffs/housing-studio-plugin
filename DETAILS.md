@@ -182,7 +182,13 @@ Each thing is taken from the first source that has it, in this order (`Core/Sour
      `AllaganTools.GetCharacterItems(id)` → `HashSet<ulong[]>`, each array item id then quantity. Every
      call is wrapped: not installed, not ready, other signatures or a throw all mean "nothing from it"
      (logged once). Its retainers are named from the game's retainer list when that's been sent this
-     session (and only those ids are kept then, so a company chest isn't taken for a retainer).
+     session, else from **AutoRetainer** (below); once either names them, only those ids are kept, so
+     a company chest isn't taken for a retainer.
+   - **AutoRetainer**, when it's installed: `AutoRetainer.GetOfflineCharacterData(contentId)` (its own
+     `OfflineCharacterData`, taken as an object and read by name: `RetainerData`, each `Name` and
+     `RetainerID`) gives your retainers' names and ids before the game's list is sent. It keeps no
+     record of what retainers hold, so it names, it doesn't count. Wrapped like Allagan Tools
+     (`Game/AutoRetainer.cs`).
 2. **Buy from vendors** ("Material Supplier, Mist (10.9, 11.4) · 1,500 gil each"), with a map-pin button
    that flags the NPC on the map (`IGameGui.OpenMapWithMapLink`). `Game/VendorData.cs` reads the game's
    data once, in the background, when the plugin starts: every gil shop's items (`GilShopItem`; only
@@ -304,7 +310,7 @@ HousingStudio/
                editor's state, pick up / set down), HousingActions (item menus, the dye window,
                aiming the held piece), FurnitureReader, FixtureReader (the home's fixtures, inside and out, for saving it), InventoryReader, PlaceAnywhere;
                VendorData (who sells what, where), MarketPrices (Universalis), Retainers
-               (the retainer record, Allagan Tools' IPC).
+               (the retainer record, Allagan Tools' IPC), AutoRetainer (retainers' names over IPC).
   Session/     LayoutSession (the design matched to the game), PlacementRunner (the run: each
                piece's steps), Backups, ActivityLog, Shopping (the shopping plan, kept up to date).
   UI/          the window: Kit/ (the design system's tokens, fonts, icons and controls drawn with
