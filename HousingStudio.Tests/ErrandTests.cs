@@ -172,6 +172,41 @@ public class ErrandPlannerTests
         Assert.Equal(new[] { 1u, 2u }, stops.Select(s => s.Vendor!.NpcId));
         Assert.Equal(2, stops[1].Items.Count);
     }
+
+    // 0.7.12: listings Universalis hasn't seen lately are put after fresh ones; a world whose board had
+    // none is left out.
+
+    [Fact]
+    public void FreshListingsAreChosenOverOldCheaperOnes()
+    {
+        var old = Noon - TimeSpan.FromDays(3);
+        var quote = new MarketQuote(300, "Light", Noon, new List<MarketListing>
+        {
+            new(1000, 1, "Lich", false, 0, old),
+            new(1500, 1, "Odin", false, 0, Noon - TimeSpan.FromHours(1)),
+        });
+        var shop = Shop(new[] { new Need(300, 1, NeedKind.Piece) }, quotes: new[] { quote });
+        var plan = ErrandPlanner.Build(shop, Options() with { Now = Noon });
+        Assert.Equal("Odin", Assert.Single(plan.Trips).Stops.Single(s => s.Kind == StopKind.Market).World);
+    }
+
+    [Fact]
+    public void OldListingsStillCountWhenTheFreshOnesAreTooFew()
+    {
+        var old = Noon - TimeSpan.FromDays(3);
+        var quote = new MarketQuote(300, "Light", Noon, new List<MarketListing> { new(1000, 1, "Lich", false, 0, old) });
+        var shop = Shop(new[] { new Need(300, 1, NeedKind.Piece) }, quotes: new[] { quote });
+        var plan = ErrandPlanner.Build(shop, Options() with { Now = Noon });
+        Assert.Equal("Lich", Assert.Single(plan.Trips).Stops.Single(s => s.Kind == StopKind.Market).World);
+    }
+
+    [Fact]
+    public void AWorldWhoseBoardHadNoneIsLeftOut()
+    {
+        var shop = Shop(new[] { new Need(300, 1, NeedKind.Piece) }, quotes: new[] { Quote(300, (1000, 1, "Lich"), (2000, 1, "Odin")) });
+        var plan = ErrandPlanner.Build(shop, Options() with { ListingAllowed = (item, world) => !(item == 300 && world == "Lich") });
+        Assert.Equal("Odin", Assert.Single(plan.Trips).Stops.Single(s => s.Kind == StopKind.Market).World);
+    }
 }
 
 public class MarketRuleTests
@@ -425,5 +460,81 @@ public class AskedCostTests
         Assert.Null(HousingStudio.Core.MarketRule.AskedCost("Leave the estate hall?", 1));
         Assert.Null(HousingStudio.Core.MarketRule.AskedCost(null, 1));
     }
+
 }
 
+public class DoorWayTests
+{
+    private static readonly DateTime Noon = new(2026, 10, 31, 12, 0, 0, DateTimeKind.Utc);
+
+    private static List<Vector3> Line(params (float X, float Z)[] at) => at.Select(a => new Vector3(a.X, 0, a.Z)).ToList();
+
+    [Fact]
+    public void ASpotIsKeptOnlyOnceYouveMovedFarEnough()
+    {
+        var spots = new List<Vector3>();
+        DoorWays.Add(spots, new Vector3(0, 0, 0));
+        DoorWays.Add(spots, new Vector3(0.3f, 0, 0));
+        DoorWays.Add(spots, new Vector3(0.8f, 0, 0));
+        Assert.Equal(2, spots.Count);
+        Assert.Equal(0.8f, spots[^1].X, 3);
+    }
+
+    [Fact]
+    public void ARecordingStopsGrowingPastTheMost()
+    {
+        var spots = new List<Vector3>();
+        for (var i = 0; i < DoorWays.MostSpots; i++) Assert.True(DoorWays.Add(spots, new Vector3(i, 0, 0)));
+        Assert.False(DoorWays.Add(spots, new Vector3(DoorWays.MostSpots + 5, 0, 0)));
+    }
+
+    [Fact]
+    public void TheWayIsTheOneEndingAtThisDoorInThisZone()
+    {
+        var mine = DoorWay.From(340, Line((0, 0), (5, 0), (5, 10)), Noon);
+        var neighbour = DoorWay.From(340, Line((0, 0), (-20, 0)), Noon);
+        var elsewhere = DoorWay.From(341, Line((0, 0), (5, 0), (5, 10)), Noon);
+        var ways = new[] { neighbour, elsewhere, mine };
+        Assert.Same(mine, DoorWays.For(ways, 340, new Vector3(5, 3, 11.5f)));
+        Assert.Null(DoorWays.For(ways, 340, new Vector3(30, 0, 30)));
+        Assert.Null(DoorWays.For(ways, 339, new Vector3(5, 0, 10)));
+    }
+
+    [Fact]
+    public void RecordingAgainReplacesTheWayToTheSameDoor()
+    {
+        var ways = new List<DoorWay> { DoorWay.From(340, Line((0, 0), (5, 10)), Noon), DoorWay.From(340, Line((0, 0), (40, 40)), Noon) };
+        DoorWays.Keep(ways, DoorWay.From(340, Line((2, 0), (5, 9)), Noon));
+        Assert.Equal(2, ways.Count);
+        Assert.Contains(ways, w => w.Spots()[0].X == 2);
+        Assert.DoesNotContain(ways, w => w.Spots()[0].X == 0 && w.End!.Value.Z == 10);
+    }
+
+    [Fact]
+    public void FollowingStartsAfterTheNearestSpot()
+    {
+        var spots = Line((0, 0), (1, 0), (2, 0), (3, 0), (4, 0));
+        var (left, off) = DoorWays.From(spots, new Vector3(1.1f, 0, 0.2f));
+        Assert.Equal(new[] { 2f, 3f, 4f }, left.Select(s => s.X));
+        Assert.True(off < 0.5f);
+    }
+
+    [Fact]
+    public void FarFromTheWayItGoesToTheNearestSpotFirst()
+    {
+        var spots = Line((0, 0), (1, 0), (2, 0));
+        var (left, off) = DoorWays.From(spots, new Vector3(1, 0, 10));
+        Assert.Equal(new[] { 1f, 2f }, left.Select(s => s.X));
+        Assert.True(off > 9);
+    }
+
+    [Fact]
+    public void AtTheEndThereIsNothingLeft()
+    {
+        var (left, _) = DoorWays.From(Line((0, 0), (1, 0)), new Vector3(1, 0, 0));
+        Assert.Empty(left);
+    }
+
+    [Fact]
+    public void AWayIsMeasuredAlongIt() => Assert.Equal(15f, DoorWays.Length(Line((0, 0), (5, 0), (5, 10))), 3);
+}

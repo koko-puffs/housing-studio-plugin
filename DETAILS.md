@@ -8,7 +8,23 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.7.11. Placing works in the game; the newer features haven't all been tried in it yet.**
+> **Status: 0.7.12. Placing works in the game; the newer features haven't all been tried in it yet.**
+> 0.7.12: **the way to your front door** is recorded once and followed after (Settings → Getting →
+> **Way to your door**: Record, walk from where the home teleport lands you to your door, go in; going
+> in saves it). vnavmesh's map of a residential ward is built from the zone, which has no houses or
+> fences in it, so its own way to a door runs through the gate posts and walls; no spot picked around
+> the door could fix that. One recording serves the same plot in every ward and on every world (the
+> plots sit in the same places). Without one, vnavmesh's way is tried; stuck (no nearer for 4 s) or
+> stopped short, once more, then **you're asked to walk in** and the errands carry on once you're
+> inside, rather than stopping. **The door** is used only once you've landed (not mid-jump: "Unable to
+> execute command while jumping"), and again if its question doesn't come in 2.5 s (three times).
+> **Market listings**: listings Universalis hasn't seen in 12 hours are chosen only when the fresh ones
+> aren't enough (old listings have often been bought by the time the board is read), and a world whose
+> board had none of an item isn't planned for it again in the run; a trip that only found empty boards
+> doesn't stop the run. The board's own answer with nothing in it reads as "none listed" at once.
+> **The furnishing editor in another mode**: it opens in the mode last used (the storeroom, say), and
+> its bar comes a moment after; switching to Rotate now waits for the bar (0.7.11 stopped with
+> "HousingLayout isn't open").
 > 0.7.11: **the market board's listings** are read as the game receives them (Dalamud's market board
 > service, `Game/BoardListings.cs`): 0.7.10 read the game's item search proxy, which never said they'd
 > come, so every item waited 15 s and was left. A batch that comes later (the list sent again, after a

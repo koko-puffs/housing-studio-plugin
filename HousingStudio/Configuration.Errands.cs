@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace HousingStudio;
 
 /// <summary>"Get everything for me" (Settings → Beta): the errands' own settings (their limits in Settings → Getting).</summary>
@@ -35,6 +37,12 @@ public sealed partial class Configuration
 
     /// <summary>The errands ride (the mount roulette) where the zone lets you, for walks long enough; Sprint otherwise.</summary>
     public bool ErrandsRide { get; set; } = true;
+
+    /// <summary>
+    /// The ways to your front door you walked once while they were recorded (Settings → Getting → Way to
+    /// your door): the errands follow one instead of vnavmesh's own way, which goes through the walls.
+    /// </summary>
+    public List<Core.DoorWay> ErrandsDoorWays { get; set; } = new();
 
     /// <summary>Bag slots the errands leave free (a stack that doesn't join one already there, a quest item).</summary>
     public int ErrandsSpareSlots { get; set; } = 2;

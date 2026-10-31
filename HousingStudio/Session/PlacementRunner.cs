@@ -2216,11 +2216,21 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                             if (!ModeRoute.Needed(bar, HousingEditor.Mode)) return StepOutcome.Done;
                             queue.InsertNext(new[]
                             {
-                                Step.Act($"{ClickWord(bar)}: {call.Describe()}", () =>
+                                // The bar comes a moment after the editor's mode does (0.7.11: the editor opened in
+                                // Store, the last mode used, and Rotate was pressed before its bar was there).
+                                new Step
                                 {
-                                    editorMayCloseUntil = DateTime.UtcNow + ModeSwitchGrace;
-                                    return GameUi.Fire(call) ? StepOutcome.Done : StepOutcome.Halt($"{call.Addon} isn't open, so the editor couldn't be switched to {ModeWord(mode)}.");
-                                }),
+                                    Label = $"{ClickWord(bar)}: {call.Describe()}",
+                                    IsAction = true,
+                                    Timeout = TimeSpan.FromSeconds(5),
+                                    TimeoutMessage = $"{call.Addon} didn't open, so the editor couldn't be switched to {ModeWord(mode)}.",
+                                    Run = () =>
+                                    {
+                                        editorMayCloseUntil = DateTime.UtcNow + ModeSwitchGrace;
+                                        if (!ModeRoute.Needed(bar, HousingEditor.Mode)) return StepOutcome.Done;
+                                        return GameUi.Fire(call) ? StepOutcome.Done : StepOutcome.Waiting;
+                                    },
+                                },
                                 Step.Wait($"The editor is in {ModeWord(ModeRoute.After(bar))}", () =>
                                 {
                                     editorMayCloseUntil = DateTime.UtcNow + TimeSpan.FromSeconds(2);
@@ -2249,7 +2259,8 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     : Step.Wait(waitFor, () =>
                     {
                         editorMayCloseUntil = DateTime.UtcNow + TimeSpan.FromSeconds(2);
-                        return ModeRoute.Reached(click, HousingEditor.Mode);
+                        // The furnishing editor: its mode, and its bar there to press (it opens in the mode last used).
+                        return ModeRoute.Reached(click, HousingEditor.Mode) && (click != ModeClick.OpenFurnishings || GameUi.IsOpen(UiTable.LayoutBar));
                     }, ClickWait));
             }
             queue.InsertNext(steps);

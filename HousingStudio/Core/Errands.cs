@@ -118,6 +118,15 @@ public sealed record ErrandOptions
 
     /// <summary>Whether a listing's world may be bought on (null: any world of the data centre).</summary>
     public Func<string, bool>? WorldAllowed { get; init; }
+
+    /// <summary>
+    /// Whether an item may be bought on a world (null: yes): a board the errands found without it this
+    /// run isn't planned for it again.
+    /// </summary>
+    public Func<uint, string, bool>? ListingAllowed { get; init; }
+
+    /// <summary>Now, for how old Universalis's listings are (tests set it).</summary>
+    public DateTime Now { get; init; } = DateTime.UtcNow;
 }
 
 /// <summary>The errands for a shopping plan: trips that fit your bags, and what's left out.</summary>
@@ -270,13 +279,19 @@ public static class ErrandPlanner
         var quote = line.Market!;
         IReadOnlyList<MarketListing> chosen;
         var shortBy = 0;
-        if (o.WorldAllowed == null && line.MarketCost != null)
+        // Listings Universalis had lately first: older ones have often gone by the time the board is read.
+        var fresh = quote.Listings.Where(l => l.SeenAt == null || o.Now - l.SeenAt.Value <= MarketListing.TrustedFor).ToList();
+        var stale = fresh.Count < quote.Listings.Count;
+        if (o.WorldAllowed == null && o.ListingAllowed == null && line.MarketCost != null && !stale)
         {
             chosen = line.MarketCost.Listings;
         }
         else
         {
-            var allowed = quote.Listings.Where(l => o.WorldAllowed == null || o.WorldAllowed(l.World)).ToList();
+            bool Allowed(MarketListing l) => (o.WorldAllowed == null || o.WorldAllowed(l.World)) && (o.ListingAllowed == null || o.ListingAllowed(line.ItemId, l.World));
+            var allowed = fresh.Where(Allowed).ToList();
+            // Enough of the fresh ones, else every allowed listing (old ones too) rather than none.
+            if (allowed.Sum(l => l.Quantity) < line.Count) allowed = quote.Listings.Where(Allowed).ToList();
             var cost = (quote with { Listings = allowed }).CostFor(line.Count);
             chosen = cost.Listings;
             shortBy = cost.Short;

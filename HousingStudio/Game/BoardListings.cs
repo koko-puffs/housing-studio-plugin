@@ -19,6 +19,10 @@ public static class BoardListings
     private static uint askedItem;
     private static DateTime askedAt = DateTime.MaxValue;
     private static bool hooked;
+    private static bool answered;
+
+    /// <summary>Listening to the market board service (else the game's item search proxy is read).</summary>
+    public static bool Hooked => hooked;
 
     public static void Hook()
     {
@@ -48,6 +52,7 @@ public static class BoardListings
         {
             item = itemId;
             Received.Clear();
+            answered = false;
             lastAt = DateTime.MinValue;
             askedItem = itemId;
             askedAt = DateTime.UtcNow;
@@ -79,7 +84,8 @@ public static class BoardListings
     {
         lock (Gate)
         {
-            if (item != itemId || Received.Count == 0 || DateTime.UtcNow - lastAt < settle) return null;
+            // An answer with nothing in it is "none listed" (as is no answer at all, after a while: Open).
+            if (item != itemId || (Received.Count == 0 && !answered) || DateTime.UtcNow - lastAt < settle) return null;
             return new List<ErrandGame.BoardListing>(Received);
         }
     }
@@ -91,6 +97,7 @@ public static class BoardListings
             // A request's batches come together; one coming later is the list sent again (after a
             // purchase, say), whose rows have moved: it's taken afresh.
             if (DateTime.UtcNow - lastAt > TimeSpan.FromSeconds(1.5)) Received.Clear();
+            answered = true;
             foreach (var l in offerings.ItemListings)
             {
                 if (l.ItemId != item)

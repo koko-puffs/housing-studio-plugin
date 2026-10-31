@@ -43,7 +43,7 @@ public sealed partial class MainWindow
     /// <summary>The settings under More options (shown on its row).</summary>
     private const int MoreCount = 12;
 
-    private const int GettingRows = 7;
+    private const int GettingRows = 8;
     private const int BetaRows = 5;
 
     private static readonly TabSpec[] SettingsTabs =
@@ -449,9 +449,31 @@ public sealed partial class MainWindow
                     config.Save();
                 }
             }, below: true);
+        DrawDoorWayRow(i++);
         DrawAccountRow(i++);
         DrawGameLinkRows(i);
         Kit.EndPanel();
+    }
+
+    /// <summary>
+    /// Way to your door: you walk from where the home teleport lands you to your front door and go in,
+    /// once, and the errands follow that way (vnavmesh's own runs into the walls: a ward's map has no
+    /// houses in it). Record / Stop; Forget when one's recorded in this zone.
+    /// </summary>
+    private void DrawDoorWayRow(int index)
+    {
+        var errands = Plugin.Errands;
+        var recorded = errands.HasWayHere(out var n);
+        var note = errands.WayNote
+                   ?? (recorded ? $"{(n == 1 ? "One way" : $"{n} ways")} recorded in this ward's zone" : "Walk it once; the errands follow it");
+        var label = errands.RecordingWay ? "Stop" : recorded ? "Forget" : "Record";
+        const string tip = "Stand where the home teleport lands you, outside your home, press Record, walk to your front door and go in: going in saves the way. "
+                           + "The errands then follow it to your door (vnavmesh's own way runs into the walls: its map of a ward has no houses in it). "
+                           + "One way serves the same plot in every ward. Forget (beside your door, or anywhere in the zone) lets it go, to record it again.";
+        if (!ButtonRow(index, "##door-way", "Way to your door", note, label, errands.RecordingWay ? Btn.Danger : Btn.Glass, errands.Active, tip: tip)) return;
+        if (errands.RecordingWay) errands.StopWay();
+        else if (recorded) errands.ForgetWays();
+        else if (errands.RecordWay() is { } why) Services.Chat.PrintError($"Way to your door: {why}", "Housing Studio");
     }
 
     // ---------------------------------------------------------------------------------------------

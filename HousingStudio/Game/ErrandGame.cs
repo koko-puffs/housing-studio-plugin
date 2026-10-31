@@ -530,8 +530,10 @@ public static unsafe class ErrandGame
     /// <summary>The listings the board has loaded for an item (in the order shown), or null while it isn't that item's or they're still loading.</summary>
     public static List<BoardListing>? Listings(uint itemId)
     {
-        // As received (Dalamud's market board service), once a batch has settled; else the game's proxy.
-        if (BoardListings.For(itemId, TimeSpan.FromMilliseconds(600)) is { } received) return received;
+        // As received (Dalamud's market board service), once a batch has settled. The game's item search
+        // proxy only when that service couldn't be listened to: it said "loaded" before the listings
+        // were (0.7.11: an empty list at once, then "closed").
+        if (BoardListings.Hooked) return BoardListings.For(itemId, TimeSpan.FromMilliseconds(600));
         var p = InfoProxyItemSearch.Instance();
         if (p == null || p->SearchItemId != itemId || p->WaitingForListings) return null;
         var list = new List<BoardListing>();

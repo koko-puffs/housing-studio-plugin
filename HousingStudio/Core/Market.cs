@@ -9,8 +9,12 @@ namespace HousingStudio.Core;
 /// <summary>One listing on the market board: a stack for sale at one price, on one world.</summary>
 /// <param name="PricePerUnit">Gil for one, before the board's tax.</param>
 /// <param name="Tax">The tax on the whole stack (Universalis says it per listing), 0 when not said.</param>
-public sealed record MarketListing(uint PricePerUnit, int Quantity, string World, bool Hq, uint Tax = 0)
+/// <param name="SeenAt">When Universalis last had the listing from its world (its <c>lastReviewTime</c>), or null when not said.</param>
+public sealed record MarketListing(uint PricePerUnit, int Quantity, string World, bool Hq, uint Tax = 0, DateTime? SeenAt = null)
 {
+    /// <summary>Universalis's word on a listing older than this isn't trusted while fresher ones will do: it has often gone.</summary>
+    public static readonly TimeSpan TrustedFor = TimeSpan.FromHours(12);
+
     /// <summary>What buying the whole stack costs, tax included.</summary>
     public long Total => (long)PricePerUnit * Quantity + Tax;
 }
@@ -139,7 +143,8 @@ public static class Universalis
                 if (price == 0 || qty <= 0) continue;
                 var world = l.TryGetProperty("worldName", out var w) && w.ValueKind == JsonValueKind.String ? w.GetString() ?? string.Empty : string.Empty;
                 var hq = l.TryGetProperty("hq", out var h) && h.ValueKind == JsonValueKind.True;
-                listings.Add(new MarketListing(price, qty, world, hq, UInt(l, "tax")));
+                var seen = UInt(l, "lastReviewTime") is var t and > 0 ? DateTimeOffset.FromUnixTimeSeconds(t).UtcDateTime : (DateTime?)null;
+                listings.Add(new MarketListing(price, qty, world, hq, UInt(l, "tax"), seen));
             }
         listings.Sort((a, b) => a.PricePerUnit.CompareTo(b.PricePerUnit));
         var units = (int)Math.Min(int.MaxValue, UInt(e, "unitsForSale"));

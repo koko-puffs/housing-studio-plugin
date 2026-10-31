@@ -48,6 +48,9 @@ public sealed partial class ErrandRunner : IDisposable
     private readonly GameData data;
     private readonly ActivityLog log;
     private readonly Shopping shop;
+
+    /// <summary>Items a world's board had none of (or none to buy) this run: not planned there again.</summary>
+    private readonly HashSet<(uint Item, string World)> emptyBoards = new();
     private readonly StepQueue queue = new(() => DateTime.UtcNow);
 
     /// <summary>A part of a trip: its words, its steps, and where it is (for the window's journey and title).</summary>
@@ -72,10 +75,16 @@ public sealed partial class ErrandRunner : IDisposable
     private int tripsAtStart;
     private int cycles;
     private int gotThisTrip;
+
+    /// <summary>Boards found without what was wanted this trip: a trip that got nothing but those isn't "something's wrong" (the next one goes elsewhere).</summary>
+    private int emptiedThisTrip;
     private bool travelling;
     private uint lastTerritory;
     private DateTime? pausedAt;
     private Vector3? walkTarget;
+
+    /// <summary>The recorded way being followed to your door (so a pause's walk carries on along it), or null.</summary>
+    private IReadOnlyList<Vector3>? followWay;
     private DateTime readAfter;
     private readonly Dictionary<uint, int> got = new();
 
@@ -213,6 +222,7 @@ public sealed partial class ErrandRunner : IDisposable
             Offers = shop.Vendors.Offers,
             PreferDistrict = at.District,
             WorldAllowed = config.ErrandsOtherWorlds ? w => w == world || Travel.CanVisit(w) != false : w => w == world,
+            ListingAllowed = (item, w) => !emptyBoards.Contains((item, w)),
         };
         return ErrandPlanner.Build(shopping, options);
     }
@@ -303,6 +313,7 @@ public sealed partial class ErrandRunner : IDisposable
         }
         Rehearsal = rehearse;
         rehearsalFailures = 0;
+        emptyBoards.Clear();
         home = ErrandGame.HomeHere(ctx)!;
         homeKind = KindOf(home);
         homeWorld = ErrandGame.HomeWorld();
@@ -322,6 +333,7 @@ public sealed partial class ErrandRunner : IDisposable
         travelling = false;
         LetsPlace = false;
         walkTarget = null;
+        followWay = null;
         lastTerritory = ErrandGame.Territory;
         StopReason = null;
         ResultWaiting = false;
@@ -335,6 +347,9 @@ public sealed partial class ErrandRunner : IDisposable
                  + $"{(houseBell ? "a summoning bell in it" : "no summoning bell in it")}.{(config.ErrandsTrustGuesses ? string.Empty : " Clicks not yet seen working wait for Continue.")}"
                  + (keepAsFirst != null ? $" The first placing swaps: what's here is kept as “{keepAsFirst}”, and {ClearOutFirst} pieces not in the design are put away first."
                      : clearOutFirst != null ? $" The first placing clears out {ClearOutFirst} pieces not in the design first." : string.Empty));
+        if (homeKind != HomeKind.Apartment && config.ErrandsDoorWays.Count == 0)
+            log.Info("No way to your front door is recorded: vnavmesh's map of a ward has no houses in it, so its way to your door can run into walls. "
+                     + "If it does, you're asked to walk in (Settings → Getting → Way to your door records the way once, to be followed after).");
         if (rehearse) RehearsalStarted(plan);
         State = RunState.Running;
         StatusText = "Starting…";
@@ -368,8 +383,9 @@ public sealed partial class ErrandRunner : IDisposable
         State = RunState.Running;
         if (pausedAt is { } at) queue.Hold(DateTime.UtcNow - at);
         pausedAt = null;
-        // A walk the pause stopped carries on.
-        if (walkTarget is { } to) Nav.MoveTo(to);
+        // A walk the pause stopped carries on (a recorded way from where you are along it).
+        if (followWay is { } w && ErrandGame.Me is { } me) Nav.Follow(DoorWays.From(w, me).Left);
+        else if (walkTarget is { } to) Nav.MoveTo(to);
         log.Info("Errands resumed.");
     }
 
@@ -387,6 +403,7 @@ public sealed partial class ErrandRunner : IDisposable
         LetsPlace = false;
         Nav.Stop();
         walkTarget = null;
+        followWay = null;
         if (travelling || Travel.Busy) Travel.Abort();
         travelling = false;
         CloseWindows();
@@ -410,6 +427,7 @@ public sealed partial class ErrandRunner : IDisposable
         keepAsFirst = null;
         Nav.Stop();
         walkTarget = null;
+        followWay = null;
         shop.AutoRetainer.LetBe();
         StopReason = null;
         StatusText = why;
@@ -444,6 +462,15 @@ public sealed partial class ErrandRunner : IDisposable
     public void Tick(HousingContext ctx)
     {
         here = ctx;
+        try
+        {
+            TickWay();
+        }
+        catch (Exception ex)
+        {
+            Services.Log.Error(ex, "Recording the way to your door failed");
+            RecordingWay = false;
+        }
         if (!Active) return;
         try
         {
@@ -537,6 +564,7 @@ public sealed partial class ErrandRunner : IDisposable
         Trip++;
         cycles++;
         gotThisTrip = 0;
+        emptiedThisTrip = 0;
         segments.Clear();
         segment = -1;
         log.Info($"Trip {Trip}: {next.Count} things ({next.Slots} bag slots), about {next.Gil:N0} gil, "
@@ -869,7 +897,8 @@ public sealed partial class ErrandRunner : IDisposable
                         }
                         return StepOutcome.Waiting;
                     }
-                    if (!gotDown) return StepOutcome.Done;
+                    // Not ridden, but maybe mid-jump (vnavmesh jumps): landed first all the same.
+                    if (!gotDown) return Movement.Landed ? StepOutcome.Done : StepOutcome.Waiting;
                     return Movement.Landed && DateTime.UtcNow - downAt > TimeSpan.FromMilliseconds(900) ? StepOutcome.Done : StepOutcome.Waiting;
                 },
             },
@@ -1401,7 +1430,8 @@ public sealed partial class ErrandRunner : IDisposable
                         log.Info($"  Buying {l.Quantity} × {name} at {l.UnitPrice:N0} gil each ({cost:N0} with tax), row {l.Row}.");
                         return GameUi.Fire(ErrandTable.ListingBuy, UiCallValues.Of(("index", l.Row))) ? StepOutcome.Done : StepOutcome.Halt($"{name}'s listings closed.");
                     }
-                    log.Warn($"  No listing of {name} to buy here ({firstWhy ?? "none listed"}): {wanted - bought} left for now.");
+                    log.Warn($"  No listing of {name} to buy here ({firstWhy ?? "none listed"}): {wanted - bought} left for now; this world isn't planned for it again this run.");
+                    if (emptyBoards.Add((item.ItemId, ErrandGame.CurrentWorld()))) emptiedThisTrip++;
                     return Finished();
                 },
             },
@@ -1616,12 +1646,19 @@ public sealed partial class ErrandRunner : IDisposable
         var steps = new List<Step>();
         Vector3? door = null;
         Vector3? spot = null;
+        DoorWay? way = null;
         if (homeKind != HomeKind.Apartment && ErrandGame.Me is { } me && ErrandGame.Nearest(ErrandTable.EntranceWords, me, 30, UsableKinds) is { } entrance)
         {
             door = entrance.Position;
             spot = ErrandGame.OutsideOf(entrance);
-            log.Info($"  Your door is at ({entrance.Position.X:0.0}, {entrance.Position.Z:0.0}), facing {entrance.Rotation * 180 / MathF.PI:0}°; walking to ({spot.Value.X:0.0}, {spot.Value.Z:0.0}), {ErrandGame.DistanceTo(spot.Value):0} yalms away.");
+            way = DoorWays.For(config.ErrandsDoorWays, ErrandGame.Territory, entrance.Position);
+            log.Info(way != null
+                ? $"  Your door is at ({entrance.Position.X:0.0}, {entrance.Position.Z:0.0}); following the way you recorded to it ({DoorWays.Length(way.Spots()):0} yalms)."
+                : $"  Your door is at ({entrance.Position.X:0.0}, {entrance.Position.Z:0.0}), facing {entrance.Rotation * 180 / MathF.PI:0}°; walking to ({spot.Value.X:0.0}, {spot.Value.Z:0.0}), {ErrandGame.DistanceTo(spot.Value):0} yalms away. "
+                  + "No way to it is recorded: vnavmesh's map of a ward has no houses in it, so its way may run into walls (Settings → Getting → Way to your door records yours).");
         }
+        // Inside (your home, or the hall your chambers are in): what going in waits for.
+        bool In() => Inside() || (home is { Chamber: true } && ErrandGame.InHouseOf(home));
         if (door == null)
         {
             if (homeKind != HomeKind.Apartment) log.Warn($"  Couldn't find your door. Near you: {ErrandGame.NamesNear(30)}.");
@@ -1629,28 +1666,68 @@ public sealed partial class ErrandRunner : IDisposable
         }
         else
         {
-            // To the spot straight out in front of the door, and all the way to it.
-            steps.AddRange(WalkSteps("your door", () => spot, within: 1f));
+            // Handed to you when the way there fails: you walk in, and the errands go on once you're in.
+            var handed = false;
+            void HandOver(string why)
+            {
+                handed = true;
+                Nav.Stop();
+                walkTarget = null;
+                followWay = null;
+                log.Warn($"  {why} Walk to your door and go in; the errands carry on once you're inside{(way == null ? " (recording the way once, in Settings → Getting, saves this next time)" : string.Empty)}.");
+                queue.InsertNext(new[] { Arriving(You("Walk to your door and go in", In)) });
+            }
+            var end = way?.End ?? spot!.Value;
+            steps.AddRange(ApproachSteps(way != null, end, door.Value, HandOver, () => handed, () =>
+            {
+                if (ErrandGame.Me is not { } p) return false;
+                if (way == null) return Nav.MoveTo(end);
+                var spots = way.Spots();
+                var (rest, off) = DoorWays.From(spots, p);
+                if (off > 15) log.Warn($"  You're {off:0} yalms from the way you recorded (the teleport landed elsewhere?); going straight to its nearest spot.");
+                followWay = spots;
+                return rest.Count == 0 || Nav.Follow(rest);
+            }));
+            // On your feet and landed, then the door; used again if its question doesn't come (0.7.11:
+            // "Unable to execute command while jumping", and nothing more).
+            var uses = 0;
+            var usedAt = DateTime.MinValue;
             steps.Add(new Step
             {
                 Label = "Use your door",
                 IsAction = true,
+                Timeout = TimeSpan.FromSeconds(15),
+                TimeoutMessage = "Your door didn't ask to go in.",
                 Run = () =>
                 {
+                    if (handed || In() || GameUi.YesNoText() != null) return StepOutcome.Done;
+                    if (Movement.Mounted)
+                    {
+                        Movement.GetDown(log.Info);
+                        return StepOutcome.Waiting;
+                    }
+                    if (!Movement.Landed || (uses > 0 && DateTime.UtcNow - usedAt < TimeSpan.FromSeconds(2.5))) return StepOutcome.Waiting;
+                    if (uses >= 3) return StepOutcome.Halt("Your door didn't ask to go in (used 3 times).");
                     if (ErrandGame.Me is not { } p || ErrandGame.Nearest(ErrandTable.EntranceWords, p, Reach + 2, UsableKinds) is not { } o)
-                        return StepOutcome.Halt($"Couldn't find your door within reach. Near you: {ErrandGame.NamesNear(15)}.");
+                    {
+                        HandOver($"Couldn't reach your door from here ({ErrandGame.DistanceTo(door.Value):0} yalms away).");
+                        return StepOutcome.Done;
+                    }
                     travelling = true;
-                    return ErrandGame.Interact(o) ? StepOutcome.Done : StepOutcome.Halt("Couldn't use your door.");
+                    if (uses > 0) log.Info("  The door didn't ask yet: using it again.");
+                    uses++;
+                    usedAt = DateTime.UtcNow;
+                    if (!ErrandGame.Interact(o)) log.Info("  The game didn't take using the door.");
+                    return StepOutcome.Waiting;
                 },
             });
-            steps.Add(Step.Wait("The game asks to go in", () => GameUi.YesNoText() != null || Inside(), TimeSpan.FromSeconds(5), StepStatus.Done));
             steps.Add(new Step
             {
                 Label = "Answer yes (go in)",
                 IsAction = true,
                 Run = () =>
                 {
-                    if (Inside() || GameUi.YesNoText() is not { } question) return StepOutcome.Done;
+                    if (handed || In() || GameUi.YesNoText() is not { } question) return StepOutcome.Done;
                     // Only the door's own question ("Enter the estate hall?").
                     if (!ErrandTable.EnterWords.Any(w => question.TrimStart().StartsWith(w, StringComparison.OrdinalIgnoreCase)))
                         return StepOutcome.Halt($"The game asked \"{question}\", not to go in: left for you.");
@@ -1660,13 +1737,115 @@ public sealed partial class ErrandRunner : IDisposable
                 },
             });
             steps.Add(Arriving(home is { Chamber: true }
-                ? WaitFor("Inside the house", () => Inside() || ErrandGame.InHouseOf(home), TimeSpan.FromSeconds(30), "Didn't get inside the house.")
+                ? WaitFor("Inside the house", In, TimeSpan.FromSeconds(30), "Didn't get inside the house.")
                 : WaitFor("Inside your home", Inside, TimeSpan.FromSeconds(30), "Didn't get inside your home.")));
         }
         // Private chambers: the door goes into the house's hall; then up to the room.
         if (home is { Chamber: true }) steps.AddRange(ChamberSteps());
         steps.AddRange(ReadAgainSteps());
         return steps;
+    }
+
+    /// <summary>
+    /// To your front door from outside: along the way you recorded (<paramref name="recorded"/>), else
+    /// vnavmesh's own way to the spot out front. Stuck (no nearer for 4 seconds) or stopped short: once
+    /// more, then handed to you (<paramref name="handOver"/>), not stopped. Close enough to use the door
+    /// counts as there.
+    /// </summary>
+    private List<Step> ApproachSteps(bool recorded, Vector3 end, Vector3 door, Action<string> handOver, Func<bool> handed, Func<bool> go)
+    {
+        var tries = 0;
+        var started = DateTime.MinValue;
+        var best = float.MaxValue;
+        var bestAt = DateTime.MinValue;
+        var sprintTried = DateTime.MinValue;
+        var meshAsked = DateTime.MinValue;
+        bool Start()
+        {
+            tries++;
+            started = bestAt = DateTime.UtcNow;
+            best = ErrandGame.DistanceTo(end);
+            return go();
+        }
+        return new List<Step>
+        {
+            new Step
+            {
+                Label = recorded ? "Follow your way to the door (vnavmesh)" : "Walk to your door (vnavmesh)",
+                IsAction = true,
+                Run = () =>
+                {
+                    if (handed() || ErrandGame.DistanceTo(end) <= 1f) return StepOutcome.Done;
+                    // vnavmesh's map only matters to its own way (a recorded one is walked as it is).
+                    if (!recorded && !Nav.Ready)
+                    {
+                        if (meshAsked == DateTime.MinValue) meshAsked = DateTime.UtcNow;
+                        if (DateTime.UtcNow - meshAsked < TimeSpan.FromSeconds(30)) return StepOutcome.Waiting;
+                        handOver("vnavmesh has no map of the ward.");
+                        return StepOutcome.Done;
+                    }
+                    if (!Start())
+                    {
+                        handOver("vnavmesh wouldn't walk to your door.");
+                        return StepOutcome.Done;
+                    }
+                    Movement.TrySprint(log.Info);
+                    sprintTried = DateTime.UtcNow;
+                    if (!recorded) walkTarget = end;
+                    return StepOutcome.Done;
+                },
+            },
+            new Step
+            {
+                Label = "Arrive at your door",
+                Timeout = TimeSpan.FromSeconds(90),
+                OnTimeout = StepStatus.Done, // the door's step decides (handed to you if it's out of reach)
+                Run = () =>
+                {
+                    if (handed() || started == DateTime.MinValue) return StepOutcome.Done;
+                    var d = ErrandGame.DistanceTo(end);
+                    if (d <= 1f)
+                    {
+                        Nav.Stop();
+                        walkTarget = null;
+                        followWay = null;
+                        return StepOutcome.Done;
+                    }
+                    if (d < best - 0.5f)
+                    {
+                        best = d;
+                        bestAt = DateTime.UtcNow;
+                    }
+                    if (!Movement.Mounted && d > 15 && DateTime.UtcNow - sprintTried > TimeSpan.FromSeconds(3))
+                    {
+                        sprintTried = DateTime.UtcNow;
+                        Movement.TrySprint(log.Info);
+                    }
+                    var stuck = DateTime.UtcNow - bestAt > TimeSpan.FromSeconds(4);
+                    if ((Nav.Busy && !stuck) || DateTime.UtcNow - started < TimeSpan.FromSeconds(2)) return StepOutcome.Waiting;
+                    Nav.Stop();
+                    // Stopped (or stuck) within reach of the door: near enough to use it.
+                    if (ErrandGame.DistanceTo(door) <= Reach + 1)
+                    {
+                        walkTarget = null;
+                        followWay = null;
+                        return StepOutcome.Done;
+                    }
+                    if (tries >= 2)
+                    {
+                        handOver($"{(stuck ? "Got stuck" : "Stopped")} {ErrandGame.DistanceTo(door):0} yalms from your door{(recorded ? " on the way you recorded" : " (vnavmesh's way)")}.");
+                        return StepOutcome.Done;
+                    }
+                    log.Info($"  {(stuck ? "Stuck" : "Stopped")} {d:0} yalms short of your door: trying once more.");
+                    if (!Start())
+                    {
+                        handOver("vnavmesh wouldn't walk to your door.");
+                        return StepOutcome.Done;
+                    }
+                    return StepOutcome.Waiting;
+                },
+            },
+        };
     }
 
     /// <summary>
@@ -1947,7 +2126,7 @@ public sealed partial class ErrandRunner : IDisposable
                     finishPending = true;
                     return StepOutcome.Done;
                 }
-                if (gotThisTrip == 0) return StepOutcome.Halt("The last trip got nothing, so something's wrong: the log says what each step saw.");
+                if (gotThisTrip == 0 && emptiedThisTrip == 0) return StepOutcome.Halt("The last trip got nothing, so something's wrong: the log says what each step saw.");
                 if (cycles >= tripsAtStart + 3) return StepOutcome.Halt($"That's {cycles} trips, more than the {tripsAtStart} planned: stopped to be safe.");
                 var trip = next.Trips[0];
                 if (Spent + trip.Gil > agreedGil)

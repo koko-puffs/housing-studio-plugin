@@ -43,6 +43,7 @@ public static class Plugins
 /// <item><c>vnavmesh.Nav.IsReady</c> → bool: the zone's mesh is built (it builds after each zone change).</item>
 /// <item><c>vnavmesh.SimpleMove.PathfindAndMoveTo</c> (Vector3 destination, bool fly) → bool: finds a path and walks it.</item>
 /// <item><c>vnavmesh.SimpleMove.PathfindInProgress</c> → bool: still finding the path.</item>
+/// <item><c>vnavmesh.Path.MoveTo</c> (List&lt;Vector3&gt; waypoints, bool fly): walks through the spots given, in order, with no pathfinding (a recorded way to your door).</item>
 /// <item><c>vnavmesh.Path.IsRunning</c> → bool: walking a path.</item>
 /// <item><c>vnavmesh.Path.Stop</c>: stops walking.</item>
 /// </list>
@@ -56,6 +57,7 @@ public sealed class Vnavmesh
     private readonly ICallGateSubscriber<bool> isReady;
     private readonly ICallGateSubscriber<Vector3, bool, bool> pathfindAndMoveTo;
     private readonly ICallGateSubscriber<bool> pathfindInProgress;
+    private readonly ICallGateSubscriber<List<Vector3>, bool, object> follow;
     private readonly ICallGateSubscriber<bool> isRunning;
     private readonly ICallGateSubscriber<object> stop;
     private readonly HashSet<string> failed = new();
@@ -66,6 +68,7 @@ public sealed class Vnavmesh
         isReady = pi.GetIpcSubscriber<bool>("vnavmesh.Nav.IsReady");
         pathfindAndMoveTo = pi.GetIpcSubscriber<Vector3, bool, bool>("vnavmesh.SimpleMove.PathfindAndMoveTo");
         pathfindInProgress = pi.GetIpcSubscriber<bool>("vnavmesh.SimpleMove.PathfindInProgress");
+        follow = pi.GetIpcSubscriber<List<Vector3>, bool, object>("vnavmesh.Path.MoveTo");
         isRunning = pi.GetIpcSubscriber<bool>("vnavmesh.Path.IsRunning");
         stop = pi.GetIpcSubscriber<object>("vnavmesh.Path.Stop");
     }
@@ -78,6 +81,13 @@ public sealed class Vnavmesh
 
     /// <summary>Starts walking to a spot. False when it couldn't start.</summary>
     public bool MoveTo(Vector3 to) => Call("SimpleMove.PathfindAndMoveTo", () => pathfindAndMoveTo.InvokeFunc(to, false), false);
+
+    /// <summary>Walks through these spots in order, as they are (no pathfinding). False when it couldn't start.</summary>
+    public bool Follow(List<Vector3> spots) => spots.Count > 0 && Call("Path.MoveTo", () =>
+    {
+        follow.InvokeAction(spots, false);
+        return true;
+    }, false);
 
     /// <summary>Finding a path or walking one.</summary>
     public bool Busy => Call("SimpleMove.PathfindInProgress", () => pathfindInProgress.InvokeFunc(), false) || Call("Path.IsRunning", () => isRunning.InvokeFunc(), false);

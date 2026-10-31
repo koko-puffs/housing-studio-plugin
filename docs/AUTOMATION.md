@@ -356,7 +356,34 @@ received; `Expect(item)` before the result is opened; a batch more than 1.5 s af
 list afresh. `ErrandGame.Listings` uses them once settled (0.6 s), else the item search proxy;
 `BoardListings.Open` gives none 6 s after asking when nothing came. A vendor's other price:
 `MarketRule.AskedCost(question, n)` (the largest number besides the quantity), yes while `Spent + asked <=
-agreedGil`. The front door: `ErrandGame.OutsideOf(door)`, the nearest of four spots around it.
+agreedGil`. The front door: `ErrandGame.OutsideOf(door)`, the nearest of four spots around it (0.7.12:
+only when no way to it is recorded).
+
+**The way to the front door** (0.7.12, `Core/DoorWays.cs`, `Session/ErrandRunner.DoorWay.cs`): a ward's
+navmesh has no houses (vnavmesh builds it from the zone's collision; the houses are placed later), so
+`PathfindAndMoveTo` to a door runs into walls. Settings → Getting → Way to your door records one:
+`RecordWay` (outside), `TickWay` each frame keeps a spot every `DoorWays.Spacing` (0.75) yalms, up to
+`MostSpots` (400), and notes the "Entrance" within `EndsAtDoor` (5); the zone changing (going in) saves
+it if it ended at a door (`DoorWays.Keep`, replacing one to the same door), as does Stop beside one.
+Kept in `Configuration.ErrandsDoorWays` by ward zone; the end's spot finds it again
+(`DoorWays.For(ways, territory, door)`), so a plot's way serves every ward. `EnterSteps` →
+`ApproachSteps`: with a way, `Vnavmesh.Follow` (`vnavmesh.Path.MoveTo(List<Vector3>, false)`, no
+pathfinding) from the spot after the nearest (`DoorWays.From`; a resume after a pause follows on from
+where you are); else `MoveTo` the spot out front. No nearer by 0.5 yalm in 4 s, or stopped short: once
+more, then `HandOver` (a "You: Walk to your door and go in" step, the rest skipped). Within reach of the
+door counts as there. "Use your door" waits for `Movement.Landed` (getting down first), uses the door,
+and again after 2.5 s with no question (up to 3). `WalkSteps`' last step waits for `Landed` even when
+not ridden. A board found without an item: `emptyBoards` (item, world) → `ErrandOptions.ListingAllowed`;
+`emptiedThisTrip` keeps a trip that got nothing but those from stopping the run.
+
+**Fresh listings** (0.7.12): `MarketListing.SeenAt` is Universalis's `lastReviewTime`; `MarketUnits`
+chooses from those within `MarketListing.TrustedFor` (12 h), all of them when those aren't enough.
+`ErrandGame.Listings` uses only `BoardListings` when hooked (an answer with nothing in it is none
+listed); the item search proxy only when it isn't.
+
+**The editor's bar** (0.7.12): `EnsureMode`'s bar press waits (5 s) for `HousingLayout` to be open,
+and opening the furnishing editor waits for its bar too: the editor opens in the mode last used
+(0.7.11's recording: mode Store at 403.85 s, `HousingLayout` open at 404.02).
 
 **Vendors in a ward's divisions**: `VendorData` keeps every spot of a selling NPC
 (`SpotsOf(name, territory)`), not only the offer's (the first per territory). `VendorTravelSteps` walks to
