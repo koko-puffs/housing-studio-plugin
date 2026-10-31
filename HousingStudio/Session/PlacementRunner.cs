@@ -164,6 +164,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         this.data = data;
         this.log = log;
         Services.Toasts.ErrorToast += OnErrorToast;
+        Rehearsals.Register(rehearsing);
         queue.Trace += (step, what) =>
         {
             // Steps that wait for you are said as they start; the rest when they end, with how long they took.
@@ -293,6 +294,9 @@ public sealed unsafe partial class PlacementRunner : IDisposable
 
     private void Start(bool dryRun, IEnumerable<PlanEntry> shown, bool forceDyes, IReadOnlyList<PlacedPiece>? putAway = null)
     {
+        // A rehearsal (Rehearse) is a real run's steps that commit nothing; any other start is a real run or a preview.
+        var rehearse = rehearseNext && !dryRun;
+        rehearseNext = false;
         var problem = CanStart(dryRun);
         if (problem != null)
         {
@@ -307,7 +311,8 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         timeLeftUntil = DateTime.MinValue;
         jobs.AddRange(RunSequence.Build(entries));
         // Clear out (chosen in Ready): the pieces not in the design go first, and the rest is planned once they're gone.
-        PlanClearOut(dryRun);
+        // A rehearsal plans its clear out as a preview does (nothing is put away, so nothing is matched again).
+        PlanClearOut(dryRun || rehearse);
         var dyes = config.DyeAfterPlacing || forceDyes;
         // The same calculation as the dye phase's (PlanDyes), predicting what placing will leave.
         dyesExpected = dyes ? DyeCounts.ToApply(entries) : 0;
@@ -330,6 +335,8 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         startPlot = ctx.Plot;
         side = ctx.Side!.Value;
         DryRun = dryRun;
+        Rehearsal = rehearse;
+        rehearsalHeld = null;
         index = -1;
         dyesPlanned = !dyes;
         failuresInARow = 0;
@@ -359,7 +366,13 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         nextJobAt = DateTime.UtcNow;
         editorMayCloseUntil = DateTime.UtcNow + ModeSwitchGrace;
 
-        if (!dryRun && KeptAs != null)
+        if (rehearse)
+        {
+            // Nothing a rehearsal does needs undoing: no backup, no swap kept, place anywhere left off.
+            if (config.BackupBeforePlacing) log.Info("Would save a backup of what's placed first: not in a rehearsal (nothing changes).");
+            if (config.PlaceAnywhere) log.Info("Would switch place anywhere on: not in a rehearsal (nothing is set down).");
+        }
+        else if (!dryRun && KeptAs != null)
         {
             // Carrying on a swap (PlanClearOut kept it): its backup stays the one to swap back to.
             log.Info($"Carrying on the swap: what was here before it is still kept as “{KeptAs}”.");
@@ -382,9 +395,9 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             }
             else log.Warn("No backup was saved for this run (see why above): Put them back won't be offered for it.");
         }
-        if (!dryRun && config.PlaceAnywhere && !anywhere.Enable()) log.Warn(anywhere.Error ?? "Couldn't switch on place anywhere; placing with the game's usual checks.");
+        if (!dryRun && !rehearse && config.PlaceAnywhere && !anywhere.Enable()) log.Warn(anywhere.Error ?? "Couldn't switch on place anywhere; placing with the game's usual checks.");
 
-        log.Info($"{(dryRun ? "Dry run" : "Placing")} started: {Count(RunPhase.Move)} to move, {Count(RunPhase.Place)} to place "
+        log.Info($"{(dryRun ? "Dry run" : rehearse ? "Rehearsal (nothing is committed)" : "Placing")} started: {Count(RunPhase.Move)} to move, {Count(RunPhase.Place)} to place "
                  + $"({jobs.Count(j => j.Kind == JobKind.PlaceFromStoreroom)} from the storeroom, {jobs.Count(j => j.Kind == JobKind.PlaceFromBags)} from your bags)"
                  + $"{(dyes ? $", then {dyesExpected} to dye ({dyedInDesign} of the pieces are dyed in the design; the others already have their dye, or will once placed from the storeroom)" : string.Empty)}.{(queue.StepByStep ? " Step by step: press Continue before each click." : string.Empty)}");
         State = RunState.Running;
@@ -533,14 +546,16 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         State = RunState.Stopped;
         StopReason = reason;
         StatusText = reason;
+        if (Rehearsal && !reason.StartsWith("Stopped by you", StringComparison.Ordinal))
+            Rehearsals.Report.Issue("The rehearsal", $"Stopped: {reason}", reason.StartsWith("Timed out", StringComparison.Ordinal) ? RehearsalTrouble.TimedOut : RehearsalTrouble.Failed);
         LeaveStoreMode();
         anywhereForOne = false;
         anywhere.Disable();
         SaveRows(force: true);
         LogRows();
         if (!DryRun) foreach (var line in timings.Summary()) log.Info(line);
-        log.Warn($"Stopped: {reason}");
-        if (config.ChatMessages) Services.Chat.PrintError($"Stopped: {reason}", "Housing Studio");
+        log.Warn($"{(Rehearsal ? "Rehearsal stopped" : "Stopped")}: {reason}");
+        if (config.ChatMessages) Services.Chat.PrintError($"{(Rehearsal ? "Rehearsal stopped" : "Stopped")}: {reason}", "Housing Studio");
     }
 
     /// <summary>Skips the piece being worked on (closing whatever it opened).</summary>
@@ -585,6 +600,8 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             return;
         }
         if (!DryRun) queue.ActionGap = TimeSpan.FromMilliseconds(Speed.ClickGapMs);
+        // A rehearsal's let-go (unconfirmed) waits for Continue until you trust it, as the errands' guesses do.
+        if (Rehearsal) queue.StepByStep = config.StepByStep || (!config.RehearsalTrustLetGo && queue.Current is { IsAction: true, Key: LetGoKey });
         SaveRows(force: false);
         if (!DryRun) WatchList();
         if (anywhereForOne && queue.State != QueueState.Running && queue.State != QueueState.AwaitingContinue) EndAnywhereForOne();
@@ -625,6 +642,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 job.Note = queue.Message;
                 job.Problem = queue.Problem;
                 log.Warn($"{Name(job)}: {queue.Message}");
+                if (Rehearsal) Rehearsals.Report.Issue(Name(job), queue.Message ?? "Didn't work.", TroubleOf(queue.Message));
                 failuresInARow++;
                 if (failuresInARow >= Math.Max(1, config.MaxFailuresInARow))
                 {
@@ -694,7 +712,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             queue.Begin(new[] { Step.Act($"Would {DryWords(job)}", () => StepOutcome.Done) });
             return;
         }
-        var (steps, cleanup) = Script(job);
+        var (steps, cleanup) = Rehearsal ? RehearsalScript(job) : Script(job);
         queue.Begin(steps, cleanup);
     }
 
@@ -845,7 +863,8 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     var now = InstanceOf(key);
                     if (HousingEditor.ActiveItem == instance && now == instance)
                     {
-                        queue.InsertNext(SetDownSteps(job, key, instance, attempt, justPlaced));
+                        // A rehearsal holds it at its spot and lets go instead of setting it down.
+                        queue.InsertNext(Rehearsal ? RehearseHold(job, key, instance) : SetDownSteps(job, key, instance, attempt, justPlaced));
                         return StepOutcome.Done;
                     }
                     // A piece just placed isn't always ready to be picked at once (0.2.3: Simple Hingan Pillar).
@@ -1029,6 +1048,12 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 return StepOutcome.Done;
             },
         });
+        if (Rehearsal)
+        {
+            // Up to the piece shown at its spot; then the menu closed instead of Place.
+            steps.AddRange(RehearsePlace(job, chosen, () => placedBefore));
+            return steps;
+        }
         steps.Add(ChoosePlace("the storeroom row's menu"));
         steps.Add(new Step
         {
@@ -1982,6 +2007,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             {
                 var values = UiCallValues.Of(("row", row[0]), ("stain", job.Target.Stain));
                 log.Info($"  → {UiTable.DyePick.Describe(values)}");
+                if (Rehearsal) queue.InsertNext(RehearseDyeEnd(job, key));
                 return Fire(UiTable.DyePick, values);
             }),
             Step.Act($"Press Dye: {UiTable.DyeApply.Describe()}", () => Fire(UiTable.DyeApply)),
@@ -2378,14 +2404,14 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         byte? LiveStain(int key) => live.TryGetValue(key, out var piece) ? piece.Stain : null;
         // The same calculation as the run's first line (DyeCounts.ToApply); a dry run places nothing, so
         // it predicts what placing would leave, as that line does.
-        var needs = DyeCounts.Needs(entries.Where(e => KeyOf(e) is not { } k || !live.TryGetValue(k, out var p) || p.ItemId == e.Target.ItemId), KeyOf, LiveStain, predict: DryRun);
+        var needs = DyeCounts.Needs(entries.Where(e => KeyOf(e) is not { } k || !live.TryGetValue(k, out var p) || p.ItemId == e.Target.ItemId), KeyOf, LiveStain, predict: DryRun || Rehearsal);
         // Count every needed dye as available here: the dye window may use another dye item (it used
         // "Standard Spectrum Dye" in the recordings), so the game decides, and a refused dye is skipped then.
         var owned = needs.Select(n => n.Want).Where(s => s != 0).Distinct().ToDictionary(s => s, s => int.MaxValue);
         var plan = DyePlanner.Plan(needs, owned);
         foreach (var j in plan.Jobs.Where(j => j.Key == DyeCounts.NotPlacedYet)) j.Key = null;
         jobs.AddRange(plan.Jobs);
-        log.Info($"Dyes: {plan.Jobs.Count} piece{(plan.Jobs.Count == 1 ? "" : "s")} to dye{(DryRun ? " (once placed)" : string.Empty)}{(dyesExpected != plan.Jobs.Count ? $"; {dyesExpected} were expected at the start{(DryRun ? string.Empty : " (pieces that didn't get placed can't be dyed)")}" : string.Empty)}.");
+        log.Info($"Dyes: {plan.Jobs.Count} piece{(plan.Jobs.Count == 1 ? "" : "s")} to dye{(DryRun || Rehearsal ? " (once placed)" : string.Empty)}{(dyesExpected != plan.Jobs.Count ? $"; {dyesExpected} were expected at the start{(DryRun || Rehearsal ? string.Empty : " (pieces that didn't get placed can't be dyed)")}" : string.Empty)}.");
         var shortfall = new List<(byte, string, int, int)>();
         foreach (var stain in plan.Jobs.Select(j => j.Target.Stain).Distinct())
         {
@@ -2561,7 +2587,8 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         var parts = new List<string> { $"{Done} of {Total} done" };
         if (Failed > 0) parts.Add($"{Failed} didn't work");
         if (Skipped > 0) parts.Add($"{Skipped} skipped");
-        var summary = $"{(DryRun ? "Dry run finished" : "Finished")}: {string.Join(", ", parts)}.";
+        if (Rehearsal) RehearsalEnded();
+        var summary = $"{(DryRun ? "Dry run finished" : Rehearsal ? "Rehearsal finished (nothing committed)" : "Finished")}: {string.Join(", ", parts)}.";
         StatusText = summary;
         log.Done(summary);
         if (config.ChatMessages) Services.Chat.Print(summary, "Housing Studio");
@@ -2604,6 +2631,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
     public void Dispose()
     {
         Services.Toasts.ErrorToast -= OnErrorToast;
+        Rehearsals.Unregister(rehearsing);
         anywhere.Disable();
         try
         {

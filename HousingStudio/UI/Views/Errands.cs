@@ -92,6 +92,16 @@ public sealed partial class MainWindow
         return errandsBlocked.Why;
     }
 
+    private (ErrandPlan? Plan, DateTime Until, string? Why) errandsRehearsalBlocked;
+
+    /// <summary>Why the errands can't be rehearsed now (too little gil doesn't stop a rehearsal: it's noted).</summary>
+    private string? ErrandsRehearsalBlocked(ErrandPlan plan)
+    {
+        if (ReferenceEquals(errandsRehearsalBlocked.Plan, plan) && DateTime.UtcNow < errandsRehearsalBlocked.Until) return errandsRehearsalBlocked.Why;
+        errandsRehearsalBlocked = (plan, DateTime.UtcNow + TimeSpan.FromSeconds(0.5), Errands.CanStart(plan, session.Context, rehearse: true));
+        return errandsRehearsalBlocked.Why;
+    }
+
     // ---------------------------------------------------------------------------------------------
     // The way in: Shopping's foot, and Ready's brass button with "Get them for me first" on.
 
@@ -105,7 +115,10 @@ public sealed partial class MainWindow
     {
         if (Kit.Button("##errands", pos, ErrandsLabel, Btn.Glass, BtnSize.Md, Icon.Package, 0, false,
                 "Beta: fetches what's missing from your retainers, vendors and the market board, and places it. You see the gil first."))
+        {
+            errandsRehearse = false;
             errandsOpen = true;
+        }
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -113,6 +126,7 @@ public sealed partial class MainWindow
     private void DrawErrands()
     {
         if (Errands.Active) DrawErrandsRunning();
+        else if (Errands.ResultWaiting && Errands.Rehearsal) DrawRehearsalResult(errands: true);
         else if (Errands.ResultWaiting) DrawErrandsSummary();
         else DrawErrandsEstimate();
     }
@@ -294,7 +308,8 @@ public sealed partial class MainWindow
     {
         var (plan, here) = ErrandEstimate();
         var g = GetScreen(plan, session.Title);
-        var blocked = ErrandsBlocked(plan);
+        var rehearse = errandsRehearse;
+        var blocked = rehearse ? ErrandsRehearsalBlocked(plan) : ErrandsBlocked(plan);
 
         // Header: "<design> · GET" and the Beta tag, the title, Back on the right.
         Frame.BeginHeader(20);
@@ -306,11 +321,21 @@ public sealed partial class MainWindow
         Kit.Eyebrow(at, g.Eyebrow, null, leftW - Kit.BetaTagWidth - S(8));
         Kit.BetaTag(new Vector2(at.X + ew + S(8), at.Y + (eyebrowH - Kit.BetaTagHeight) / 2));
         var titleH = FitTitle(new Vector2(at.X, at.Y + eyebrowH + S(8)), g.TitlePlain, g.TitleItalic, leftW);
-        if (Kit.IconButton("##errands-back", new Vector2(at.X + w - S(40), at.Y), Icon.ArrowLeft, "Back")) errandsOpen = false;
+        if (Kit.IconButton("##errands-back", new Vector2(at.X + w - S(40), at.Y), Icon.ArrowLeft, "Back"))
+        {
+            errandsOpen = false;
+            errandsRehearse = false;
+        }
         Kit.Reserve(at, w, MathF.Max(S(40), eyebrowH + S(8) + titleH));
         Frame.EndHeader();
 
         Frame.BeginBody("##errands", "errands-foot", 18, 22);
+        if (rehearse)
+        {
+            AlertNote("A rehearsal: every trip as planned, each purchase asked for and then cancelled, nothing taken from your retainers; then placing rehearsed on what you have. "
+                      + RehearsalWords.Teleports, Palette.Brass, Icon.Info, Palette.Text);
+            Kit.Gap(14);
+        }
         if (Plugin.Shop.Status() is { } status)
         {
             AlertNote(status, Palette.Dim, Icon.Info);
@@ -382,13 +407,14 @@ public sealed partial class MainWindow
         Frame.BeginFooter("errands-foot", 16, 20);
         var row = Kit.At;
         var fw = Kit.Width;
-        var bw = MathF.Min(fw, Kit.ButtonWidth(g.Button, BtnSize.Lg, Icon.Play, Btn.Primary));
-        if (Kit.Button("##errands-start", row, g.Button, Btn.Primary, BtnSize.Lg, Icon.Play, bw, blocked != null,
-                blocked ?? "Sets out now: no question after this. It spends no more than this in all, and stops at anything it didn't expect."))
-            SetOut(plan, clear, keep);
+        var button = rehearse ? RehearsalWords.ErrandsButton : g.Button;
+        var bw = MathF.Min(fw, Kit.ButtonWidth(button, BtnSize.Lg, Icon.Play, Btn.Primary));
+        if (Kit.Button("##errands-start", row, button, Btn.Primary, BtnSize.Lg, Icon.Play, bw, blocked != null,
+                blocked ?? (rehearse ? "Sets out now on the trips shown: nothing is bought or taken, teleports are real." : "Sets out now: no question after this. It spends no more than this in all, and stops at anything it didn't expect.")))
+            SetOut(plan, clear, keep, rehearse);
         const string hint1 = "You can stop at any time.";
-        const string hint2 = "Nothing is bought above the price shown.";
-        const string hints = hint1 + " " + hint2;
+        var hint2 = rehearse ? "Nothing is bought or taken." : "Nothing is bought above the price shown.";
+        var hints = hint1 + " " + hint2;
         var hw = MathF.Max(Txt.Measure(hint1, Face.Sans, 12).X, Txt.Measure(hint2, Face.Sans, 12).X);
         if (blocked == null && bw + S(16) + hw <= fw)
         {
@@ -412,7 +438,7 @@ public sealed partial class MainWindow
     /// estimate must still say the same: if your bags, prices or limits changed since the screen was
     /// drawn, nothing starts, and the screen shows the new one.
     /// </summary>
-    private void SetOut(ErrandPlan shown, IReadOnlyList<PlacedPiece>? clear, string? keepAs)
+    private void SetOut(ErrandPlan shown, IReadOnlyList<PlacedPiece>? clear, string? keepAs, bool rehearse = false)
     {
         if (shown.IsEmpty) return;
         OnFramework(() =>
@@ -425,7 +451,8 @@ public sealed partial class MainWindow
                 Notify("The estimate changed: look at it again");
                 return;
             }
-            Errands.Start(shown, session.Context, clear, keepAs);
+            if (rehearse) Rehearsals.Report.Begin(session.Title, DateTime.Now);
+            Errands.Start(shown, session.Context, clear, keepAs, rehearse);
             if (!Errands.Active && Errands.StopReason != null) Notify(Errands.StopReason);
             // Their placing comes after: Ready's "Set them for me after placing" follows them.
             if (Errands.Active)
@@ -674,6 +701,8 @@ public sealed partial class MainWindow
         var waiting = e.AwaitingContinue || e.WaitingForYou || (placing && (runner.AwaitingContinue || runner.WaitingForYou));
         var paused = e.State == RunState.Paused || (placing && runner.State == RunState.Paused);
         var (pill, tone) = waiting ? ("Waiting for you", Tone.Waiting) : paused ? ("Paused", Tone.Neutral) : ("Running", Tone.Live);
+        var rehearsing = e.Rehearsal && tone == Tone.Live;
+        if (rehearsing) pill = RehearsalWords.Pill(placing ? Words.About(runner.TimeLeft) : null);
         var r = ErrandRunWords(e);
 
         // Header: the eyebrow and the live pill on one row, where it is in words under them.
@@ -681,9 +710,10 @@ public sealed partial class MainWindow
         var at = Kit.At;
         var w = Kit.Width;
         var pw = Kit.StatusPillWidth(pill);
-        Kit.StatusPill(new Vector2(at.X + w - pw, at.Y), pill, tone, tone == Tone.Live);
+        if (rehearsing) RehearsalPill(new Vector2(at.X + w - pw, at.Y), pill);
+        else Kit.StatusPill(new Vector2(at.X + w - pw, at.Y), pill, tone, tone == Tone.Live);
         var eyebrowH = Txt.Natural(Face.Mono, 12);
-        Kit.Eyebrow(new Vector2(at.X, at.Y + (S(28) - eyebrowH) / 2), r.Eyebrow, null, w - pw - S(12));
+        Kit.Eyebrow(new Vector2(at.X, at.Y + (S(28) - eyebrowH) / 2), e.Rehearsal ? $"{RehearsalWords.Eyebrow} · trip {Math.Max(1, e.Trip)} of {Math.Max(e.Trip, e.TripsAtStart)}" : r.Eyebrow, null, w - pw - S(12));
         var titleH = FitTitle(new Vector2(at.X, at.Y + S(28) + S(6)), r.Plain, r.Italic, w);
         Kit.Reserve(at, w, S(28) + S(6) + titleH);
         Frame.EndHeader();
@@ -717,7 +747,7 @@ public sealed partial class MainWindow
         Kit.Gap(14);
         DrawLog();
         Frame.BeginBottom("errands-run-bottom");
-        Txt.Note("Leave the keyboard and mouse alone while it walks and buys.", center: true);
+        Txt.Note(e.Rehearsal ? "Leave the keyboard and mouse alone while it walks. Nothing is bought or taken; teleports are real." : "Leave the keyboard and mouse alone while it walks and buys.", center: true);
         Frame.EndBottom();
         Frame.EndBody();
 
@@ -800,8 +830,8 @@ public sealed partial class MainWindow
         var w = Kit.Width;
         var gap = S(10);
         var cw = (w - gap) / 2;
-        var h = KvCard(at, cw, "GOT", c.GotV, c.GotOf, of > 0 ? got / (float)of : 0);
-        KvCard(new Vector2(at.X + cw + gap, at.Y), cw, "SPENT", c.SpentV, c.SpentOf, e.AgreedGil > 0 ? e.Spent / (float)e.AgreedGil : 0);
+        var h = KvCard(at, cw, e.Rehearsal ? "WOULD GET" : "GOT", c.GotV, c.GotOf, of > 0 ? got / (float)of : 0);
+        KvCard(new Vector2(at.X + cw + gap, at.Y), cw, e.Rehearsal ? "WOULD SPEND" : "SPENT", c.SpentV, c.SpentOf, e.AgreedGil > 0 ? e.Spent / (float)e.AgreedGil : 0);
         Kit.Reserve(at, w, h);
     }
 
@@ -854,6 +884,15 @@ public sealed partial class MainWindow
             var cw = Kit.ButtonWidth(cont, BtnSize.Md, Icon.Play, Btn.Primary);
             if (Kit.Button("##errand-continue", new Vector2(row.X + Kit.Width - cw, row.Y), cont, Btn.Primary, BtnSize.Md, Icon.Play))
                 OnFramework(e.Continue);
+            // The placing rehearsal's let-go (not seen working yet): trusted from here as in Running's callout.
+            if (placing && runner.HoldingALetGo
+                && Kit.Button("##errand-trust-letgo", row, "Trust it from now on", Btn.Quiet, BtnSize.Md, Icon.Check, 0, false,
+                    "This click hasn't been seen working yet: lets the rehearsal let go of pieces without waiting for Continue each time."))
+            {
+                config.RehearsalTrustLetGo = true;
+                config.Save();
+                OnFramework(e.Continue);
+            }
             Kit.Reserve(row, Kit.Width, S(40));
         }
         else

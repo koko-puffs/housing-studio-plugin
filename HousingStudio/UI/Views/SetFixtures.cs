@@ -94,10 +94,21 @@ public sealed partial class MainWindow
     /// after a preview): when that very run finishes, the fixtures are set if "Set them for me after
     /// placing" is on. Framework thread, from <see cref="StartRun"/>'s onStarted (the run is going).
     /// </summary>
-    private void ArmFixturesAfterPlacing() => afterPlacing.ArmRun(runner.RunNumber, DesignId);
+    private void ArmFixturesAfterPlacing()
+    {
+        afterPlacing.ArmRun(runner.RunNumber, DesignId);
+        afterPlacingRehearse = runner.Rehearsal;
+    }
+
+    /// <summary>The run (or errands) armed for is a rehearsal: the fixtures after it are rehearsed too.</summary>
+    private bool afterPlacingRehearse;
 
     /// <summary>Call once the errands are sent out: when they finish, and every placing run they started finished, the fixtures follow.</summary>
-    private void ArmFixturesAfterErrands() => afterPlacing.ArmErrands(DesignId);
+    private void ArmFixturesAfterErrands()
+    {
+        afterPlacing.ArmErrands(DesignId);
+        afterPlacingRehearse = Errands.Rehearsal;
+    }
 
     private DateTime afterPlacingFailedAt;
 
@@ -131,8 +142,9 @@ public sealed partial class MainWindow
         if (!config.FixturesAfterPlacing || !run.Enabled || session.Layout is not { } layout) return;
         var all = FixtureCount(layout);
         if (all == 0 || FixtureTicks.CountDone(config.FixturesDone, DesignKey, Fixtures(layout).Select(FixtureKey)) >= all) return;
-        run.Start();
-        Notify(run.Active ? "Setting the fixtures…" : run.StopReason ?? "Couldn't start setting the fixtures");
+        if (afterPlacingRehearse) run.Rehearse();
+        else run.Start();
+        Notify(run.Active ? afterPlacingRehearse ? "Rehearsing the fixtures…" : "Setting the fixtures…" : run.StopReason ?? "Couldn't start setting the fixtures");
         if (run.Active) IsOpen = true;
     }
 
@@ -178,7 +190,8 @@ public sealed partial class MainWindow
         Kit.BeginPanel("##fixtures-run", 14, 16, 14, Palette.BrassWash, Palette.Brass);
         var at = Kit.At;
         var w = Kit.Width;
-        var eyebrow = run.AwaitingContinue ? "SETTING FIXTURES · NEXT" : run.WaitingForYou ? "SETTING FIXTURES · WAITING FOR YOU" : "SETTING FIXTURES";
+        var what = run.Rehearsal ? "REHEARSING FIXTURES" : "SETTING FIXTURES";
+        var eyebrow = run.AwaitingContinue ? $"{what} · NEXT" : run.WaitingForYou ? $"{what} · WAITING FOR YOU" : what;
         var eh = Kit.Eyebrow(at, eyebrow, Palette.Brass, w);
         Kit.Reserve(at, w, eh);
         Kit.Gap(6);

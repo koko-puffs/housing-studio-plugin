@@ -25,7 +25,7 @@ namespace HousingStudio.Session;
 /// above the plan, more gil than you agreed to, combat, a duty, a cutscene, a zone change no travel
 /// asked for, full bags, too little gil, a path vnavmesh can't find, a plugin that stops answering.
 /// </summary>
-public sealed class ErrandRunner : IDisposable
+public sealed partial class ErrandRunner : IDisposable
 {
     private static readonly TimeSpan WindowWait = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan YouWait = TimeSpan.FromMinutes(3);
@@ -87,6 +87,7 @@ public sealed class ErrandRunner : IDisposable
         this.data = data;
         this.log = log;
         this.shop = shop;
+        Rehearsals.Register(rehearsing);
         queue.StepsPerTick = 4;
         queue.Trace += (step, what) =>
         {
@@ -230,7 +231,8 @@ public sealed class ErrandRunner : IDisposable
     }
 
     /// <summary>Why the errands can't start now with this plan, or null.</summary>
-    public string? CanStart(ErrandPlan plan, HousingContext ctx)
+    /// <param name="rehearse">For a rehearsal: too little gil doesn't stop it (it's noted as where a real run would stop).</param>
+    public string? CanStart(ErrandPlan plan, HousingContext ctx, bool rehearse = false)
     {
         if (!Enabled) return "Switch it on in Settings → Beta.";
         if (Active) return "Already on errands.";
@@ -249,7 +251,7 @@ public sealed class ErrandRunner : IDisposable
         if (runner.CanStart(false) is { } placing) return placing;
         if (plan.IsEmpty) return "Nothing the errands can get.";
         var gil = ErrandGame.Gil();
-        if (gil < plan.TotalGil) return $"You have {gil:N0} gil; the errands need about {plan.TotalGil:N0}.";
+        if (gil < plan.TotalGil && !rehearse) return $"You have {gil:N0} gil; the errands need about {plan.TotalGil:N0}.";
         if (plan.Needs(StopKind.Market) || (plan.Needs(StopKind.Retainer) && !BellNearby()))
         {
             var hub = ErrandGame.AetheryteOf(ErrandGame.HubTerritory);
@@ -287,14 +289,17 @@ public sealed class ErrandRunner : IDisposable
     /// away first, as far as those pieces are still there when it comes home, and with
     /// <paramref name="keepAsName"/> (Swap) what's here is kept under that name, as Ready's own start does.
     /// </summary>
-    public void Start(ErrandPlan plan, HousingContext ctx, IReadOnlyList<PlacedPiece>? clearOut = null, string? keepAsName = null)
+    /// <param name="rehearse">A rehearsal: every trip walked as planned, each purchase asked for and cancelled, nothing taken; then placing rehearsed.</param>
+    public void Start(ErrandPlan plan, HousingContext ctx, IReadOnlyList<PlacedPiece>? clearOut = null, string? keepAsName = null, bool rehearse = false)
     {
-        if (CanStart(plan, ctx) is { } why)
+        if (CanStart(plan, ctx, rehearse) is { } why)
         {
             StopReason = why;
             log.Warn($"Errands didn't start: {why}");
             return;
         }
+        Rehearsal = rehearse;
+        rehearsalFailures = 0;
         home = ErrandGame.HomeHere(ctx)!;
         homeKind = KindOf(home);
         homeWorld = ErrandGame.HomeWorld();
@@ -327,6 +332,7 @@ public sealed class ErrandRunner : IDisposable
                  + $"{(houseBell ? "a summoning bell in it" : "no summoning bell in it")}.{(config.ErrandsTrustGuesses ? string.Empty : " Clicks not yet seen working wait for Continue.")}"
                  + (keepAsFirst != null ? $" The first placing swaps: what's here is kept as “{keepAsFirst}”, and {ClearOutFirst} pieces not in the design are put away first."
                      : clearOutFirst != null ? $" The first placing clears out {ClearOutFirst} pieces not in the design first." : string.Empty));
+        if (rehearse) RehearsalStarted(plan);
         State = RunState.Running;
         StatusText = "Starting…";
         pendingTrip = plan.Trips[0];
@@ -388,7 +394,8 @@ public sealed class ErrandRunner : IDisposable
         StopReason = reason;
         StatusText = reason;
         ResultWaiting = true;
-        log.Warn($"Errands stopped: {reason} ({Summary()})");
+        if (Rehearsal && !reason.StartsWith("Stopped by you", StringComparison.Ordinal)) Rehearsals.Report.Issue("The errands", $"Stopped: {reason}");
+        log.Warn($"Errands {(Rehearsal ? "rehearsal " : string.Empty)}stopped: {reason} ({Summary()})");
         if (config.ChatMessages) Services.Chat.PrintError($"Errands stopped: {reason}", "Housing Studio");
     }
 
@@ -404,12 +411,13 @@ public sealed class ErrandRunner : IDisposable
         StopReason = null;
         StatusText = why;
         ResultWaiting = true;
-        log.Done($"Errands finished: {why} ({Summary()})");
-        if (config.ChatMessages) Services.Chat.Print($"Errands finished: {why}", "Housing Studio");
+        log.Done($"Errands {(Rehearsal ? "rehearsal " : string.Empty)}finished: {why} ({Summary()})");
+        if (config.ChatMessages) Services.Chat.Print($"Errands {(Rehearsal ? "rehearsal " : string.Empty)}finished: {why}", "Housing Studio");
     }
 
-    private string Summary() =>
-        $"{GotCount} got, {Spent:N0} gil spent ({VendorSpent:N0} at vendors, {MarketSpent:N0} on the market board), {Words(Trip, "trip")}";
+    private string Summary() => Rehearsal
+        ? $"would get {GotCount}, for {Spent:N0} gil (nothing bought), {Words(Trip, "trip")}"
+        : $"{GotCount} got, {Spent:N0} gil spent ({VendorSpent:N0} at vendors, {MarketSpent:N0} on the market board), {Words(Trip, "trip")}";
 
     private static string Words(int n, string word) => n == 1 ? $"1 {word}" : $"{n} {word}s";
 
@@ -492,7 +500,8 @@ public sealed class ErrandRunner : IDisposable
         if (finishPending && queue.State is not (QueueState.Running or QueueState.AwaitingContinue))
         {
             finishPending = false;
-            Finish(Plan.Left.Count == 0 ? "everything's got and placed." : $"all the errands can get is got; {Plan.Left.Sum(l => l.Count)} left for you (see the list).");
+            Finish(Rehearsal ? "every trip was walked as planned, and placing rehearsed; nothing was bought or taken."
+                : Plan.Left.Count == 0 ? "everything's got and placed." : $"all the errands can get is got; {Plan.Left.Sum(l => l.Count)} left for you (see the list).");
             return;
         }
 
@@ -504,7 +513,12 @@ public sealed class ErrandRunner : IDisposable
                 queue.Tick();
                 StatusText = queue.State == QueueState.AwaitingContinue ? $"Next: {queue.Current?.Label}" : StepLabel ?? StatusText;
                 if (queue.State == QueueState.Finished) NextSegment();
-                else if (queue.State is QueueState.Stopped or QueueState.Skipped) Stop(queue.Message ?? "A step didn't work.");
+                else if (queue.State is QueueState.Stopped or QueueState.Skipped)
+                {
+                    // A rehearsal notes what didn't work and goes on where it sensibly can (the next stop).
+                    if (Rehearsal && RehearsalCarriesOn(queue.Message ?? "A step didn't work.")) NextSegment();
+                    else Stop(queue.Message ?? "A step didn't work.");
+                }
                 return;
             case QueueState.AwaitingContinue:
                 return;
@@ -546,8 +560,17 @@ public sealed class ErrandRunner : IDisposable
         }
         Add("Going home", GoHomeSteps, NoCleanup, ErrandLeg.Home, true);
         Add("Going in", EnterSteps, NoCleanup, ErrandLeg.Home);
-        Add("Placing what's in your bags", PlaceSteps, NoCleanup, ErrandLeg.Place);
-        Add("Seeing what's still missing", ReplanSteps, NoCleanup, ErrandLeg.Place);
+        if (Rehearsal)
+        {
+            // No replanning (nothing was got): the trips as planned, placing rehearsed once, after the last.
+            if (Trip >= Plan.Trips.Count) Add("Rehearsing placing what's in your bags", PlaceSteps, NoCleanup, ErrandLeg.Place);
+            Add(Trip >= Plan.Trips.Count ? "Done with the trips" : "On to the next trip, as planned", NextTripSteps, NoCleanup, ErrandLeg.Place);
+        }
+        else
+        {
+            Add("Placing what's in your bags", PlaceSteps, NoCleanup, ErrandLeg.Place);
+            Add("Seeing what's still missing", ReplanSteps, NoCleanup, ErrandLeg.Place);
+        }
         NextSegment();
     }
 
@@ -601,7 +624,9 @@ public sealed class ErrandRunner : IDisposable
                 if (ErrandGame.Territory == territory) return StepOutcome.Done;
                 if (aetheryte == 0) return StepOutcome.Halt($"No aetheryte for {where} is known.");
                 travelling = true;
-                return Travel.Teleport(aetheryte) ? StepOutcome.Done : StepOutcome.Halt($"Lifestream wouldn't teleport to {where} (is it installed and up to date?).");
+                if (!Travel.Teleport(aetheryte)) return StepOutcome.Halt($"Lifestream wouldn't teleport to {where} (is it installed and up to date?).");
+                if (Rehearsal) Rehearsals.Report.Teleported();
+                return StepOutcome.Done;
             }),
             new Step
             {
@@ -768,7 +793,8 @@ public sealed class ErrandRunner : IDisposable
         var r = stop.Retainer!;
         Add("Going to a summoning bell", BellSteps, WindowCleanup, ErrandLeg.Bell, true);
         Add($"Opening {r.Name}'s bags", () => OpenRetainerSteps(r), WindowCleanup, ErrandLeg.Bell, who: r.Name);
-        foreach (var item in stop.Items) Add($"Taking {Thing(item)} from {r.Name}", () => WithdrawSteps(r, item), WindowCleanup, ErrandLeg.Bell, who: r.Name, item: item);
+        foreach (var item in stop.Items)
+            Add($"Taking {Thing(item)} from {r.Name}", () => Rehearsal ? RehearseWithdraw(r, item) : WithdrawSteps(r, item), WindowCleanup, ErrandLeg.Bell, who: r.Name, item: item);
         Add($"Saying goodbye to {r.Name}", () => CloseRetainerSteps(r), WindowCleanup, ErrandLeg.Bell, who: r.Name);
     }
 
@@ -932,7 +958,8 @@ public sealed class ErrandRunner : IDisposable
         var v = stop.Vendor!;
         Add($"Going to {v.Where()}", () => VendorTravelSteps(v), WindowCleanup, ErrandLeg.Vendor, true, v.NpcName);
         Add($"Opening {v.NpcName}'s shop", () => OpenShopSteps(v), WindowCleanup, ErrandLeg.Vendor, who: v.NpcName);
-        foreach (var item in stop.Items) Add($"Buying {Thing(item)} from {v.NpcName}", () => BuySteps(v, item), WindowCleanup, ErrandLeg.Vendor, who: v.NpcName, item: item);
+        foreach (var item in stop.Items)
+            Add($"Buying {Thing(item)} from {v.NpcName}", () => Rehearsal ? RehearseBuy(v, item) : BuySteps(v, item), WindowCleanup, ErrandLeg.Vendor, who: v.NpcName, item: item);
         Add($"Closing {v.NpcName}'s shop", () => new List<Step>
         {
             Step.Act("Close the shop", () =>
@@ -1099,7 +1126,8 @@ public sealed class ErrandRunner : IDisposable
     {
         var world = stop.World ?? ErrandGame.CurrentWorld();
         Add($"Going to a market board on {world}", () => BoardSteps(world), WindowCleanup, ErrandLeg.Market, true, world);
-        foreach (var item in stop.Items) Add($"Buying {Thing(item)} on the market board", () => ListingSteps(item), WindowCleanup, ErrandLeg.Market, who: world, item: item);
+        foreach (var item in stop.Items)
+            Add($"Buying {Thing(item)} on the market board", () => Rehearsal ? RehearseListing(item) : ListingSteps(item), WindowCleanup, ErrandLeg.Market, who: world, item: item);
         Add("Closing the market board", () => new List<Step>
         {
             Step.Act("Close the board", () =>
@@ -1404,7 +1432,9 @@ public sealed class ErrandRunner : IDisposable
                     // Only the door's own question ("Enter the estate hall?").
                     if (!ErrandTable.EnterWords.Any(w => question.TrimStart().StartsWith(w, StringComparison.OrdinalIgnoreCase)))
                         return StepOutcome.Halt($"The game asked \"{question}\", not to go in: left for you.");
-                    return GameUi.Fire(UiTable.YesNoYes) ? StepOutcome.Done : StepOutcome.Halt("The yes/no closed.");
+                    // Going in is part of the trip, in a rehearsal too: the guard lets this one Yes through.
+                    using (Rehearsals.Allow())
+                        return GameUi.Fire(UiTable.YesNoYes) ? StepOutcome.Done : StepOutcome.Halt("The yes/no closed.");
                 },
             });
             steps.Add(Arriving(WaitFor("Inside your home", Inside, TimeSpan.FromSeconds(30), "Didn't get inside your home.")));
@@ -1470,7 +1500,8 @@ public sealed class ErrandRunner : IDisposable
             if (clear != null || keepAs != null)
                 log.Info(keepAs != null ? $"  Swapping: what's here is kept as “{keepAs}”, {clear?.Count ?? 0} pieces put away first." : $"  Clearing out {clear!.Count} pieces first.");
             LetsPlace = true;
-            runner.Start(false, entries, clear, keepAs);
+            if (Rehearsal) runner.Rehearse(entries, clear, keepAs);
+            else runner.Start(false, entries, clear, keepAs);
             if (runner.Active)
             {
                 clearOutFirst = null;
@@ -1559,6 +1590,7 @@ public sealed class ErrandRunner : IDisposable
     public void Dispose()
     {
         Stop("The plugin was unloaded.");
+        Rehearsals.Unregister(rehearsing);
         shop.AutoRetainer.LetBe();
     }
 }

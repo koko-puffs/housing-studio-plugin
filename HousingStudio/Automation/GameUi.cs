@@ -88,6 +88,8 @@ public static unsafe class GameUi
         var addon = Ready(call.Addon);
         if (addon == null) return false;
         var values = call.Resolve(blanks);
+        // A rehearsal never sends a click that commits (Yes, Dye, the fixtures' apply): refused and noted.
+        if (Rehearsals.Blocks(call.Addon, values)) return false;
         var size = sizeof(AtkValue) * Math.Max(1, values.Count);
         var ptr = (AtkValue*)Marshal.AllocHGlobal(size);
         try

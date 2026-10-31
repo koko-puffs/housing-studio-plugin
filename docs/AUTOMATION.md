@@ -288,12 +288,50 @@ dyeing through Furnishing Color's list) would confirm them: its "menu entries" l
 4. **Opening the Housing menu** from nothing (Indoor Furnishings now accepts Move).
 5. **Picking another dye shade**, and closing Furnishing Color.
 
+## Rehearsal
+
+A rehearsal (Ready's Preview → Rehearse the run; [DETAILS.md](../DETAILS.md#rehearsal)) runs the
+same scripts with every commit point backed out, in `Session/PlacementRunner.Rehearsal.cs`,
+`ErrandRunner.Rehearsal.cs` and `FixtureRunner.Rehearsal.cs`:
+- **Moves**: `MoveSteps` as usual; at "Picked up?" `RehearseHold` replaces `SetDownSteps`: the held
+  piece's transform is set to its spot (what the set-down would use), shown, its old transform
+  written back, then `UiTable.LetGo` (`HousingLayout ← [i:0]`, the Move button: **unconfirmed** that a
+  mode change drops a held piece; held for Continue until `RehearsalTrustLetGo`). Still held → you
+  press Esc. Its stored position is checked against where it was.
+- **Storeroom**: `StoreroomAttempt` up to the preview, then `RehearsePlace`: `AimPreview` at the spot,
+  "Place" found in the menu, `MenuCancel`, and a check that the preview went and nothing was placed.
+- **Bags**: `RehearseBag`: the item's menu, "Store" (or "Place") found, `MenuCancel`.
+- **Clear out**: `RehearseStore`: Store mode pressed, the piece not picked (Store mode's pick may store it).
+- **Dyes**: `DyeSteps` up to `DyePick`, then `RehearseDyeEnd`: `DyeClose` (and `DyeConfirmNo` if it
+  asks), the stain checked unchanged; dyes of pieces not placed are only counted.
+- **Errands**: `RehearseBuy` / `RehearseListing`: the purchase sent, the yes/no read and checked with
+  `MarketRule.QuestionMatches`, closed (`GameUi.Close(SelectYesno)`, as a mismatched question is), and
+  bags and gil checked unchanged; `RehearseWithdraw`: "Retrieve from Retainer" found, `MenuCancel`.
+  Trips as planned (`NextTripSteps`), placing rehearsed after the last (`runner.Rehearse`).
+- **Fixtures**: `PutInSlot` as usual (`MoveItemSlot` into the edit container), then `RehearseApply`:
+  the window closed (`GameUi.Close`, held for Continue as every fixtures step), a question left to you,
+  and the fixtures and your bags checked.
+
+The guard (`Core/Rehearsal.cs`): `GameUi.Fire` refuses what `RehearsalRules.Commits` names (SelectYesno
+[i:0], ColorantColoring [i:0], MiragePrismMiragePlateConfirm [i:0], HousingEditInterior/Exterior
+[i:0, …]) and `HousingEditor.Place` refuses the set-down while any runner rehearses
+(`Rehearsals.Register`); `Rehearsals.Allow()` lets the door's yes through. What it would have done
+and what didn't work go in `Rehearsals.Report`. Care, backups, swaps, place anywhere and fixture
+ticks are skipped for a rehearsal.
+
+**To confirm the let-go**: a recording (Settings → Help → Record what I do) of picking a placed piece
+up in Rotate (by clicking it) and, while it's held, pressing the bar's Move button (and, separately,
+Esc), saying whether the piece went back or was set down, and the editor's mode and held piece after.
+The fixtures window's close: a recording of putting a fixture in its slot and closing the window
+without applying, saying whether it asked anything and whether the fixture went back to the bags.
+
 ## For the window (the run's state)
 
 `PlacementRunner`: `State`, `DryRun`, `Phase`, `PhaseProgress(phase)` → (done, problems, total),
 `Current` (the piece), `StepLabel` and `StepProgress`, `WaitingForYou`, `AwaitingContinue` /
 `Continue()`, `TimeLeft`, `Problems` (piece, name, kind, reason), `DyeShortfall`, `RetryProblems()`,
-`LastBackupPath` / `RestoreBackup()`, `StoreroomRowsKnown`, `Pause`/`Resume`/`Stop`/`SkipCurrent`.
+`LastBackupPath` / `RestoreBackup()`, `StoreroomRowsKnown`, `Pause`/`Resume`/`Stop`/`SkipCurrent`,
+`Rehearsal` / `Rehearse(…)` / `HoldingALetGo`.
 `LayoutSession.MissingDyes()` lists the dyes to buy before a run.
 
 ## Sending diagnostics

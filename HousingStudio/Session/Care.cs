@@ -13,7 +13,7 @@ public sealed record DriftCheck(string Home, Side Side, DateTime SnapshotAt, Dri
 /// <summary>
 /// Looks after a home between runs, on the framework thread, once a frame:
 /// <list type="bullet">
-/// <item>after every run (not a preview), a snapshot of what's placed, per home
+/// <item>after every run (not a preview or a rehearsal), a snapshot of what's placed, per home
 /// (<c>snapshots/&lt;home&gt;.build</c>), for Check for changes; the old one is dropped when a run
 /// starts, so one that ended away from home (a zone change) leaves none rather than a stale one;</item>
 /// <item>the run's progress in <c>resume.json</c> as it goes (the design, the home, its pieces, how
@@ -117,7 +117,8 @@ public sealed class Care
         // A new run is told by the runner's count (a run that ends and another that starts between two
         // frames still count as two; a clear out planning the design again is the same run).
         if (watching && (!runner.Active || runner.RunNumber != runNumber)) RunEnded(ctx);
-        if (!watching && runner.Active && !runner.DryRun) RunStarted(ctx);
+        // A preview and a rehearsal change nothing: no snapshot dropped, no resume.json.
+        if (!watching && runner.Active && !runner.DryRun && !runner.Rehearsal) RunStarted(ctx);
         else if (watching) KeepProgress(force: false);
 
         if (putBack != null) StartPutBack();

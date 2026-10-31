@@ -564,7 +564,11 @@ public sealed partial class MainWindow
     /// <summary>The brass button pressed: the errands' estimate, else Swap (asks first), else Start (asks before a clear out).</summary>
     private void Go(GoPlan g, List<PlanEntry> entries)
     {
-        if (g.Getting) errandsOpen = true;
+        if (g.Getting)
+        {
+            errandsRehearse = false;
+            errandsOpen = true;
+        }
         else if (g.Mode == ReadyMode.Swap && g.Clear != null) AskSwap(KeepAsName(), g.Clear.Count);
         else StartFromReady(entries);
     }
@@ -592,6 +596,8 @@ public sealed partial class MainWindow
         // Getting first opens the errands' estimate, which says itself why they can't go yet.
         var blocked = g.Getting ? null : runner.CanStart(false) ?? (nothing ? "Nothing to do: every piece you have is in place" : null);
         var previewBlocked = runner.CanStart(true) ?? (nothing ? "Nothing to preview" : null);
+        // Rehearse the run goes as the brass button would: the errands (which say why they can't go), else placing.
+        var rehearseBlocked = g.Getting ? null : runner.CanStart(false) ?? (nothing ? "Nothing to rehearse" : null);
 
         const string preview = "Preview";
         var pw = Kit.ButtonWidth(preview, BtnSize.Lg, Icon.Eye);
@@ -602,9 +608,12 @@ public sealed partial class MainWindow
         if (Kit.Button("##start", at, g.Label, Btn.Primary, BtnSize.Lg, Icon.Play, goW, blocked != null, blocked ?? tip))
             Go(g, entries);
         var previewAt = beside ? new Vector2(at.X + w - pw, at.Y) : new Vector2(at.X, at.Y + S(46) + S(10));
-        if (Kit.Button("##preview", previewAt, preview, Btn.Glass, BtnSize.Lg, Icon.Eye, beside ? 0 : w, previewBlocked != null,
-                previewBlocked ?? "Walks through every piece, marking each spot in your home, and moves nothing."))
-            StartRun(true, entries, g.Clear);
+        // Preview offers two: Mark the spots (moves nothing) and Rehearse the run (every step, nothing committed).
+        var neither = previewBlocked != null && rehearseBlocked != null;
+        if (Kit.Button("##preview", previewAt, preview, Btn.Glass, BtnSize.Lg, Icon.Eye, beside ? 0 : w, neither,
+                neither ? previewBlocked : "Mark the spots (moves nothing), or rehearse the run (does every step, commits nothing)."))
+            ImGui.OpenPopup(PreviewMenu);
+        DrawPreviewMenu(g, entries, previewBlocked, rehearseBlocked);
         Kit.Reserve(at, w, beside ? S(46) : S(46) * 2 + S(10));
         Kit.Gap(12);
 
