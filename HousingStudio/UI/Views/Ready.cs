@@ -338,12 +338,17 @@ public sealed partial class MainWindow
         var allDone = done == all.Count;
         Disclosure("##fixtures-row", ref fixturesOpen, "Fixtures to set yourself", FixtureSummary(layout), 16, Kit.ChipWidth(chip, allDone), S(24),
             (p, _) => Kit.Chip(p, chip, allDone), false);
+        // While "Set them for me" runs, its step and Continue show here.
+        if (Plugin.FixtureRun.Active) fixturesOpen = true;
         if (fixturesOpen)
         {
             Kit.PushBox(Kit.Left + S(20), Kit.Width - S(40));
-            Txt.Note("The plugin doesn't set these: use the game's Housing → Interior Fixtures (or Exterior Fixtures), and tick each one as you set it.");
+            Txt.Note(Plugin.FixtureRun.Enabled
+                ? "Set them with the game's Housing → Interior Fixtures (or Exterior Fixtures), or let the plugin put them in from your bags (experimental). Tick each one as it's set."
+                : "The plugin doesn't set these: use the game's Housing → Interior Fixtures (or Exterior Fixtures), and tick each one as you set it.");
             Kit.Gap(6);
             Kit.PopBox();
+            DrawSetFixtures();
             var design = DesignKey;
             var groups = all.GroupBy(f => f.Level).OrderBy(g => LevelRank(g.Key));
             foreach (var group in groups)

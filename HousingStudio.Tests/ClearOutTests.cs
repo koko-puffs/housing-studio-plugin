@@ -145,4 +145,17 @@ public class FixtureJobsTests
         Assert.False(FixtureJobs.LayoutAgrees(new Dictionary<int, uint>(), Array.Empty<CurrentFixture>(), Side.Interior, out _));
         Assert.True(FixtureJobs.LayoutAgrees(new Dictionary<int, uint> { [7] = 5 }, new[] { new CurrentFixture("Exterior", "Fence", 5) }, Side.Garden, out _));
     }
+
+    [Fact]
+    public void FindsTheMenusFixturesEntry()
+    {
+        var menu = new[] { "Indoor Furnishings", "Furnishing Color", "Interior Fixtures", "Exterior Fixtures" };
+        Assert.Equal(2, FixtureJobs.MenuEntry(menu, new[] { "Interior Fixtures", "Fixtures" }));
+        Assert.Equal(3, FixtureJobs.MenuEntry(menu, new[] { "Exterior Fixtures", "Fixtures" }));
+        Assert.Equal(2, FixtureJobs.MenuEntry(menu, new[] { "Fixtures" }));
+        Assert.Equal(-1, FixtureJobs.MenuEntry(menu, new[] { "Lighting" }));
+        Assert.True(FixtureJobs.MenuInPlace(menu));
+        // A title read first moves every entry along one: not trusted.
+        Assert.False(FixtureJobs.MenuInPlace(new[] { "Housing", "Indoor Furnishings", "Furnishing Color" }));
+    }
 }

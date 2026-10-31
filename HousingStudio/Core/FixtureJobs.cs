@@ -168,4 +168,37 @@ public static class FixtureJobs
         why = compared == 0 ? "Nothing set here to compare the window's slots with." : string.Empty;
         return compared > 0;
     }
+
+    /// <summary>
+    /// The Housing menu's entry with these words: the same words, else one starting with them, else
+    /// one holding them (the menu's "Interior Fixtures" for "Fixtures"). -1 when none.
+    /// </summary>
+    public static int MenuEntry(IReadOnlyList<string> entries, IReadOnlyList<string> words)
+    {
+        var wanted = words.Where(w => w.Trim().Length > 0).Select(w => w.Trim()).ToList();
+        for (var pass = 0; pass < 3; pass++)
+            for (var i = 0; i < entries.Count; i++)
+            {
+                var e = entries[i].Trim();
+                if (wanted.Any(w => pass switch
+                    {
+                        0 => e.Equals(w, StringComparison.OrdinalIgnoreCase),
+                        1 => e.StartsWith(w, StringComparison.OrdinalIgnoreCase),
+                        _ => e.Contains(w, StringComparison.OrdinalIgnoreCase),
+                    }))
+                    return i;
+            }
+        return -1;
+    }
+
+    /// <summary>
+    /// Are the Housing menu's entries read in their places? Its first two are Indoor Furnishings
+    /// ([i:0]) and Furnishing Color ([i:1]), as recorded: only then is an entry's place taken for its
+    /// click. (English words; another client's menu is chosen by you.)
+    /// </summary>
+    public static bool MenuInPlace(IReadOnlyList<string> entries) =>
+        entries.Count >= 2
+        && entries[0].Contains("Furnishing", StringComparison.OrdinalIgnoreCase)
+        && entries[1].Contains("Furnishing", StringComparison.OrdinalIgnoreCase)
+        && entries[1].Contains("Colo", StringComparison.OrdinalIgnoreCase);
 }

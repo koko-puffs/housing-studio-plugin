@@ -90,6 +90,12 @@ public sealed class Configuration : IPluginConfiguration
     public bool Experimental { get; set; }
 
     /// <summary>
+    /// Experimental: Ready's "Set them for me" sets the design's fixtures through the game's fixtures
+    /// windows (Session/FixtureRunner). Only while <see cref="Experimental"/> is on too.
+    /// </summary>
+    public bool SetFixturesForYou { get; set; }
+
+    /// <summary>
     /// The furnishing list's storeroom rows learnt in each house (by house id), kept while the
     /// storeroom holds the same pieces, so a later run doesn't pick its way down the list again.
     /// </summary>
