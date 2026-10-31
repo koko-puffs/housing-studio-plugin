@@ -103,7 +103,7 @@ it, danger when it stopped for safety), "Errands *done*" / "*stopped*", one line
 | --- | --- |
 | "PLACING <NAME>" / "PREVIEWING <NAME>" / "REHEARSAL · NOTHING IS COMMITTED · <NAME>" | `DrawRunning` header |
 | Rehearsing pill (no mockup): "Rehearsing · about N minutes left", a brass outline, not filled | `RehearsalPill` (`Views/Rehearsal.cs`), while a rehearsal runs (waiting and paused use the usual pills); the errands' running header uses it too, with "Rehearsal · nothing is committed · trip N of M" and Would get / Would spend cards |
-| The rehearsal's let-go held for Continue | `DrawCallout`: with `runner.HoldingALetGo`, a note that the click isn't seen working yet and **Trust it from now on** (`config.RehearsalTrustLetGo`) |
+| The rehearsal's let-go held for Continue (only if `UiTable.LetGo` were unconfirmed again) | `DrawCallout`: with `runner.HoldingALetGo`, a note that the click isn't seen working yet and **Trust it from now on** (`config.RehearsalTrustLetGo`) |
 | Live pill: "Running · about N minutes left", "Paused", "Waiting for you" | `DrawRunning` (`runner.TimeLeft`); the dot breathes while running |
 | 56px figure, "of N pieces done", 8px bar | `DrawFigure` (`ViewModel.Figure`: in place at the start + moved + placed) |
 | Three phase cards | `DrawPhases` (`runner.PhaseProgress`, `runner.Phase`) |

@@ -295,11 +295,11 @@ same scripts with every commit point backed out, in `Session/PlacementRunner.Reh
 `ErrandRunner.Rehearsal.cs` and `FixtureRunner.Rehearsal.cs`:
 - **Moves**: `MoveSteps` as usual; at "Picked up?" `RehearseHold` replaces `SetDownSteps`: the held
   piece's transform is set to its spot (what the set-down would use), shown, its old transform
-  written back, then `UiTable.LetGo` (`HousingLayout ← [i:0]`, the Move button: **unconfirmed** that a
-  mode change drops a held piece; held for Continue until `RehearsalTrustLetGo`). Still held → you
-  press Esc. Its stored position is checked against where it was.
+  written back, then `UiTable.LetGo` (`HousingLayout ← [i:0]`, the Move button; recorded: the mode went to
+  Move, the editor held nothing, the piece was where it was). Still held → you press Esc. Its stored position is checked against where it was.
 - **Storeroom**: `StoreroomAttempt` up to the preview, then `RehearsePlace`: `AimPreview` at the spot,
-  "Place" found in the menu, `MenuCancel`, and a check that the preview went and nothing was placed.
+  "Place" found in the menu, `MenuCancel`, and a check that the menu closed and nothing was placed (the
+  game keeps the row's preview, as the editor's active item, until another row is picked: recorded).
 - **Bags**: `RehearseBag`: the item's menu, "Store" (or "Place") found, `MenuCancel`.
 - **Clear out**: `RehearseStore`: Store mode pressed, the piece not picked (Store mode's pick may store it).
 - **Dyes**: `DyeSteps` up to `DyePick`, then `RehearseDyeEnd`: `DyeClose` (and `DyeConfirmNo` if it
@@ -319,10 +319,8 @@ The guard (`Core/Rehearsal.cs`): `GameUi.Fire` refuses what `RehearsalRules.Comm
 and what didn't work go in `Rehearsals.Report`. Care, backups, swaps, place anywhere and fixture
 ticks are skipped for a rehearsal.
 
-**To confirm the let-go**: a recording (Settings → Help → Record what I do) of picking a placed piece
-up in Rotate (by clicking it) and, while it's held, pressing the bar's Move button (and, separately,
-Esc), saying whether the piece went back or was set down, and the editor's mode and held piece after.
-The fixtures window's close: a recording of putting a fixture in its slot and closing the window
+**The let-go** was confirmed by a recording of a rehearsal (`HousingLayout ← [i:0]` while holding:
+mode Move, nothing held, the piece where it was, the pieces placed unchanged). The fixtures window's close: a recording of putting a fixture in its slot and closing the window
 without applying, saying whether it asked anything and whether the fixture went back to the bags.
 
 ## For the window (the run's state)

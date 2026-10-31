@@ -601,7 +601,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         }
         if (!DryRun) queue.ActionGap = TimeSpan.FromMilliseconds(Speed.ClickGapMs);
         // A rehearsal's let-go (unconfirmed) waits for Continue until you trust it, as the errands' guesses do.
-        if (Rehearsal) queue.StepByStep = config.StepByStep || (!config.RehearsalTrustLetGo && queue.Current is { IsAction: true, Key: LetGoKey });
+        if (Rehearsal) queue.StepByStep = config.StepByStep || (!UiTable.LetGo.Verified && !config.RehearsalTrustLetGo && queue.Current is { IsAction: true, Key: LetGoKey });
         SaveRows(force: false);
         if (!DryRun) WatchList();
         if (anywhereForOne && queue.State != QueueState.Running && queue.State != QueueState.AwaitingContinue) EndAnywhereForOne();

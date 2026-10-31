@@ -82,13 +82,12 @@ public static class UiTable
     /// <summary>
     /// A rehearsal's let-go: the editor holds a placed piece (picked up in Rotate, moved to its spot and
     /// then its old spot written back), and pressing Move changes the mode, which is expected to drop
-    /// what the editor holds without setting it down. Not seen in the game: the click itself is
-    /// recorded (it's <see cref="LayoutMove"/>), what it does to a held piece isn't, so a rehearsal holds
-    /// before it for Continue until you trust it. Its old spot is written back first, so even if the
-    /// game set it down instead, it would land where it was. [Rehearsal; to confirm: a recording of
-    /// picking a piece up in Rotate and pressing Move (or Esc) while holding it]
+    /// what the editor holds without setting it down. Its old spot is written back first, so even if the
+    /// game set it down, it would land where it was. [Recording 3: a rehearsal's let-go,
+    /// HousingLayout [i:0] while holding a piece in Rotate: the mode went to Move, the editor held
+    /// nothing, the piece was where it was, and the pieces placed didn't change]
     /// </summary>
-    public static readonly UiCall LetGo = new(LayoutBar, "i:0", true, "Rehearsal: a mode change drops what's held", Verified: false);
+    public static readonly UiCall LetGo = new(LayoutBar, "i:0", true, "Recording 3: holding a piece in Rotate, Move let go of it (the editor held nothing after), and it was where it was");
 
     /// <summary>Close the editor (back to the Housing menu). [Recording 1]</summary>
     public static readonly UiCall LayoutClose = new(LayoutBar, "i:-2", false, "Recording 1");

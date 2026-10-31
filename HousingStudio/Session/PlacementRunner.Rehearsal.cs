@@ -270,20 +270,21 @@ public sealed unsafe partial class PlacementRunner
             }),
             new Step
             {
-                Label = "The menu closes (nothing in hand)",
+                Label = "The menu closes",
                 Timeout = WindowWait,
                 OnTimeout = StepStatus.Done, // checked next
-                // Not the preview: it stays shown after the menu closes, until another row is picked.
-                Run = () => !GameUi.IsOpen(UiTable.ContextMenu) && HousingEditor.ActiveItem == 0 ? StepOutcome.Done : StepOutcome.Waiting,
+                // Only the menu: the game keeps the row's preview shown, as the editor's active item, until
+                // another row is picked (a recording shows it), and that's nothing placed.
+                Run = () => !GameUi.IsOpen(UiTable.ContextMenu) ? StepOutcome.Done : StepOutcome.Waiting,
             },
             new Step
             {
                 Label = $"Check {name} wasn't placed",
                 Run = () =>
                 {
-                    if (GameUi.IsOpen(UiTable.ContextMenu) || HousingEditor.ActiveItem != 0)
+                    if (GameUi.IsOpen(UiTable.ContextMenu) || HousingEditor.Mode == EditorMode.Place)
                     {
-                        var what = GameUi.IsOpen(UiTable.ContextMenu) ? "the menu stayed open" : "the editor holds a piece";
+                        var what = GameUi.IsOpen(UiTable.ContextMenu) ? "the menu stayed open" : "the editor went on to place it";
                         log.Warn($"  After closing the menu, {what}.");
                         Rehearsals.Report.Issue(name, $"After closing the storeroom row's menu ({UiTable.MenuCancel.Describe()}), {what}.", RehearsalTrouble.NoMatch);
                     }
@@ -454,6 +455,13 @@ public sealed unsafe partial class PlacementRunner
 
     private void SayStillHeld()
     {
+        // The last storeroom row's preview: the game keeps it as its active item until another row is
+        // picked. Nothing is placed; it isn't a piece held.
+        if (HousingEditor.Mode != EditorMode.Place && FurnitureReader.Preview() != null && rehearsalHeld == null)
+        {
+            log.Info("  The game still shows the last storeroom row's preview (nothing was placed): picking another row, or Esc, clears it.");
+            return;
+        }
         var what = rehearsalHeld is { } h && h.Instance == HousingEditor.ActiveItem ? $"{h.Name} (back where it was)" : "a piece";
         var line = HousingEditor.Mode == EditorMode.Place
             ? "The editor is still holding a piece to place: press Esc to put it back. A rehearsal never sets a piece down."
