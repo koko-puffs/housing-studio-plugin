@@ -21,7 +21,8 @@ public enum MainView
 }
 
 /// <summary>A row of the Recent list.</summary>
-public sealed record RecentRow(string Path, string Name, string Note, string Kind, bool Exists, bool Backup, DateTime At);
+/// <param name="Kept">What a swap kept of a home ("Medium house in Mist before Winter Lodge"): KEPT, "Kept from a swap".</param>
+public sealed record RecentRow(string Path, string Name, string Note, string Kind, bool Exists, bool Backup, DateTime At, bool Kept = false);
 
 /// <summary>
 /// What the views read, computed from the session, the runner and the plan. Most of it is the
@@ -213,20 +214,23 @@ public sealed class ViewModel
         return rows.OrderByDescending(r => r.At).Take(max).Select(r =>
         {
             var exists = File.Exists(r.Path);
+            var kept = r.Backup && SwapNames.IsKept(Path.GetFileName(r.Path));
             var layout = exists ? Parsed(r.Path) : null;
             var name = layout?.BuildName ?? Path.GetFileNameWithoutExtension(r.Path);
             var when = r.At == DateTime.MinValue ? null : When.Relative(r.At, now, t => t.ToString("HH:mm"));
             string note;
             if (!exists) note = "Not found";
-            else if (layout == null) note = when ?? string.Empty;
+            else if (layout == null) note = kept ? string.Join(" · ", new[] { "Kept from a swap", when }.Where(s => !string.IsNullOrEmpty(s))) : when ?? string.Empty;
             else
             {
                 var count = Words.Count(layout.Interior.Count + layout.Garden.Count, "piece");
-                var what = r.Backup ? "what was here" : layout.Interior.Count == 0 && layout.Garden.Count > 0 ? "Garden" : Words.Home(layout.HouseSize);
-                note = string.Join(" · ", new[] { count, what, when }.Where(s => !string.IsNullOrEmpty(s)));
+                // A swap's kept home leads with that ("Kept from a swap · 391 pieces · yesterday"), so it's found to swap back to.
+                var parts = kept ? new[] { "Kept from a swap", count, when }
+                    : new[] { count, r.Backup ? "what was here" : layout.Interior.Count == 0 && layout.Garden.Count > 0 ? "Garden" : Words.Home(layout.HouseSize), when };
+                note = string.Join(" · ", parts.Where(s => !string.IsNullOrEmpty(s)));
             }
-            var kind = r.Backup ? "BACKUP" : r.Path.EndsWith(".build", StringComparison.OrdinalIgnoreCase) ? "BUILD" : "MAKEPLACE";
-            return new RecentRow(r.Path, name, note, kind, exists, r.Backup, r.At);
+            var kind = kept ? "KEPT" : r.Backup ? "BACKUP" : r.Path.EndsWith(".build", StringComparison.OrdinalIgnoreCase) ? "BUILD" : "MAKEPLACE";
+            return new RecentRow(r.Path, name, note, kind, exists, r.Backup, r.At, kept);
         }).ToList();
     }
 

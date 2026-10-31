@@ -22,10 +22,10 @@ public sealed class Plugin : IDalamudPlugin
     /// <summary>Where the missing pieces and dyes come from (retainers, vendors, the market board).</summary>
     internal static Shopping Shop { get; private set; } = null!;
 
-    /// <summary>"Set them for me" (Settings → Experimental): the design's fixtures, through the game's fixtures windows.</summary>
+    /// <summary>"Set them for me" (Settings → Beta): the design's fixtures, through the game's fixtures windows.</summary>
     internal static FixtureRunner FixtureRun { get; private set; } = null!;
 
-    /// <summary>"Get everything for me" (Settings → Experimental): fetching what's missing, and placing it.</summary>
+    /// <summary>"Get everything for me" (Settings → Beta): fetching what's missing, and placing it.</summary>
     internal static ErrandRunner Errands { get; private set; } = null!;
 
     private readonly Configuration config;

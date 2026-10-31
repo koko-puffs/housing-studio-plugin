@@ -181,48 +181,31 @@ public sealed partial class MainWindow
             : $"{Words.Capital(Words.Count(done, "piece"))} not in the design {(done == 1 ? "was" : "were")} put away in the storeroom.");
     }
 
-    /// <summary>After a swap: what was here is kept, and Swap back puts it back (after asking).</summary>
+    private (string? Kept, string Line) swapBackLine = (null, string.Empty);
+
+    /// <summary>The undo card after a swap: "Not what you wanted?", what was here is kept as “…”, and Swap back (after asking).</summary>
     private void DrawSwapBack(DateTime savedAt)
     {
         var kept = runner.KeptAs!;
-        Kit.BeginPanel("##swapback", 16, 20, 16);
-        var at = Kit.At;
-        var w = Kit.Width;
-        const string label = "Swap back";
-        var bw = Kit.ButtonWidth(label, BtnSize.Sm, null, Btn.Quiet);
-        var x = at.X + S(16) + S(14);
-        var tw = at.X + w - bw - S(14) - x;
-        var titleH = Txt.Natural(Face.SansMedium, 14);
-        var note = new[] { Run.Note($"What was here is kept as “{kept}” (saved at {Clock(savedAt)}, in Recent).") };
-        var noteH = Txt.Flow(Vector2.Zero, tw, note, 19.5f, out _, draw: false);
-        var wordsH = titleH + S(2) + noteH;
-        var h = MathF.Max(S(34), wordsH);
-        var mid = at.Y + h / 2;
-        var dl = Kit.Dl;
-        Icons.Draw(dl, Icon.Refresh, new Vector2(at.X, mid - S(8)), S(16), Palette.Dim);
-        var top = mid - wordsH / 2;
-        Txt.Line(dl, new Vector2(x, top), "Swap back?", Face.SansMedium, 14, Palette.Ivory);
-        Txt.Flow(new Vector2(x, top + titleH + S(2)), tw, note, 19.5f, out _);
+        if (swapBackLine.Kept != kept) swapBackLine = (kept, $"What was here is kept as “{kept}”");
         var cannot = runner.CanRestore();
-        if (Kit.Button("##swapback-btn", new Vector2(at.X + w - bw, mid - S(17)), label, Btn.Quiet, BtnSize.Sm, disabled: cannot != null, tip: cannot))
-        {
-            Ask("Swap back?",
-                $"This loads “{kept}” as the design and starts a run that puts away what isn't in it first, then puts everything back where it was.",
-                "Swap back", "Keep this design", () =>
+        if (!Kit.ActionCard("##swapback", Icon.Undo, null, "Not what you wanted?", swapBackLine.Line, "Swap back", null, false, cannot != null,
+                cannot ?? $"Kept at {Clock(savedAt)}, and in Recent. Puts away what isn't in it, then puts everything back where it was (asks first)."))
+            return;
+        Ask("Swap back?",
+            $"This loads “{kept}” as the design and starts a run that puts away what isn't in it first, then puts everything back where it was.",
+            "Swap back", "Keep this design", () =>
+            {
+                OnFramework(() =>
                 {
-                    OnFramework(() =>
+                    if (runner.SwapBack(out var why))
                     {
-                        if (runner.SwapBack(out var why))
-                        {
-                            vm.Dismiss();
-                            session.Refresh(HousingContext.Read(Plugin.Plots));
-                            Notify("Swapping back…");
-                        }
-                        else Notify(why);
-                    });
+                        vm.Dismiss();
+                        session.Refresh(HousingContext.Read(Plugin.Plots));
+                        Notify("Swapping back…");
+                    }
+                    else Notify(why);
                 });
-        }
-        Kit.Reserve(at, w, h);
-        Kit.EndPanel();
+            });
     }
 }

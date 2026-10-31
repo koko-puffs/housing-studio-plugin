@@ -150,6 +150,7 @@ public class DriftTests
         Assert.Equal(4u, Assert.Single(r.Redyed).Was.ItemId);
         Assert.True(r.CanPutBack);
         Assert.Equal("1 moved, 1 added, 1 taken away and 1 in another dye", CareWords.Drift(r));
+        Assert.Equal("4 changed", CareWords.Changed(r));
     }
 
     [Fact]
@@ -158,6 +159,7 @@ public class DriftTests
         var r = Drift.Compare(new[] { T(0, 1, 2) }, new[] { P(7, 1, 2.004f) });
         Assert.True(r.Unchanged);
         Assert.Equal("Nothing has changed", CareWords.Drift(r));
+        Assert.Equal("Nothing changed", CareWords.Changed(r));
         Assert.False(Drift.Compare(new[] { T(0, 1, 2) }, new[] { P(7, 1, 2), P(8, 1, 3) }).CanPutBack);
     }
 }

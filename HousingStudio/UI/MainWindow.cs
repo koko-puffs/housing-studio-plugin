@@ -74,13 +74,6 @@ public sealed partial class MainWindow : Window
         IsOpen = true;
     }
 
-    /// <summary>Opens Settings (Dalamud's cog, /hstudio settings); during a run, the run.</summary>
-    public void ShowSettings()
-    {
-        sub = runner.Active || Plugin.FixtureRun.Active ? Sub.None : Sub.Settings;
-        IsOpen = true;
-    }
-
     public override void PreDraw() => Theme.PushFrame();
 
     public override void PostDraw()
@@ -119,19 +112,21 @@ public sealed partial class MainWindow : Window
     private void DrawBody()
     {
         vm.Observe();
+        NoteErrandsRun();
         FixturesAfterPlacing();
         using (fonts.Push(Face.Sans, 14))
         {
             // (Setting the fixtures: its Continue and Stop are in Ready's Finish stage and on Done.)
-            if (runner.Active || Plugin.FixtureRun.Active) sub = Sub.None;
-            if (ErrandsShown())
+            if (runner.Active || Plugin.FixtureRun.Active || Plugin.Errands.Active) sub = Sub.None;
+            if (sub == Sub.Settings && !Plugin.Errands.Active && !Plugin.Errands.ResultWaiting)
+            {
+                // Settings over the errands' estimate too (its limits are in Getting); back goes back to it.
+                DrawSettings();
+            }
+            else if (ErrandsShown())
             {
                 // Errands (experimental): their estimate, run (its placing too) and summary.
                 DrawErrands();
-            }
-            else if (sub == Sub.Settings)
-            {
-                DrawSettings();
             }
             else if (sub == Sub.Shopping && vm.View is MainView.Ready or MainView.Done)
             {

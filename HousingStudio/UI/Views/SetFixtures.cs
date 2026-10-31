@@ -10,7 +10,7 @@ using static HousingStudio.UI.Theme;
 namespace HousingStudio.UI;
 
 /// <summary>
-/// Setting the fixtures for you (Settings → Experimental): in Ready's Finish stage, "Set them for me
+/// Setting the fixtures for you (Settings → Beta): in Ready's Finish stage, "Set them for me
 /// after placing" (it starts by itself when a placing run started from Ready finishes) and, under Tick
 /// off, what the plugin can set from your bags here with "Set them for me"; while it runs, the step
 /// it's on with Continue (it goes step by step) and Stop, in Ready's Finish stage and on Done.
@@ -153,18 +153,22 @@ public sealed partial class MainWindow
         Txt.Flow(new Vector2(at.X, at.Y + (h - noteH) / 2), tw, new[] { Run.Note(line) }, 19.5f, out _);
         if (Kit.Button("##set-fixtures", new Vector2(at.X + w - bw, at.Y + (h - Kit.ButtonHeight(BtnSize.Sm)) / 2), label, Btn.Glass, BtnSize.Sm, Icon.Play, 0,
                 blocked != null, blocked ?? "Experimental: opens the game's fixtures window and puts each one in from your bags, step by step."))
-        {
-            Ask("Set the fixtures?",
-                $"This opens the game's {(session.Context.Side == Side.Garden ? "Exterior" : "Interior")} Fixtures window and puts the {Words.Count(toSet, "fixture")} in from your bags. "
-                + "It's experimental: it holds before each action until you press Continue, asks you where it can't find its way, and you press the window's apply yourself. "
-                + "Setting a fixture uses its item, as it does by hand.",
-                "Set them", "Not now", () => OnFramework(() =>
-                {
-                    Plugin.FixtureRun.Start();
-                    if (!Plugin.FixtureRun.Active) Notify(Plugin.FixtureRun.StopReason ?? "Couldn't start");
-                }));
-        }
+            AskSetFixtures(toSet);
         Kit.Reserve(at, w, h);
+    }
+
+    /// <summary>Asks before setting the fixtures (Ready's Set them for me, Done's Set them), then starts it.</summary>
+    private void AskSetFixtures(int toSet)
+    {
+        Ask("Set the fixtures?",
+            $"This opens the game's {(session.Context.Side == Side.Garden ? "Exterior" : "Interior")} Fixtures window and puts the {Words.Count(toSet, "fixture")} in from your bags. "
+            + "It's experimental: it holds before each action until you press Continue, asks you where it can't find its way, and you press the window's apply yourself. "
+            + "Setting a fixture uses its item, as it does by hand.",
+            "Set them", "Not now", () => OnFramework(() =>
+            {
+                Plugin.FixtureRun.Start();
+                if (!Plugin.FixtureRun.Active) Notify(Plugin.FixtureRun.StopReason ?? "Couldn't start");
+            }));
     }
 
     private void DrawFixturesRunning(FixtureRunner run)

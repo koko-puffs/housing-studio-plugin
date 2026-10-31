@@ -10,9 +10,8 @@ namespace HousingStudio.Automation;
 /// listing bought, the estate's door) showed the shop's purchase, the retainer list's pick, the
 /// board's purchase and the yes/no each asks. The ones still marked unconfirmed (<see cref="UiCall.Verified"/> false) are always done step by step (the
 /// run holds before the click until you press Continue) until you switch that off in the errands'
-/// screen, having watched them work. To confirm or fix one: Settings → Something not working? → Start
-/// recording, do the thing by hand (the recording each entry names), Stop recording, Copy recording +
-/// log, and the window's name and the values it sent are in it.
+/// screen, having watched them work. To confirm or fix one: Settings → Help → Record what I do → Start,
+/// do the thing by hand (the recording each entry names), Stop, Copy the recording and log, and the window's name and the values it sent are in it.
 ///
 /// Sources:
 /// <list type="bullet">

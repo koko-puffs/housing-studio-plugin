@@ -1,6 +1,6 @@
 namespace HousingStudio;
 
-/// <summary>"Get everything for me" (Settings → Experimental): the errands' own settings.</summary>
+/// <summary>"Get everything for me" (Settings → Beta): the errands' own settings (their limits in Settings → Getting).</summary>
 public sealed partial class Configuration
 {
     /// <summary>
