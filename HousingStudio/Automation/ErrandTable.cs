@@ -54,8 +54,14 @@ public static class ErrandTable
     /// <summary>[Recording 2: the Material Supplier's "Purchase Items" [i:0]; the housing merchant's "Purchase Furnishings (Tables, Food)", the fourth, [i:3]]</summary>
     public static readonly UiCall IconMenuPick = new(SelectIconString, "i:{index}", true, "ECommons, Recording 2");
 
-    /// <summary>An NPC's words, which you click through. Not clicked by the plugin: it waits for you.</summary>
+    /// <summary>An NPC's (or a retainer's) words.</summary>
     public const string Talk = "Talk";
+
+    /// <summary>
+    /// Goes on to the next of an NPC's words, as clicking them does. [Recording 2: Talk [] (no values),
+    /// each time a retainer's greeting was clicked through.] If the words don't move on, you're asked.
+    /// </summary>
+    public static readonly UiCall TalkNext = new(Talk, "", true, "Recording 2");
 
     // ---------- retainers ----------
 
@@ -104,6 +110,15 @@ public static class ErrandTable
     /// </summary>
     public static readonly UiCall ListingBuy = new(ItemSearchResult, "i:2 i:{index}", true, "Recording 2");
 
+    /// <summary>
+    /// The board's search by words: ItemSearch [i:9, empty, empty, s:words, s:words, empty, empty,
+    /// empty]. [Recording 2, searching "hedge"] Sent with <see cref="GameUi.FireValues"/> (it holds text).
+    /// </summary>
+    public const int SearchByWords = 9;
+
+    /// <summary>Opens the listings of the search's result in row <c>index</c>. [Recording 2: [i:5, i:8] for the ninth]</summary>
+    public static readonly UiCall SearchResultPick = new(ItemSearch, "i:5 i:{index}", true, "Recording 2", Verified: false);
+
     // ---------- the house ----------
 
     /// <summary>
@@ -128,5 +143,5 @@ public static class ErrandTable
     public static readonly string[] MarketBoardWords = { "Market Board" };
 
     /// <summary>Every errand click, for Settings' list of windows and clicks.</summary>
-    public static IReadOnlyList<UiCall> All => new[] { ShopBuy, MenuPick, IconMenuPick, RetainerPick, ListingBuy };
+    public static IReadOnlyList<UiCall> All => new[] { ShopBuy, MenuPick, IconMenuPick, TalkNext, RetainerPick, SearchResultPick, ListingBuy };
 }

@@ -673,6 +673,41 @@ public sealed class ErrandRunner : IDisposable
         TimeoutMessage = $"Waited {(timeout ?? YouWait).TotalMinutes:0} minutes for you to {what[..1].ToLowerInvariant()}{what[1..]}.",
     };
 
+    /// <summary>
+    /// Clicks through an NPC's (or a retainer's) words until <paramref name="done"/>, as clicking them
+    /// does (<see cref="ErrandTable.TalkNext"/>), a click every half second. If they don't move on
+    /// (15 clicks, or 15 seconds with nothing), you're asked to.
+    /// </summary>
+    private Step ClickThrough(string who, Func<bool> done)
+    {
+        var clicks = 0;
+        var next = DateTime.MinValue;
+        DateTime? began = null;
+        return new Step
+        {
+            Label = $"Click through what {who} says ({ErrandTable.TalkNext.Describe()})",
+            Run = () =>
+            {
+                if (done()) return StepOutcome.Done;
+                var now = DateTime.UtcNow;
+                began ??= now;
+                if (clicks >= 15 || now - began.Value > TimeSpan.FromSeconds(15))
+                {
+                    log.Info($"  {who}'s words didn't move on from the plugin's clicks: you click them through.");
+                    queue.InsertNext(new[] { You($"Click through what {who} says", done, TimeSpan.FromMinutes(1)) });
+                    return StepOutcome.Done;
+                }
+                if (!GameUi.IsOpen(ErrandTable.Talk) || now < next) return StepOutcome.Waiting;
+                clicks++;
+                next = now + TimeSpan.FromMilliseconds(500);
+                GameUi.Fire(ErrandTable.TalkNext);
+                return StepOutcome.Waiting;
+            },
+            Timeout = TimeSpan.FromMinutes(2),
+            TimeoutMessage = $"{who}'s words didn't end.",
+        };
+    }
+
     // ---------------------------------------------------------------------------------------------
     // Retainers.
 
@@ -713,7 +748,7 @@ public sealed class ErrandRunner : IDisposable
                 },
             },
             Step.Wait($"{r.Name} comes", MenuOpen, TimeSpan.FromSeconds(8), StepStatus.Done),
-            You($"Click through what {r.Name} says", MenuOpen, TimeSpan.FromMinutes(1)),
+            ClickThrough(r.Name, MenuOpen),
             new Step
             {
                 Label = $"Choose \"{ErrandTable.RetainerItemsWords[0]}\"",
@@ -825,6 +860,8 @@ public sealed class ErrandRunner : IDisposable
             else GameUi.Close(menu.Addon);
             return StepOutcome.Done;
         }),
+        Step.Wait($"{r.Name} says goodbye", () => GameUi.IsOpen(ErrandTable.Talk) || GameUi.IsOpen(ErrandTable.RetainerList), TimeSpan.FromSeconds(5), StepStatus.Done),
+        ClickThrough(r.Name, () => GameUi.IsOpen(ErrandTable.RetainerList) || !Services.Condition[ConditionFlag.OccupiedSummoningBell]),
         Step.Wait("The list of retainers", () => GameUi.IsOpen(ErrandTable.RetainerList), TimeSpan.FromSeconds(5), StepStatus.Done),
         Step.Act("Close the list of retainers", () =>
         {
@@ -891,7 +928,7 @@ public sealed class ErrandRunner : IDisposable
                 }
                 if (GameUi.IsOpen(ErrandTable.Talk))
                 {
-                    queue.InsertNext(new[] { You($"Click through what {v.NpcName} says", () => !GameUi.IsOpen(ErrandTable.Talk), TimeSpan.FromMinutes(1)), Opens() });
+                    queue.InsertNext(new[] { ClickThrough(v.NpcName, () => !GameUi.IsOpen(ErrandTable.Talk)), Opens() });
                     return StepOutcome.Done;
                 }
                 return StepOutcome.Waiting;
@@ -1127,12 +1164,97 @@ public sealed class ErrandRunner : IDisposable
                 TimeoutMessage = $"{name} didn't come to your bags (sold to someone else first?).",
             },
         };
-        var steps = new List<Step>
-        {
-            You($"Search the board for {name} and open its listings", () => GameUi.IsOpen(ErrandTable.ItemSearchResult) && ErrandGame.Listings(item.ItemId) != null),
-        };
+        var steps = SearchSteps(item.ItemId, name);
         steps.AddRange(Once());
         return steps;
+    }
+
+    /// <summary>
+    /// Opens an item's listings: the board searched for its name (as typing it does), its row found
+    /// in the results, and opened; what opens is checked to be that item's before anything is bought.
+    /// Whatever doesn't work is left to you (search and open it), as before.
+    /// </summary>
+    private List<Step> SearchSteps(uint itemId, string name)
+    {
+        var index = -1;
+        DateTime? searchedAt = null;
+        bool Opened() => GameUi.IsOpen(ErrandTable.ItemSearchResult) && ErrandGame.Listings(itemId) != null;
+        Step YouOpen(string what) => You($"{what} {name} and open its listings", Opened);
+        return new List<Step>
+        {
+            Step.Act("Close the last item's listings", () =>
+            {
+                if (GameUi.IsOpen(ErrandTable.ItemSearchResult) && ErrandGame.ListingsItem() != itemId) GameUi.Close(ErrandTable.ItemSearchResult);
+                return StepOutcome.Done;
+            }),
+            Step.Wait("The board's search", () => Opened() || (GameUi.IsOpen(ErrandTable.ItemSearch) && !GameUi.IsOpen(ErrandTable.ItemSearchResult)), WindowWait, StepStatus.Done),
+            new Step
+            {
+                Label = $"Search the board for \"{name}\" (ItemSearch ← [i:{ErrandTable.SearchByWords}, empty, empty, s:words, s:words, empty, empty, empty])",
+                IsAction = true,
+                Run = () =>
+                {
+                    if (Opened()) return StepOutcome.Done;
+                    if (name.Length == 0 || GameUi.IsOpen(ErrandTable.ItemSearchResult)
+                        || !GameUi.FireValues(ErrandTable.ItemSearch, true, ErrandTable.SearchByWords, null, null, name, name, null, null, null))
+                    {
+                        queue.InsertNext(new[] { YouOpen("Search the board for") });
+                        return StepOutcome.Done;
+                    }
+                    searchedAt = DateTime.UtcNow;
+                    return StepOutcome.Done;
+                },
+            },
+            new Step
+            {
+                Label = $"Find {name} in the results",
+                Run = () =>
+                {
+                    if (Opened() || searchedAt == null) return StepOutcome.Done;
+                    index = ErrandGame.SearchResultIndex(name, out var seen);
+                    if (index >= 0)
+                    {
+                        log.Info($"  {name} is result {index + 1} of the search ({string.Join(" | ", seen)}).");
+                        return StepOutcome.Done;
+                    }
+                    if (DateTime.UtcNow - searchedAt.Value < TimeSpan.FromSeconds(3)) return StepOutcome.Waiting;
+                    log.Info($"  {name} wasn't found among the search's results{(seen.Count == 0 ? string.Empty : $" ({string.Join(" | ", seen)})")}: you open it.");
+                    queue.InsertNext(new[] { YouOpen("In the board's results, find") });
+                    return StepOutcome.Done;
+                },
+            },
+            new Step
+            {
+                Label = $"Open {name}'s listings ({ErrandTable.SearchResultPick.Describe()})",
+                IsAction = true,
+                Run = () =>
+                {
+                    if (Opened() || index < 0) return StepOutcome.Done;
+                    if (!GameUi.Fire(ErrandTable.SearchResultPick, UiCallValues.Of(("index", index))))
+                        queue.InsertNext(new[] { YouOpen("Search the board for") });
+                    return StepOutcome.Done;
+                },
+            },
+            new Step
+            {
+                Label = $"{name}'s listings come",
+                Run = () =>
+                {
+                    if (Opened()) return StepOutcome.Done;
+                    if (GameUi.IsOpen(ErrandTable.ItemSearchResult) && ErrandGame.ListingsItem() is var other && other != 0 && other != itemId)
+                    {
+                        // Another item's listings: nothing of theirs is bought; back to the search, and you.
+                        log.Info($"  Result {index + 1} opened another item's listings ({Name(other)}): you open {name}'s.");
+                        GameUi.Close(ErrandTable.ItemSearchResult);
+                        queue.InsertNext(new[] { YouOpen("In the board's results, find") });
+                        return StepOutcome.Done;
+                    }
+                    return StepOutcome.Waiting;
+                },
+                Timeout = TimeSpan.FromSeconds(15),
+                TimeoutMessage = $"{name}'s listings didn't come.",
+            },
+        };
     }
 
     // ---------------------------------------------------------------------------------------------

@@ -8,7 +8,10 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.5.1. Placing works in the game; the new features below haven't been tried in it yet.**
+> **Status: 0.5.2. Placing works in the game; the new features below haven't been tried in it yet.**
+> 0.5.2: the errands click through NPCs' and retainers' words themselves, and search the market
+> board for each item (its name typed in, its row found in the results and opened, checked to be
+> that item's listings before anything is bought). Whatever doesn't work is asked of you, as before.
 > 0.5.1: what a recording of each by hand showed. Set the fixtures for me chooses **Remodel
 > Interior** (the menu's real words; it looked for "Interior Fixtures", which isn't there), presses
 > the window's apply and says yes to "Proceed with fixture changes?". The errands' shop purchase,
@@ -446,8 +449,14 @@ gil?", "Purchase 1 hedge-trimmed flower bed for 22,107 gil (1,052 fee included)?
 estate hall?"); those go without holding. Each purchase's question is checked against its price
 before yes. Still guesses, held for **Continue** until **trust the new clicks** is on: opening a
 retainer's item menu from the plugin, and the objects found by name (the door's "Entrance", the
-board's). The search on the board is still yours (the game's was `ItemSearch` [i:9, empty, empty,
-s:"hedge", …] then [i:5, result]); NPC and retainer greetings are clicked through by you.
+board's). NPCs' and retainers' words are clicked through as the game does it (`Talk` [], no
+values, a click every half second; after 15 that don't move them on, you're asked). The board is
+searched by the item's name (`ItemSearch` [i:9, empty, empty, s:name, s:name, empty, empty,
+empty], as recorded with "hedge"), its row found among the search window's text values that read
+like the name (when the name is there twice, the first is taken to be the search box), and opened
+(`ItemSearch` [i:5, row], as recorded; held for Continue until trusted); the listings that come must
+be that item's (`InfoProxyItemSearch`'s item), or they're closed, nothing is bought, and you're
+asked to open the right one.
 
 Words are matched in English only so far. IPC names used (`Game/Vnavmesh.cs`, `Game/Lifestream.cs`,
 `Game/AutoRetainer.cs`): `vnavmesh.Nav.IsReady`, `vnavmesh.SimpleMove.PathfindAndMoveTo`,

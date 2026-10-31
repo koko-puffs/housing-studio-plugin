@@ -12,6 +12,64 @@ namespace HousingStudio.Automation;
 /// <summary>Reading and clicking the game's windows (framework thread only).</summary>
 public static unsafe class GameUi
 {
+    /// <summary>
+    /// Fires a window's callback with values that may hold text (a search box's words): an int, a
+    /// uint, a string, or null for an empty value. As <see cref="Fire(UiCall, IReadOnlyDictionary{string, long}?)"/> otherwise.
+    /// </summary>
+    public static bool FireValues(string name, bool close, params object?[] values)
+    {
+        var addon = Ready(name);
+        if (addon == null) return false;
+        var size = sizeof(AtkValue) * Math.Max(1, values.Length);
+        var ptr = (AtkValue*)Marshal.AllocHGlobal(size);
+        var texts = new List<IntPtr>();
+        try
+        {
+            new Span<byte>(ptr, size).Clear();
+            for (var i = 0; i < values.Length; i++)
+            {
+                switch (values[i])
+                {
+                    case int n:
+                        ptr[i].Type = AtkValueType.Int;
+                        ptr[i].Int = n;
+                        break;
+                    case uint u:
+                        ptr[i].Type = AtkValueType.UInt;
+                        ptr[i].UInt = u;
+                        break;
+                    case string text:
+                        var bytes = System.Text.Encoding.UTF8.GetBytes(text);
+                        var mem = Marshal.AllocHGlobal(bytes.Length + 1);
+                        texts.Add(mem);
+                        Marshal.Copy(bytes, 0, mem, bytes.Length);
+                        ((byte*)mem)[bytes.Length] = 0;
+                        ptr[i].Type = AtkValueType.String;
+                        ptr[i].String = (byte*)mem;
+                        break;
+                    default:
+                        ptr[i].Type = AtkValueType.Undefined;
+                        break;
+                }
+            }
+            UiRecorder.OurClick = true;
+            try
+            {
+                addon->FireCallback((uint)values.Length, ptr, close);
+            }
+            finally
+            {
+                UiRecorder.OurClick = false;
+            }
+            return true;
+        }
+        finally
+        {
+            Marshal.FreeHGlobal((IntPtr)ptr);
+            foreach (var t in texts) Marshal.FreeHGlobal(t);
+        }
+    }
+
     /// <summary>A window that's open, shown and finished loading, or null.</summary>
     public static AtkUnitBase* Ready(string name)
     {

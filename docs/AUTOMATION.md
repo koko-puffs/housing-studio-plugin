@@ -311,8 +311,11 @@ above. Every window, callback and word it uses is in `Automation/ErrandTable.cs`
 a gil shop's purchase (`Shop ← [i:0, row, count, empty]`), choosing a retainer (`RetainerList ←
 [i:2, u:row, empty, empty]`), "Retrieve from Retainer", buying a listing (`ItemSearchResult ← [i:2,
 row]`), and each one's question; a purchase's question is checked against its price before yes. The
-ones still guessed (opening a retainer's item menu, the door's and the board's names) wait for
-Continue until you trust them. The market board's listings are
+ones still guessed (opening a retainer's item menu, the board's result row, the door's and the
+board's names) wait for Continue until you trust them. NPCs' words are clicked through with `Talk ←
+[]` (recorded); the board's search is `ItemSearch ← [i:9, empty, empty, s:name, s:name, empty,
+empty, empty]` (recorded), sent by `GameUi.FireValues` (it holds text), and the listings opened are
+checked to be the item's before anything is bought. The market board's listings are
 read from the game's own record of them (`InfoProxyItemSearch`), not the window. See
 [DETAILS.md](../DETAILS.md#getting-everything-for-you-experimental) for what it does and what would
 confirm each guess.

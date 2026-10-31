@@ -385,6 +385,34 @@ public static unsafe class ErrandGame
     /// <summary>A listing as the board shows it on this world (its row in the listings shown).</summary>
     public readonly record struct BoardListing(int Row, ulong ListingId, uint UnitPrice, int Quantity, uint TotalTax, bool Hq);
 
+    /// <summary>The item whose listings the board has (or is loading), or 0.</summary>
+    public static uint ListingsItem()
+    {
+        var p = InfoProxyItemSearch.Instance();
+        return p == null ? 0 : p->SearchItemId;
+    }
+
+    /// <summary>
+    /// Where <paramref name="name"/> is among the board's search results, as the search's window holds
+    /// them (its text values, in order, that read like the name searched for), or -1. The search's own
+    /// words may be among them: when the name is there twice, the first is taken to be the search box.
+    /// What's opened is checked against the item before anything is bought.
+    /// </summary>
+    public static int SearchResultIndex(string name, out List<string> seen)
+    {
+        seen = GameUi.TextValues(ErrandTable.ItemSearch).OrderBy(kv => kv.Key)
+            .Select(kv => kv.Value.Trim())
+            .Where(t => t.Contains(name, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        var exact = new List<int>();
+        for (var i = 0; i < seen.Count; i++)
+            if (string.Equals(seen[i], name, StringComparison.OrdinalIgnoreCase)) exact.Add(i);
+        if (exact.Count == 0) return -1;
+        if (exact.Count == 1) return exact[0];
+        // The search box's words first: the results are what follow it.
+        return exact[1] - 1;
+    }
+
     /// <summary>The listings the board has loaded for an item (in the order shown), or null while it isn't that item's or they're still loading.</summary>
     public static List<BoardListing>? Listings(uint itemId)
     {
