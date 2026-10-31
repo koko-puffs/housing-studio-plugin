@@ -261,6 +261,8 @@ public sealed partial class GameLink
         {
             v.Asking = false;
             if (Here != v) return;
+            // Linked or unlinked meanwhile: asked again with the token in hand now.
+            if (token != (Usable ? config.SiteToken : string.Empty) && !r.TokenRefused) return;
             if (r.TokenRefused && token.Length > 0)
             {
                 // Asked again as anyone next frame.

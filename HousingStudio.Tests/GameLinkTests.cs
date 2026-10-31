@@ -382,7 +382,7 @@ public class SiteCallsTests
             [{"id":"{{Id}}","name":"Cozy Café","maker":{"handle":"koko","name":"Koko"},"cover":"u/d/cover one.webp",
               "verified_at":"2026-10-31T19:00:00+00:00","own":false,
               "social":{"likes":12,"dislikes":null,"my_vote":1,"favourites":3,"is_favourite":false,"comments":4},
-              "stamps":{"on":true,"total":9,"mine_today":true}},
+              "stamps":{"on":true,"total":9,"mine_today":true} },
              {"id":"{{Other}}","name":"","maker":{"handle":null,"name":"Someone"},"cover":null,"own":true,"social":null,"stamps":null}]
             """))!;
         var d = list[0];
