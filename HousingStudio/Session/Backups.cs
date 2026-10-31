@@ -46,6 +46,35 @@ public static class Backups
         }
     }
 
+    /// <summary>
+    /// A swap's backup: what's placed now, kept in the backups folder under a name you'll know again
+    /// ("Medium house in Mist before Winter Lodge.build", the build named so too), which isn't one
+    /// of the backups' own names, so it's never pruned. Returns its path, or null.
+    /// </summary>
+    public static string? SaveKept(LayoutSession session, GameData data, ActivityLog log, string name)
+    {
+        try
+        {
+            Directory.CreateDirectory(Folder);
+            var stem = SwapNames.FileStem(name);
+            var path = Path.Combine(Folder, stem + ".build");
+            for (var n = 2; File.Exists(path); n++) path = Path.Combine(Folder, $"{stem} {n}.build");
+            if (!SaveTo(path, session, data, name, out var failed))
+            {
+                log.Error($"Couldn't keep what's here: {(failed.Length > 0 ? failed : "what's placed couldn't be read")}");
+                return null;
+            }
+            log.Done($"Kept what's placed as “{name}” ({path}).");
+            return path;
+        }
+        catch (Exception ex)
+        {
+            Services.Log.Error(ex, "Keeping a swap's backup failed");
+            log.Error($"Couldn't keep what's here: {ex.Message}");
+            return null;
+        }
+    }
+
     private static readonly System.Text.RegularExpressions.Regex BackupName =
         new(@"^(interior|garden)-\d{8}-\d{6}(-\d+)?\.build$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 

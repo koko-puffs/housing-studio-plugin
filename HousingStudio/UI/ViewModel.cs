@@ -110,8 +110,11 @@ public sealed class ViewModel
         : session.Layout == null ? MainView.Start
         : MainView.Ready;
 
-    /// <summary>The big figure: pieces where the design has them (those already there, plus each moved or placed).</summary>
-    public int Figure => Math.Min(RunPieces, RunInPlaceAtStart + runner.Count(RunPhase.Move, JobOutcome.Done) + runner.Count(RunPhase.Place, JobOutcome.Done));
+    /// <summary>
+    /// The big figure: pieces where the design has them (those already there, plus each moved or
+    /// placed; pieces put away are counted with the moves by the runner, but aren't the design's).
+    /// </summary>
+    public int Figure => Math.Min(RunPieces, RunInPlaceAtStart + runner.Count(RunPhase.Move, JobOutcome.Done) - runner.PutAwayDone + runner.Count(RunPhase.Place, JobOutcome.Done));
 
     /// <summary>The step in hand in plain words ("Setting it at its spot").</summary>
     // TODO(runner): a `StepText` in plain words; the labels are written for the log.

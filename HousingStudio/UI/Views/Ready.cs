@@ -110,6 +110,7 @@ public sealed partial class MainWindow
             Kit.Gap(10);
             Txt.Note(line);
         }
+        if (plan != null) DrawClearOut(plan);
 
         if (layout.InteriorFixtures.Count + layout.ExteriorFixtures.Count > 0)
         {
@@ -280,8 +281,6 @@ public sealed partial class MainWindow
         if (plan != null)
         {
             if (s.InPlace > 0) parts.Add(s.InPlace == 1 ? "1 piece is already in place." : $"{s.InPlace} pieces are already in place.");
-            if (plan.Extras.Count > 0)
-                parts.Add(plan.Extras.Count == 1 ? "1 piece in your home isn't in this design and stays where it is." : $"{plan.Extras.Count} pieces in your home aren't in this design and stay where they are.");
             if (s.Missing > 0) parts.Add(s.Missing == 1 ? "You don't have 1 piece, so it's skipped (Pieces lists it)." : $"You don't have {s.Missing} pieces, so they're skipped (Pieces lists them).");
             if (ShopPlan() is { TotalGil: > 0 } shop) parts.Add($"Buying what's missing: {ShoppingList.TotalWords(shop)}.");
             if (config.NearMe) parts.Add($"Near me is on: only the {Words.Count(shown, "piece")} within {config.NearMeRadius:0} yalms of you.");
@@ -340,12 +339,17 @@ public sealed partial class MainWindow
         var allDone = done == all.Count;
         Disclosure("##fixtures-row", ref fixturesOpen, "Fixtures to set yourself", FixtureSummary(layout), 16, Kit.ChipWidth(chip, allDone), S(24),
             (p, _) => Kit.Chip(p, chip, allDone), false);
+        // While "Set them for me" runs, its step and Continue show here.
+        if (Plugin.FixtureRun.Active) fixturesOpen = true;
         if (fixturesOpen)
         {
             Kit.PushBox(Kit.Left + S(20), Kit.Width - S(40));
-            Txt.Note("The plugin doesn't set these: use the game's Housing → Interior Fixtures (or Exterior Fixtures), and tick each one as you set it.");
+            Txt.Note(Plugin.FixtureRun.Enabled
+                ? "Set them with the game's Housing → Interior Fixtures (or Exterior Fixtures), or let the plugin put them in from your bags (experimental). Tick each one as it's set."
+                : "The plugin doesn't set these: use the game's Housing → Interior Fixtures (or Exterior Fixtures), and tick each one as you set it.");
             Kit.Gap(6);
             Kit.PopBox();
+            DrawSetFixtures();
             var design = DesignKey;
             var groups = all.GroupBy(f => f.Level).OrderBy(g => LevelRank(g.Key));
             foreach (var group in groups)
@@ -447,14 +451,14 @@ public sealed partial class MainWindow
         Frame.BeginFooter("ready-foot", 18, 22);
         var at = Kit.At;
         var w = Kit.Width;
-        var nothing = session.Plan != null && s.Moves.Count + s.Places + s.Dyes == 0;
+        var nothing = session.Plan != null && s.Moves.Count + s.Places + s.Dyes == 0 && ChosenClearOut() == null;
         var blocked = runner.CanStart(false) ?? (nothing ? "Nothing to do: every piece you have is in place" : null);
         var previewBlocked = runner.CanStart(true) ?? (nothing ? "Nothing to preview" : null);
 
         const string preview = "Preview first";
         var pw = Kit.ButtonWidth(preview, BtnSize.Lg, Icon.Eye);
         if (Kit.Button("##start", at, "Start placing", Btn.Primary, BtnSize.Lg, Icon.Play, w - pw - S(10), blocked != null, blocked))
-            StartRun(false, entries);
+            StartFromReady(entries);
         if (Kit.Button("##preview", new Vector2(at.X + w - pw, at.Y), preview, Btn.Glass, BtnSize.Lg, Icon.Eye, 0, previewBlocked != null,
                 previewBlocked ?? "Walks through every piece, marking each spot in your home, and moves nothing."))
             StartRun(true, entries);

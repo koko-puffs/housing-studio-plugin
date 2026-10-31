@@ -22,6 +22,9 @@ public sealed class Plugin : IDalamudPlugin
     /// <summary>Where the missing pieces and dyes come from (retainers, vendors, the market board).</summary>
     internal static Shopping Shop { get; private set; } = null!;
 
+    /// <summary>"Set them for me" (Settings → Experimental): the design's fixtures, through the game's fixtures windows.</summary>
+    internal static FixtureRunner FixtureRun { get; private set; } = null!;
+
     private readonly Configuration config;
     private readonly GameData data;
     private readonly ActivityLog log = new();
@@ -65,6 +68,9 @@ public sealed class Plugin : IDalamudPlugin
 
         session = new LayoutSession(data, furniture, Plots, log);
         runner = new PlacementRunner(config, session, editor, actions, furniture, anywhere, data, log);
+        FixtureRun = new FixtureRunner(config, session, data, log);
+        runner.OtherRunActive = () => FixtureRun.Active;
+        FixtureRun.OtherRunActive = () => runner.Active;
 
         fonts = new Fonts();
         Txt.Fonts = fonts;
@@ -104,6 +110,8 @@ public sealed class Plugin : IDalamudPlugin
             if (DateTime.UtcNow - drawFailedAt > TimeSpan.FromSeconds(10)) Services.Log.Error(ex, "Housing Studio couldn't draw its window");
             drawFailedAt = DateTime.UtcNow;
             Safely(() => runner.Pause("The window couldn't be drawn (see /xllog); /hstudio resume or stop."));
+            // Setting fixtures waits for Continue in the window: without it, it stops.
+            Safely(() => FixtureRun.Stop("The window couldn't be drawn (see /xllog)."));
         }
     }
 
@@ -131,6 +139,7 @@ public sealed class Plugin : IDalamudPlugin
             var ctx = HousingContext.Read(Plots);
             runner.Update();
             runner.Tick(ctx);
+            FixtureRun.Tick(ctx);
             recorder.Tick();
             Shop.Tick();
             if (DateTime.UtcNow >= nextRefresh)
@@ -143,6 +152,7 @@ public sealed class Plugin : IDalamudPlugin
         {
             Services.Log.Error(ex, "Housing Studio update failed");
             Safely(() => runner.Stop("Something went wrong reading the game; stopped to be safe."));
+            Safely(() => FixtureRun.Stop("Something went wrong reading the game; stopped to be safe."));
             Safely(anywhere.Disable);
         }
     }
@@ -150,10 +160,15 @@ public sealed class Plugin : IDalamudPlugin
     private void OnTerritoryChanged(uint territory)
     {
         runner.Stop("You changed zones.");
+        FixtureRun.Stop("You changed zones.");
         nextRefresh = DateTime.UtcNow;
     }
 
-    private void OnLogout(int type, int code) => runner.Stop("You logged out.");
+    private void OnLogout(int type, int code)
+    {
+        runner.Stop("You logged out.");
+        FixtureRun.Stop("You logged out.");
+    }
 
     private void OnCommand(string command, string args)
     {
@@ -161,6 +176,7 @@ public sealed class Plugin : IDalamudPlugin
         {
             case "stop":
                 runner.Stop("Stopped by you (/hstudio stop).");
+                FixtureRun.Stop("Stopped by you (/hstudio stop).");
                 break;
             case "pause":
                 runner.Pause("Paused by you (/hstudio pause).");
@@ -171,6 +187,7 @@ public sealed class Plugin : IDalamudPlugin
             case "continue":
             case "next":
                 runner.Continue();
+                FixtureRun.Continue();
                 break;
             case "settings":
             case "config":
@@ -187,6 +204,7 @@ public sealed class Plugin : IDalamudPlugin
         // The game's code is put back first, whatever else fails on the way out.
         Safely(anywhere.Dispose);
         Safely(() => runner.Stop("The plugin was unloaded."));
+        Safely(() => FixtureRun.Stop("The plugin was unloaded."));
         Services.Framework.Update -= OnUpdate;
         Services.ClientState.TerritoryChanged -= OnTerritoryChanged;
         Services.ClientState.Logout -= OnLogout;
