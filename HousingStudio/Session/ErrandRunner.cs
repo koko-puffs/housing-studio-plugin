@@ -1468,6 +1468,7 @@ public sealed partial class ErrandRunner : IDisposable
     private List<Step> ChamberSteps()
     {
         var handed = false;
+        var answered = false;
         Vector3? door = null;
         var navAsked = DateTime.MinValue;
         var walking = DateTime.MinValue;
@@ -1556,23 +1557,26 @@ public sealed partial class ErrandRunner : IDisposable
                     return GameUi.Fire(call, UiCallValues.Of(("index", i))) ? StepOutcome.Done : HandOver("The door's menu closed.");
                 },
             },
-            Step.Wait("The game asks to go up", () => Up() || GameUi.YesNoText() != null, TimeSpan.FromSeconds(5), StepStatus.Done),
-            new Step
+            // The direct entry takes you in with no question (0.7.4's recording); a question that does come
+            // is answered yes only if it's the chambers' own.
+            Arriving(new Step
             {
-                Label = "Answer yes (go up)",
-                IsAction = true,
+                Label = "Go up to your chambers",
+                Timeout = TimeSpan.FromSeconds(30),
+                OnTimeout = StepStatus.Done, // the next step waits for you
                 Run = () =>
                 {
                     if (Up()) return StepOutcome.Done;
-                    if (GameUi.YesNoText() is not { } question) return HandOver("The game didn't ask to go up.");
+                    if (answered || GameUi.YesNoText() is not { } question) return StepOutcome.Waiting;
                     if (!ErrandTable.ChamberYesWords.Any(w => question.TrimStart().StartsWith(w, StringComparison.OrdinalIgnoreCase)))
                         return HandOver($"The game asked \"{question}\".");
                     // Going up is part of the trip, in a rehearsal too: the guard lets this one Yes through.
                     using (Rehearsals.Allow())
-                        return GameUi.Fire(UiTable.YesNoYes) ? StepOutcome.Done : HandOver("The yes/no closed.");
+                        if (!GameUi.Fire(UiTable.YesNoYes)) return HandOver("The yes/no closed.");
+                    answered = true;
+                    return StepOutcome.Waiting;
                 },
-            },
-            Arriving(WaitFor("Inside your chambers", () => Up(), TimeSpan.FromSeconds(30), "Didn't get to your chambers.", StepStatus.Done)),
+            }),
             Arriving(You("Go up to your private chambers (the hall's door to them, then \"Move to your private chambers\")", Inside)),
         };
     }

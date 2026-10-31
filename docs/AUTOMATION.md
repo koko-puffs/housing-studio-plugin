@@ -340,10 +340,11 @@ first, gets `DyeSteps` as a stand-in `RunJob` (in `standIns`: its `Would` isn't 
 apartment or the workshop) as `HomeRef.Chamber`, yours (`CompanyHouse`) when the company's estate has
 its ward and plot and you may decorate. `HomeRef.WardTerritory` is the house id's bits 32-47 (0.7.5; the game's original house territory, read in chambers, wasn't the ward's), and `ErrandGame.WardCheck` says what "outside your home" compared when it waits over 20 s. `EnterSteps` then waits for the house's hall
 (`ErrandGame.InHouseOf`), and `ChamberSteps` goes up (0.7.4, from 0.7.2's chamber recording): the
-door found by `ErrandTable.ChamberDoorWords` in its name (`ErrandGame.NearestContaining`; a guess),
-walked to (vnavmesh), used; its SelectString's `ChamberMenuWords` ("Move to your private chambers");
-yes only to `ChamberYesWords` ("Retire to your own chambers?", through `Rehearsals.Allow()` as the
-front door's). Anything else hands over to you (logged), and the run waits for you to be in.
+door found by `ErrandTable.ChamberDoorWords` in its name ("Entrance to Additional Chambers";
+`ErrandGame.NearestContaining`), walked to (vnavmesh), used; its SelectString's `ChamberMenuWords`
+("Move to your private chambers", [i:1]: in with no question, 0.7.5's recording); a question that does
+come is answered yes only for `ChamberYesWords` ("Retire to your own chambers?", through
+`Rehearsals.Allow()` as the front door's). Anything else hands over to you (logged), and the run waits for you to be in.
 
 **Clear out and the storeroom's room**: `InventoryReader.StoreroomRoom(side)` (the loaded pages' `Size`
 less the occupied slots), `ClearOutSplit.Split` at the start, `PutOffClearOut` before each first store

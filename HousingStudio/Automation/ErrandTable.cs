@@ -132,10 +132,10 @@ public static class ErrandTable
 
     /// <summary>
     /// In a company's hall, the door to the chambers and the workshop: an object whose name has this in
-    /// it. [Guess: the 0.7.2 recording shows its menu, not its name; the plugin logs the names near you
+    /// it. [You, 0.7.4: it's called "Entrance to Additional Chambers"; the plugin logs the names near you
     /// when it can't find it]
     /// </summary>
-    public static readonly string[] ChamberDoorWords = { "Chambers" };
+    public static readonly string[] ChamberDoorWords = { "Additional Chambers" };
 
     /// <summary>
     /// That door's menu (a SelectString): "Move to the company workshop | Move to your private chambers |
@@ -143,7 +143,11 @@ public static class ErrandTable
     /// </summary>
     public static readonly string[] ChamberMenuWords = { "Move to your private chambers" };
 
-    /// <summary>Its question, answered yes only when it starts so. [0.7.2's chamber recording: "Retire to your own chambers?"]</summary>
+    /// <summary>
+    /// A question on the way, answered yes only when it starts so. "Move to your private chambers" asks
+    /// none (0.7.4's recording: [i:1], and you were in your chambers); "Retire to your own chambers?"
+    /// came after picking your room from "Move to specified private chambers" (0.7.2's).
+    /// </summary>
     public static readonly string[] ChamberYesWords = { "Retire to your own chambers" };
 
     // ---------- objects by name ----------

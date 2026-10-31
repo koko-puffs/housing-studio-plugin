@@ -13,7 +13,10 @@ its exact spot, then dyes everything to match.
 > "outside your home" compared the ward's territory with the game's "original house territory", read
 > inside the chambers, which isn't the ward's there. It's read from the house's own id now (bits 32-47:
 > 340 for The Lavender Beds, for the house and its chambers alike), and if arriving still doesn't read
-> as home after 20 s, the log says what was compared.
+> as home after 20 s, the log says what was compared. Going up to the chambers, from a second
+> recording: the door is "Entrance to Additional Chambers" (found by "Additional Chambers" in its name),
+> and "Move to your private chambers" takes you in with no question (0.7.4 waited for one and handed
+> the rest to you); a question that does come is answered yes only if it's "Retire to your own chambers?".
 > 0.7.4: the errands go up to **private chambers** themselves, from a recording of doing it by hand:
 > into the company's hall, to the door to the chambers (found by "Chambers" in its name, a guess: its
 > name isn't in the recording, and the names near you are logged if it isn't found), its menu's "Move
