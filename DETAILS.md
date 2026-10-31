@@ -8,7 +8,16 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.7.5. Placing works in the game; the newer features haven't all been tried in it yet.**
+> **Status: 0.7.6. Placing works in the game; the newer features haven't all been tried in it yet.**
+> 0.7.6: the errands get about faster. For a walk of 35 yalms or more they take the **mount roulette**
+> where the zone lets you ride (its TerritoryType row's Mount: not a city's streets, not inside), else
+> **Sprint**, and Sprint again whenever it's ready; off the mount before talking to someone or using
+> something (Settings → Getting → **Ride and sprint**, on by default). General actions by row: Sprint 4,
+> Mount Roulette 9, Dismount 23, each used only when the game says it can be, its name logged the first
+> time. **A ward's subdivision**: each division has its own Housing Merchant, but the vendor list kept
+> only the first one in a ward (the main division's), and from a subdivision the errands set off for it
+> and couldn't get there. Every spot is kept now, and the errands walk to the nearest one of that name
+> in the zone (the one in sight first), and use it by its name if its id differs.
 > 0.7.5: from private chambers the errands teleported out and then waited outside the house for ever:
 > "outside your home" compared the ward's territory with the game's "original house territory", read
 > inside the chambers, which isn't the ward's there. It's read from the house's own id now (bits 32-47:

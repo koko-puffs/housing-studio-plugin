@@ -409,6 +409,12 @@ public sealed partial class MainWindow
             config.ErrandsOtherWorlds = !config.ErrandsOtherWorlds;
             config.Save();
         }
+        if (SwitchRow(i++, "##errand-ride", "Ride and sprint", "Mount up where the zone allows, else sprint", config.ErrandsRide,
+                "For walks of 35 yalms or more, the mount roulette where the zone lets you ride (not a city's streets or inside); Sprint otherwise, again whenever it's ready. Off: walks." + errands))
+        {
+            config.ErrandsRide = !config.ErrandsRide;
+            config.Save();
+        }
         var spare = config.ErrandsSpareSlots;
         d = StepperRow(i++, "##errand-spare", "Spare bag slots", "Each trip leaves these empty", spare.ToString(), spare > 0, spare < 20,
             "Bag slots the errands leave free, for a stack that doesn't join one already there or a quest item." + errands);

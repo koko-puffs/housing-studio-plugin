@@ -30,6 +30,9 @@ public sealed partial class Configuration
     /// </summary>
     public bool ErrandsTrustGuesses { get; set; }
 
+    /// <summary>The errands ride (the mount roulette) where the zone lets you, for walks long enough; Sprint otherwise.</summary>
+    public bool ErrandsRide { get; set; } = true;
+
     /// <summary>Bag slots the errands leave free (a stack that doesn't join one already there, a quest item).</summary>
     public int ErrandsSpareSlots { get; set; } = 2;
 }

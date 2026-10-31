@@ -327,6 +327,16 @@ Move (or Esc) went back as it was. A recording of an unshifted piece showed mode
 the piece where it was. 0.7.1's rehearsal of a shifted one (old transform written back first) read
 the piece away from where it was after; why isn't known, so a rehearsal never shifts what it holds.
 
+**Getting about** (0.7.6, `Game/Movement.cs`): before a walk of `RideFrom` (35) yalms or more,
+`Movement.SpeedUp`: the mount roulette (GeneralAction 9) where `TerritoryType.Mount` and not in combat,
+else Sprint (4); Sprint again while walking on foot every 3 s if ready; `GetDown` (Dismount, 23) at
+the end of `WalkSteps`. Each only when `ActionManager.GetActionStatus` is 0; the GeneralAction row's name
+is logged on first use. Switch: `ErrandsRide`.
+
+**Vendors in a ward's divisions**: `VendorData` keeps every spot of a selling NPC
+(`SpotsOf(name, territory)`), not only the offer's (the first per territory). `VendorTravelSteps` walks to
+the NPC in sight (`ErrandGame.NpcOrNamed`: by id, else by name), else the nearest such spot.
+
 **The bar's put-away buttons** (0.7.2's chamber recording): `HousingLayout ← [i:2]` is "Place selected
 object in your inventory" (mode 3, `EditorMode.ToBags`, `UiTable.LayoutToBags`); `[i:3]` is "Place
 selected item into your storeroom" (mode 6, `EditorMode.Store`, `UiTable.LayoutStore`). Until 0.7.3

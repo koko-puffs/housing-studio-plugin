@@ -53,6 +53,15 @@ public sealed class VendorData
 
     private static readonly IReadOnlyList<VendorOffer> None = Array.Empty<VendorOffer>();
 
+    private static readonly IReadOnlyList<System.Numerics.Vector3> NoSpots = Array.Empty<System.Numerics.Vector3>();
+
+    /// <summary>
+    /// Everywhere an NPC of that name stands in a territory, from the game's data: a ward's main division
+    /// and its subdivision each have their own Housing Merchant (an offer names only one of them).
+    /// </summary>
+    public IReadOnlyList<System.Numerics.Vector3> SpotsOf(string npcName, uint territory) =>
+        tables is { } t && t.SpotsByName.TryGetValue((npcName, territory), out var list) ? list : NoSpots;
+
     /// <summary>Every NPC selling an item for gil (each place they stand), or none.</summary>
     public IReadOnlyList<VendorOffer> Offers(uint itemId) =>
         tables is { } t && t.ByItem.TryGetValue(itemId, out var list) ? list : None;
@@ -93,6 +102,9 @@ public sealed class VendorData
     private sealed class Tables
     {
         public readonly Dictionary<uint, IReadOnlyList<VendorOffer>> ByItem = new();
+
+        /// <summary>Every spot of a selling NPC, by its name and territory (both divisions of a ward).</summary>
+        public readonly Dictionary<(string Name, uint Territory), List<System.Numerics.Vector3>> SpotsByName = new();
 
         public int Count => ByItem.Values.Sum(l => l.Count);
     }
@@ -181,10 +193,14 @@ public sealed class VendorData
 
         // Where they stand: their Level rows, and the residential wards' layouts.
         var spots = new Dictionary<uint, List<Spot>>();
+        // Every spot, not only the first in each territory (the offers' one): a ward's subdivision has its own.
+        var allSpots = new Dictionary<uint, List<Spot>>();
         void AddSpot(uint npc, Spot spot)
         {
             if (!spots.TryGetValue(npc, out var list)) spots[npc] = list = new List<Spot>();
             if (list.All(s => s.Territory != spot.Territory)) list.Add(spot);
+            if (!allSpots.TryGetValue(npc, out var all)) allSpots[npc] = all = new List<Spot>();
+            if (all.All(s => s.Territory != spot.Territory || System.Numerics.Vector3.Distance(s.Position, spot.Position) > 3)) all.Add(spot);
         }
         foreach (var level in Services.Data.GetExcelSheet<Level>())
         {
@@ -267,6 +283,16 @@ public sealed class VendorData
         }
 
         var tables = new Tables();
+        foreach (var (npc, all) in allSpots)
+        {
+            var name = residents.TryGetRow(npc, out var res) ? NpcName(res.Singular.ExtractText()) : string.Empty;
+            if (name.Length == 0) continue;
+            foreach (var spot in all)
+            {
+                if (!tables.SpotsByName.TryGetValue((name, spot.Territory), out var list)) tables.SpotsByName[(name, spot.Territory)] = list = new List<System.Numerics.Vector3>();
+                if (list.All(p => System.Numerics.Vector3.Distance(p, spot.Position) > 3)) list.Add(spot.Position);
+            }
+        }
         foreach (var (item, offers) in byItem)
             tables.ByItem[item] = VendorChoice.Ranked(offers).ToList();
         return tables;

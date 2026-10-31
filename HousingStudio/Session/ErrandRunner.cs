@@ -675,10 +675,38 @@ public sealed partial class ErrandRunner : IDisposable
         var started = DateTime.MinValue;
         var tries = 0;
         Vector3? to = null;
+        var mounting = false;
+        var sprintTried = DateTime.MinValue;
+        var gotDown = false;
         return new List<Step>
         {
             WaitFor("vnavmesh has this zone's map", () => Nav.Ready, TimeSpan.FromSeconds(90),
                 "vnavmesh's map of this zone wasn't ready in 90 s (is vnavmesh installed and on?)."),
+            // Faster: on a mount for a long way where the zone lets you ride, else Sprint.
+            new Step
+            {
+                Label = "Mount up, or sprint",
+                IsAction = true,
+                Run = () =>
+                {
+                    mounting = false;
+                    gotDown = false;
+                    to = where();
+                    if (to == null) return StepOutcome.Done; // said by the walk
+                    var d = ErrandGame.DistanceTo(to.Value);
+                    if (d <= within) return StepOutcome.Done;
+                    mounting = Movement.SpeedUp(d, config.ErrandsRide, log.Info);
+                    sprintTried = DateTime.UtcNow;
+                    return StepOutcome.Done;
+                },
+            },
+            new Step
+            {
+                Label = "On the mount",
+                Timeout = TimeSpan.FromSeconds(5),
+                OnTimeout = StepStatus.Done, // on foot, then
+                Run = () => !mounting || (Movement.Mounted && ErrandGame.Settled) ? StepOutcome.Done : StepOutcome.Waiting,
+            },
             Step.Act($"Walk to {what} (vnavmesh)", () =>
             {
                 to = where();
@@ -703,6 +731,12 @@ public sealed partial class ErrandRunner : IDisposable
                         walkTarget = null;
                         return StepOutcome.Done;
                     }
+                    // On foot: Sprint again once it's off cooldown (tried every few seconds, not every frame).
+                    if (!Movement.Mounted && d > 15 && DateTime.UtcNow - sprintTried > TimeSpan.FromSeconds(3))
+                    {
+                        sprintTried = DateTime.UtcNow;
+                        Movement.TrySprint(log.Info);
+                    }
                     if (Nav.Busy || DateTime.UtcNow - started < TimeSpan.FromSeconds(2)) return StepOutcome.Waiting;
                     // vnavmesh stopped short: once more, then it's no way through.
                     if (tries >= 2)
@@ -716,6 +750,19 @@ public sealed partial class ErrandRunner : IDisposable
                 },
                 Timeout = WalkWait,
                 TimeoutMessage = $"Didn't get to {what} within {WalkWait.TotalMinutes:0} minutes.",
+            },
+            // Off the mount before talking to someone or using something.
+            new Step
+            {
+                Label = "Get down from the mount",
+                Timeout = TimeSpan.FromSeconds(4),
+                OnTimeout = StepStatus.Done,
+                Run = () =>
+                {
+                    if (!Movement.Mounted) return StepOutcome.Done;
+                    if (!gotDown) gotDown = Movement.GetDown(log.Info);
+                    return StepOutcome.Waiting;
+                },
             },
         };
     }
@@ -988,7 +1035,24 @@ public sealed partial class ErrandRunner : IDisposable
             steps.AddRange(TeleportSteps(v.TerritoryId, v.PlaceName.Length > 0 ? v.PlaceName : "the vendor's zone"));
         }
         var at = v.Position!.Value;
-        steps.AddRange(WalkSteps(v.NpcName, () => ErrandGame.Npc(v.NpcId, 60)?.Position ?? at));
+        var said = false;
+        // The one in sight, else the nearest spot of an NPC of that name in this zone: a ward's subdivision
+        // has its own Housing Merchant, which the offer (the main division's) doesn't name, and the two
+        // divisions can't be walked between (0.7.5: from a subdivision it set off for the main one's).
+        Vector3 Target()
+        {
+            if (ErrandGame.NpcOrNamed(v.NpcId, v.NpcName, 60) is { } seen) return seen.Position;
+            var nearest = shop.Vendors.SpotsOf(v.NpcName, ErrandGame.Territory)
+                .Select(p => (Vector3?)p).OrderBy(p => ErrandGame.DistanceTo(p!.Value)).FirstOrDefault();
+            if (nearest is not { } n) return at;
+            if (!said && Vector3.Distance(n, at) > 5)
+            {
+                said = true;
+                log.Info($"  The nearest {v.NpcName} here is at ({n.X:0.0}, {n.Z:0.0}), {ErrandGame.DistanceTo(n):0} yalms away (not the one in the list: another division of the ward).");
+            }
+            return n;
+        }
+        steps.AddRange(WalkSteps(v.NpcName, () => Target()));
         return steps;
     }
 
@@ -1035,7 +1099,7 @@ public sealed partial class ErrandRunner : IDisposable
         };
         return new List<Step>
         {
-            Use(v.NpcName, () => ErrandGame.Npc(v.NpcId, Reach + 3)),
+            Use(v.NpcName, () => ErrandGame.NpcOrNamed(v.NpcId, v.NpcName, Reach + 3)),
             Opens(),
         };
     }
@@ -1501,6 +1565,7 @@ public sealed partial class ErrandRunner : IDisposable
                     if (!Nav.Ready)
                         return DateTime.UtcNow - navAsked > TimeSpan.FromSeconds(20) ? HandOver("vnavmesh has no map of the hall.") : StepOutcome.Waiting;
                     if (!Nav.MoveTo(door.Value)) return HandOver("vnavmesh wouldn't walk to the door.");
+                    Movement.TrySprint(log.Info);
                     walkTarget = door;
                     walking = DateTime.UtcNow;
                     return StepOutcome.Done;

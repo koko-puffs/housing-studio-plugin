@@ -252,6 +252,10 @@ public static unsafe class ErrandGame
         return best;
     }
 
+    /// <summary>The NPC with that ENpcBase row, else one with that name (a subdivision's own Housing Merchant), nearest you within reach.</summary>
+    public static IGameObject? NpcOrNamed(uint npcId, string name, float within) =>
+        Npc(npcId, within) ?? (Me is { } me && name.Length > 0 ? Nearest(new[] { name }, me, within, ObjectKind.EventNpc) : null);
+
     /// <summary>The NPC with that ENpcBase row, nearest you within reach.</summary>
     public static IGameObject? Npc(uint npcId, float within)
     {
