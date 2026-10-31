@@ -62,7 +62,7 @@ public enum Tone
 /// and shows hover (edges go to the 0.34 line), press, focus (a 2px brass-soft ring, 2px out) and
 /// disabled (50% for buttons, 40% for small controls).
 /// </summary>
-public static class Kit
+public static partial class Kit
 {
     /// <summary>While a dialog is open, everything under it is drawn but can't be pointed at or pressed.</summary>
     public static bool Blocked { get; set; }
@@ -79,6 +79,8 @@ public static class Kit
     {
         Boxes.Clear();
         Panels.Clear();
+        Details.Clear();
+        Stages.Clear();
     }
 
     public static void PopBox() => Boxes.Pop();
@@ -268,33 +270,61 @@ public static class Kit
 
     private static Vector4 Mix(Vector4 a, Vector4 b, float t) => a + (b - a) * t;
 
-    public static float SegmentedWidth(IReadOnlyList<string> items)
+    /// <summary>The segmented pill's width; with <paramref name="maxWidth"/>, what it shrinks to (its words keep at least 6px either side).</summary>
+    public static float SegmentedWidth(IReadOnlyList<string> items, float maxWidth = 0) =>
+        SegmentedFrame(items) + items.Count * 2 * SegmentPad(items, maxWidth);
+
+    /// <summary>The pill's edges, inner padding, gaps and words: everything but the words' own padding.</summary>
+    private static float SegmentedFrame(IReadOnlyList<string> items)
     {
         var w = S(3) * 2 + S(1) * 2 + S(2) * (items.Count - 1);
-        foreach (var s in items) w += Txt.Measure(s, Face.Sans, 13).X + S(14) * 2;
+        foreach (var s in items) w += Txt.Measure(s, Face.Sans, 13).X;
         return w;
     }
 
-    /// <summary>The segmented pill (Settings → Pace): 40 tall outside, 32 inside, the picked one in brass-picked.</summary>
-    public static int Segmented(string id, Vector2 pos, IReadOnlyList<string> items, int selected)
+    /// <summary>The padding either side of each item's words: 14px, less when the pill must fit a narrower width.</summary>
+    private static float SegmentPad(IReadOnlyList<string> items, float maxWidth)
+    {
+        var pad = S(14);
+        if (maxWidth <= 0 || items.Count == 0) return pad;
+        var full = SegmentedFrame(items) + items.Count * 2 * pad;
+        if (full <= maxWidth) return pad;
+        return MathF.Max(S(6), pad - (full - maxWidth) / (items.Count * 2));
+    }
+
+    /// <summary>
+    /// The segmented pill (Settings → Pace, Ready's Keep / Clear out / Swap): 40 tall outside, 32
+    /// inside, the picked one in brass-picked. Items whose bit is set in <paramref name="disabledMask"/>
+    /// are at 40% and can't be picked; <paramref name="tips"/> are each item's tooltip (null for none).
+    /// With <paramref name="maxWidth"/>, the items' padding shrinks so the pill fits.
+    /// </summary>
+    public static int Segmented(string id, Vector2 pos, IReadOnlyList<string> items, int selected, int disabledMask = 0, float maxWidth = 0,
+        IReadOnlyList<string?>? tips = null)
     {
         var dl = Dl;
-        var total = SegmentedWidth(items);
+        var pad = SegmentPad(items, maxWidth);
+        var total = SegmentedFrame(items) + items.Count * 2 * pad;
         var h = S(40);
         dl.AddRect(pos + new Vector2(0.5f), pos + new Vector2(total, h) - new Vector2(0.5f), Palette.U32(Palette.LineStrong), h / 2, ImDrawFlags.None, 1f);
         var x = pos.X + S(1) + S(3);
         var result = selected;
         for (var i = 0; i < items.Count; i++)
         {
-            var w = Txt.Measure(items[i], Face.Sans, 13).X + S(28);
+            var w = Txt.Measure(items[i], Face.Sans, 13).X + pad * 2;
             var p = new Vector2(x, pos.Y + S(1) + S(3));
             var size = new Vector2(w, S(32));
             var on = i == selected;
-            var (clicked, hovered, _) = Hit($"{id}{i}", p, size);
+            var disabled = (disabledMask & (1 << i)) != 0;
+            var (clicked, hovered, _) = Hit($"{id}{i}", p, size, disabled);
             if (clicked) result = i;
+            if (tips != null && i < tips.Count && tips[i] is { } tip && !Blocked && ImGui.IsWindowHovered() && ImGui.IsMouseHoveringRect(p, p + size))
+                Tooltip(tip);
+            var old = Palette.Opacity;
+            if (disabled) Palette.Opacity = old * 0.4f;
             if (on) dl.AddRectFilled(p, p + size, Palette.U32(Palette.BrassPicked), size.Y / 2);
             else if (hovered) dl.AddRectFilled(p, p + size, Palette.U32(Palette.LineFaint), size.Y / 2);
-            Txt.Line(dl, new Vector2(p.X + S(14), p.Y), items[i], Face.Sans, 13, on || hovered ? Palette.Ivory : Palette.Ash, 32);
+            Txt.Line(dl, new Vector2(p.X + pad, p.Y), items[i], Face.Sans, 13, on || hovered ? Palette.Ivory : Palette.Ash, 32);
+            Palette.Opacity = old;
             FocusRing(p + new Vector2(S(4)), p + size - new Vector2(S(4)), size.Y / 2 - S(4));
             x += w + S(2);
         }
