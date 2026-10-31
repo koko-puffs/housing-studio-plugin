@@ -132,6 +132,7 @@ its exact spot, then dyes everything to match.
 - **Near me** (only pieces within a few yalms of you: a room) and the floors to place; placing
   follows them. The Pieces list also filters by state and name.
 - **Preview first**: walks every piece, marking each spot and logging what it would do, touching nothing.
+- **Rehearse the run**: every step a real start does, committing nothing (see [Rehearsal](#rehearsal)).
 - **Activity log** of every step, with the windows and values used, copyable.
 
 ### Looking after a home
@@ -318,7 +319,8 @@ One window, no tabs: what it shows follows what you're doing.
   (the fixtures left and ticked, what they are, **Set them for me after placing** (Beta), and **Tick
   off**: tick them as you set them, kept per design). The stage in hand has a brass number, done ones
   a tick. One brass button says what it does ("Get 12, then place", "Clear out 14, then place",
-  "Swap and place", "Start placing", with " · fixtures" when they follow), beside **Preview**, with
+  "Swap and place", "Start placing", with " · fixtures" when they follow), beside **Preview** (a menu:
+  **Mark the spots**, the preview, or **Rehearse the run**, see [Rehearsal](#rehearsal)), with
   about how long it takes at your pace (and the errands' trips first). With Get them for me first on,
   it opens the errands only when they can get something and set out now; otherwise it places what you
   have, and the line under it starts "Not getting first:" and why. Its tooltip says what it does
@@ -545,6 +547,61 @@ Words are matched in English only so far. IPC names used (`Game/Vnavmesh.cs`, `G
 `AutoRetainer.GetSuppressed` / `SetSuppressed`. Each is wrapped: missing, another version or a
 throw means "can't" (logged once), and the run stops where it needed it.
 
+## Rehearsal
+
+**Preview → Rehearse the run** (Ready's footer) does every step a real start would do, in the same
+order, with the same windows, clicks and waits, but never commits anything: nothing is bought,
+placed, moved, stored, dyed or set, and nothing needs cleaning up afterwards. It's for debugging and
+testing a whole run without spending gil. (**Mark the spots**, beside it in the menu, is the preview
+as it always was: it lights each spot and touches nothing in the game.)
+
+It follows Ready's choices as the brass button would: with **Get them for me first** it opens the
+errands' estimate, whose button reads **Rehearse these errands**; otherwise it rehearses placing at
+once (Keep, Clear out or Swap as chosen), and the fixtures after it when **Set them for me after
+placing** is on. Step by step, Pause, Stop and the errands' "Trust the new clicks" work as in a real
+run.
+
+**At each commit point** it does everything up to it, logs "Would …" and backs out:
+
+| | A real run | A rehearsal |
+| --- | --- | --- |
+| Move a placed piece | picks it up, sets its spot, sets it down | picks it up and holds it at its spot a moment, writes its old spot back, then lets go by pressing the editor's **Move** button (`UiTable.LetGo`), never the set-down. That a mode change drops a held piece isn't seen in the game yet, so it waits for **Continue** until you press **Trust it from now on** in the callout; since the old spot is written back first, the piece stays where it was even if the game set it down. If the editor still holds it, you're asked to press Esc. Then it checks the piece is where it was. |
+| Place from the storeroom | finds and picks the row, the preview shows, Place | the same up to the preview, which is moved to the piece's spot for a moment; "Place" is found in the row's menu (its words checked), then the menu is closed (as a run closes a row that isn't the piece), which takes the preview away; it checks nothing was placed. |
+| Place from your bags | the item's menu → Store, then from the storeroom (or Place, then set down) | the item's menu opened, "Store" (or "Place") found, the menu closed. |
+| Placed by hand | waits for you | doesn't wait: noted. |
+| Clear out | Store mode, the piece picked | Store mode pressed; the piece isn't picked (in Store mode the pick itself may put it away; whether the game asks first isn't known). |
+| Dye | the dye window, the dye chosen, Dye, yes | the dye window opened on the piece and the dye chosen, then closed without Dye (a "dye it?" question is answered no); it checks the dye didn't change. Pieces not placed yet are counted ("once placed"), not tried. |
+| A vendor's purchase | the purchase, its question checked, yes | the purchase sent, the game's question read and checked against the price (`MarketRule.QuestionMatches`: whether it matched is in the report), then Cancel; it checks nothing came to your bags and no gil went. |
+| The market board | search, listings, the listing, its question, yes | the same up to the question, checked, then Cancel. |
+| A retainer | the bell, the retainer, their bags, the item's menu, Retrieve | the same up to the menu, "Retrieve from Retainer" found, the menu closed. |
+| Fixtures | each put in its slot, apply, yes | each put in its slot, then the window closed without applying (its close button; closing is expected to keep the fixtures as they were and give the items back, which it checks). Every fixtures step waits for Continue, as setting them does. |
+
+**Teleports and walking happen for real**: their fees are the only gil a rehearsal spends (the
+screens say so). As nothing is bought, each trip is made once as planned (no working out again, no
+"the last trip got nothing" stop), going home and in between them as usual, and placing is rehearsed
+once, after the last trip, on what you already own. Gil and bag-slot checks still run and are noted
+("A real run would stop here: not enough gil") without stopping it; a step that fails is noted and
+the rehearsal goes on with the next stop (the rest of that stop left out), stopping only for going
+home, going in or placing, or after 6 failures. Its Got and Spent cards read **Would get** and
+**Would spend**.
+
+**Nothing in a rehearsal changes the plugin's own records either**: no backup is saved (none is
+needed), no swap is kept, place anywhere isn't switched on, Care keeps no snapshot or `resume.json`,
+fixture ticks and the Recent list are left alone. (The storeroom rows it learns by picking are kept,
+as they're true of the storeroom.)
+
+**A guard** (`Core/Rehearsal.cs`, `Rehearsals`): each runner says whether it's rehearsing, and while
+one is, the clicks that commit (`RehearsalRules`: Yes on the game's question, the dye window's Dye and
+its yes, the fixtures window's apply) and the editor's set-down are refused and noted as "refused: it
+would commit", whatever step tried. The door's "Enter the estate hall?" is let through (going in is
+part of the trip). A real run never sees the guard.
+
+**After it**: **Rehearsal *done*** (or *stopped*), what it would have done ("Would place 12, move 3,
+store 2, dye 4 (1 once placed), buy 6 for 12,400 gil, take 2 from retainers and set 3 fixtures"),
+how the purchase questions read, and **what didn't work**: each step that failed, timed out or didn't
+match, with its message. **Copy report** copies all that with the whole log. There's no Put them back,
+Swap back or Try again after a rehearsal (nothing changed).
+
 ## Sending a house to the site
 
 **Send to my builds** (Start's This house card, beside Save as a build) puts the home you're in straight
@@ -596,7 +653,7 @@ pause between pieces: Careful (1.5 s) becomes Steady, the rest Quick.
    The pill under the title turns green: "Fits your house (medium) · you can decorate".
 3. Housing → **Indoor Furnishings** (or Outdoor), which opens the editor and the furnishing list
    (the run can also open the Housing menu for you).
-4. **Preview first** to see it, then **Start placing**. The first time, switch on **Step by step**
+4. **Preview first** to see it (**Rehearse the run** to try every step without committing), then **Start placing**. The first time, switch on **Step by step**
    (Settings → Help): it holds before every click and shows what it's about to
    do; press **Continue** (or `/hstudio continue`).
 

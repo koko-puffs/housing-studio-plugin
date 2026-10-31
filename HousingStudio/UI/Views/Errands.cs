@@ -884,6 +884,15 @@ public sealed partial class MainWindow
             var cw = Kit.ButtonWidth(cont, BtnSize.Md, Icon.Play, Btn.Primary);
             if (Kit.Button("##errand-continue", new Vector2(row.X + Kit.Width - cw, row.Y), cont, Btn.Primary, BtnSize.Md, Icon.Play))
                 OnFramework(e.Continue);
+            // The placing rehearsal's let-go (not seen working yet): trusted from here as in Running's callout.
+            if (placing && runner.HoldingALetGo
+                && Kit.Button("##errand-trust-letgo", row, "Trust it from now on", Btn.Quiet, BtnSize.Md, Icon.Check, 0, false,
+                    "This click hasn't been seen working yet: lets the rehearsal let go of pieces without waiting for Continue each time."))
+            {
+                config.RehearsalTrustLetGo = true;
+                config.Save();
+                OnFramework(e.Continue);
+            }
             Kit.Reserve(row, Kit.Width, S(40));
         }
         else

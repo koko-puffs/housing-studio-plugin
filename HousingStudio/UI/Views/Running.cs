@@ -223,6 +223,7 @@ public sealed partial class MainWindow
                 {
                     config.RehearsalTrustLetGo = true;
                     config.Save();
+                    OnFramework(runner.Continue);
                 }
                 Kit.Reserve(trustAt, Kit.Width, Kit.ButtonHeight(BtnSize.Sm));
             }
