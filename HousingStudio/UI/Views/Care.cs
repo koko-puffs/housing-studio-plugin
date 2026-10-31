@@ -78,17 +78,17 @@ public sealed partial class MainWindow
             AlertNote(words.WrongSide, Palette.Danger, textColor: Palette.Text);
             Kit.Gap(10);
         }
-        if (words.Rest > 0)
+        if (words.Others > 0)
         {
-            var lead = CareWords.ClashLead(words.Rest, config.PlaceAnywhere, false);
+            var lead = CareWords.ClashLead(words.Others, config.PlaceAnywhere, false);
             if (config.PlaceAnywhere) AlertNote($"{lead} Pieces lists them.", Palette.Dim, Icon.Info);
-            else AlertNote($"{lead} {words.RestList}. Pieces lists them with Show where.", Palette.Danger, textColor: Palette.Text);
+            else AlertNote($"{lead} {words.OthersList}. Pieces lists them with Show where.", Palette.Danger, textColor: Palette.Text);
             Kit.Gap(10);
         }
     }
 
     /// <summary>The clashes in words, made once per clash list: the other side's line, and the rest's count and list.</summary>
-    private (string? WrongSide, int Rest, string RestList, int All) ClashWords(List<Clash> clashes)
+    private (string? WrongSide, int Others, string OthersList, int All) ClashWords(List<Clash> clashes)
     {
         var wrongSide = clashes.Where(c => c.Kind == ClashKind.WrongSide).ToList();
         var rest = clashes.Where(c => c.Kind != ClashKind.WrongSide).ToList();
@@ -104,7 +104,7 @@ public sealed partial class MainWindow
             return $"{CareWords.Names(pieces.Select(t => t.ItemId), data.ItemName)} {CareWords.Reason(g.Key, pieces.Count)}";
         }));
 
-    private (object? Of, Side Side, string? Size, string? District, List<Clash> List, (string? WrongSide, int Rest, string RestList, int All) Words) clashCache =
+    private (object? Of, Side Side, string? Size, string? District, List<Clash> List, (string? WrongSide, int Others, string OthersList, int All) Words) clashCache =
         (null, Side.Interior, null, null, new List<Clash>(), (null, 0, string.Empty, 0));
 
     /// <summary>The design's clashes for the side shown, worked out again only when the plan, the side or the home changes.</summary>
