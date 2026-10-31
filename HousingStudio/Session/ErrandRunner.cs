@@ -210,6 +210,8 @@ public sealed class ErrandRunner : IDisposable
         if (world.Length == 0 || world != ErrandGame.HomeWorld()) return "Go back to your home world first.";
         if (!Nav.Installed) return "vnavmesh isn't installed (or is turned off).";
         if (!Travel.Installed) return "Lifestream isn't installed (or is turned off).";
+        // What's fetched is placed by the usual run: it has to be able to start here.
+        if (runner.CanStart(false) is { } placing) return placing;
         if (plan.IsEmpty) return "Nothing the errands can get.";
         var gil = ErrandGame.Gil();
         if (gil < plan.TotalGil) return $"You have {gil:N0} gil; the errands need about {plan.TotalGil:N0}.";
@@ -395,6 +397,12 @@ public sealed class ErrandRunner : IDisposable
 
     private void TickSafely(HousingContext ctx)
     {
+        // Switched off in Settings while it goes: it stops.
+        if (!Enabled)
+        {
+            Stop("Switched off in Settings → Experimental.");
+            return;
+        }
         // The placing run looks after itself (its own stops); the errands only wait for it.
         if (!Placing)
         {
@@ -416,6 +424,12 @@ public sealed class ErrandRunner : IDisposable
         }
         else
         {
+            // (Combat, a cutscene and zone changes stop the placing run itself; a duty pop doesn't.)
+            if (ErrandGame.Blocked(true) is { } why)
+            {
+                Stop(why);
+                return;
+            }
             lastTerritory = ErrandGame.Territory;
         }
         if (State == RunState.Paused) return;
@@ -894,7 +908,9 @@ public sealed class ErrandRunner : IDisposable
             {
                 if (ErrandGame.MenuEntries() is not { } menu) return StepOutcome.Halt($"{v.NpcName}'s menu closed.");
                 var i = v.ShopName.Length == 0 ? -1 : menu.Entries.FindIndex(e => string.Equals(e.Trim(), v.ShopName.Trim(), StringComparison.OrdinalIgnoreCase));
-                if (i < 0 && v.ShopName.Length > 0) i = menu.Entries.FindIndex(e => e.Contains(v.ShopName.Trim(), StringComparison.OrdinalIgnoreCase));
+                if (i < 0 && v.ShopName.Length > 0)
+                    i = menu.Entries.FindIndex(e => e.Trim().Length > 0
+                                                    && (e.Contains(v.ShopName.Trim(), StringComparison.OrdinalIgnoreCase) || v.ShopName.Contains(e.Trim(), StringComparison.OrdinalIgnoreCase)));
                 if (i < 0) return StepOutcome.Halt($"{v.NpcName}'s menu has no \"{v.ShopName}\" (it shows: {string.Join(" | ", menu.Entries)}).");
                 var call = menu.Addon == ErrandTable.SelectIconString ? ErrandTable.IconMenuPick : ErrandTable.MenuPick;
                 return GameUi.Fire(call, UiCallValues.Of(("index", i))) ? StepOutcome.Done : StepOutcome.Halt($"{v.NpcName}'s menu closed.");
@@ -1027,6 +1043,8 @@ public sealed class ErrandRunner : IDisposable
         long gilBefore = 0;
         long cost = 0;
         var name = Name(item.ItemId);
+        // Listings bought (or tried): the board's list may still show one for a moment after.
+        var tried = new HashSet<ulong>();
         List<Step> Once() => new()
         {
             new Step
@@ -1042,6 +1060,7 @@ public sealed class ErrandRunner : IDisposable
                     string? firstWhy = null;
                     foreach (var l in listings.OrderBy(l => l.UnitPrice))
                     {
+                        if (tried.Contains(l.ListingId)) continue;
                         var why = MarketRule.WhyNot(l.UnitPrice, l.Quantity, l.TotalTax, item.MaxUnitPrice, wanted - bought, item.Gil - itemSpent,
                             Math.Min(ceiling - MarketSpent, agreedGil - Spent), gil);
                         if (why != null)
@@ -1052,6 +1071,7 @@ public sealed class ErrandRunner : IDisposable
                         if (ErrandGame.FreeSlots() < ErrandPlanner.Stacks(l.Quantity, ErrandGame.StackSize(item.ItemId)))
                             return StepOutcome.Halt($"Your bags are full ({ErrandGame.FreeSlots()} free slots).");
                         cost = MarketRule.Cost(l.UnitPrice, l.Quantity, l.TotalTax);
+                        tried.Add(l.ListingId);
                         before = ErrandGame.BagCount(item.ItemId);
                         gilBefore = gil;
                         log.Info($"  Buying {l.Quantity} × {name} at {l.UnitPrice:N0} gil each ({cost:N0} with tax), row {l.Row}.");
@@ -1112,12 +1132,17 @@ public sealed class ErrandRunner : IDisposable
     {
         var steps = new List<Step>();
         if (ErrandGame.CurrentWorld() != homeWorld) steps.AddRange(WorldSteps(homeWorld));
-        bool There() => leave ? ErrandGame.InHomeWard(home!) : Inside() || ErrandGame.InHomeWard(home!);
+        // Home: inside already, or teleported to its door (even from elsewhere in the ward, so the door
+        // found after is yours, not a neighbour's). Out (for your district's vendors): in the ward.
         var asked = DateTime.MinValue;
+        var went = false;
+        var skipped = false;
         steps.Add(Step.Act(leave ? "Go out to your ward (Lifestream, your home's teleport)" : "Go home (Lifestream)", () =>
         {
-            if (There()) return StepOutcome.Done;
+            skipped = leave ? ErrandGame.InHomeWard(home!) : Inside();
+            if (skipped) return StepOutcome.Done;
             travelling = true;
+            went = false;
             asked = DateTime.UtcNow;
             return Travel.GoHome(homeKind) ? StepOutcome.Done : StepOutcome.Halt("Lifestream wouldn't take you home (is it installed and up to date?).");
         }));
@@ -1126,13 +1151,17 @@ public sealed class ErrandRunner : IDisposable
             Label = leave ? "Arrive outside your home" : "Arrive home",
             Run = () =>
             {
-                if (leave && Inside() && !ErrandGame.Moving && !Travel.Busy && DateTime.UtcNow - asked > TimeSpan.FromSeconds(15))
+                if (skipped) return StepOutcome.Done;
+                went |= ErrandGame.Moving || Travel.Busy;
+                if (!went && DateTime.UtcNow - asked > TimeSpan.FromSeconds(15))
                 {
-                    // Lifestream didn't teleport from inside the home it goes to.
+                    if (!leave || !Inside()) return StepOutcome.Halt("Lifestream didn't take you home (it may need your home's address: see its settings).");
+                    // Lifestream didn't teleport from inside the home it goes to: you step out.
                     queue.InsertNext(new[] { Arriving(You("Step outside your home", () => ErrandGame.InHomeWard(home!))) });
                     return StepOutcome.Done;
                 }
-                if (!There() || !ErrandGame.Settled || Travel.Busy) return StepOutcome.Waiting;
+                var there = ErrandGame.InHomeWard(home!) || (!leave && Inside());
+                if (!went || !there || !ErrandGame.Settled || Travel.Busy) return StepOutcome.Waiting;
                 travelling = false;
                 lastTerritory = ErrandGame.Territory;
                 return StepOutcome.Done;

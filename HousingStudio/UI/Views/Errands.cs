@@ -72,6 +72,16 @@ public sealed partial class MainWindow
 
     private bool estimateFailed;
 
+    private (ErrandPlan? Plan, DateTime Until, string? Why) errandsBlocked;
+
+    /// <summary>Why the errands can't start (asked a few times a second, not every frame: it looks around you).</summary>
+    private string? ErrandsBlocked(ErrandPlan plan)
+    {
+        if (ReferenceEquals(errandsBlocked.Plan, plan) && DateTime.UtcNow < errandsBlocked.Until) return errandsBlocked.Why;
+        errandsBlocked = (plan, DateTime.UtcNow + TimeSpan.FromSeconds(0.5), Errands.CanStart(plan, session.Context));
+        return errandsBlocked.Why;
+    }
+
     // ---------------------------------------------------------------------------------------------
     // The way in: Shopping's foot and Ready.
 
@@ -150,7 +160,7 @@ public sealed partial class MainWindow
         ErrandsHeader($"Experimental · {session.Title}", title, true);
 
         Frame.BeginBody("##errands", "errands-foot", 16, 22);
-        var blocked = Errands.CanStart(plan, session.Context);
+        var blocked = ErrandsBlocked(plan);
         if (blocked != null)
         {
             AlertNote(blocked, Palette.Danger, textColor: Palette.Text);
