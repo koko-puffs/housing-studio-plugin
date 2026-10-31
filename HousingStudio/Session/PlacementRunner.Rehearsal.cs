@@ -234,7 +234,8 @@ public sealed unsafe partial class PlacementRunner
     /// <summary>
     /// A storeroom piece's commit point: its row is picked and the game shows its preview (as a real
     /// run); here the preview is shown at the piece's spot, "Place" is found in the row's menu, and the
-    /// menu is closed instead (as a real run closes a row that isn't the piece), which takes the preview away.
+    /// menu is closed instead (as a real run closes a row that isn't the piece). The game keeps showing the
+    /// preview after that (the row stays picked until another is), so only the menu and the hand are waited for.
     /// </summary>
     private List<Step> RehearsePlace(RunJob job, int[] chosen, Func<int> placedBefore)
     {
@@ -269,19 +270,20 @@ public sealed unsafe partial class PlacementRunner
             }),
             new Step
             {
-                Label = "The menu closes, and the preview with it",
+                Label = "The menu closes (nothing in hand)",
                 Timeout = WindowWait,
                 OnTimeout = StepStatus.Done, // checked next
-                Run = () => !GameUi.IsOpen(UiTable.ContextMenu) && FurnitureReader.Preview() == null && HousingEditor.ActiveItem == 0 ? StepOutcome.Done : StepOutcome.Waiting,
+                // Not the preview: it stays shown after the menu closes, until another row is picked.
+                Run = () => !GameUi.IsOpen(UiTable.ContextMenu) && HousingEditor.ActiveItem == 0 ? StepOutcome.Done : StepOutcome.Waiting,
             },
             new Step
             {
                 Label = $"Check {name} wasn't placed",
                 Run = () =>
                 {
-                    if (GameUi.IsOpen(UiTable.ContextMenu) || FurnitureReader.Preview() != null || HousingEditor.ActiveItem != 0)
+                    if (GameUi.IsOpen(UiTable.ContextMenu) || HousingEditor.ActiveItem != 0)
                     {
-                        var what = GameUi.IsOpen(UiTable.ContextMenu) ? "the menu stayed open" : FurnitureReader.Preview() != null ? "the preview stayed" : "the editor still holds a piece";
+                        var what = GameUi.IsOpen(UiTable.ContextMenu) ? "the menu stayed open" : "the editor holds a piece";
                         log.Warn($"  After closing the menu, {what}.");
                         Rehearsals.Report.Issue(name, $"After closing the storeroom row's menu ({UiTable.MenuCancel.Describe()}), {what}.", RehearsalTrouble.NoMatch);
                     }
