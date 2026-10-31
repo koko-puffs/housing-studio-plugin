@@ -298,3 +298,15 @@ dyeing through Furnishing Color's list) would confirm them: its "menu entries" l
 Settings → Something not working? → **Start recording**; do the thing that went wrong by hand (and, with the
 Storeroom tab open, press **Write down the windows' values**); **Stop recording**; **Copy recording +
 log**.
+
+## Errands (experimental)
+
+"Get everything for me" (`Session/ErrandRunner.cs`) uses the same step queue for its trips: teleports
+and world visits through Lifestream's IPC, walking through vnavmesh's, talking to NPCs and using bells,
+boards and doors with the game's `TargetSystem.InteractWithObject`, and the windows' callbacks as
+above. Every window, callback and word it uses is in `Automation/ErrandTable.cs`; the ones not yet
+seen working (a gil shop's purchase, choosing a retainer, retrieving from their bags, buying a
+listing, the door's name) wait for Continue until you trust them. The market board's listings are
+read from the game's own record of them (`InfoProxyItemSearch`), not the window. See
+[DETAILS.md](../DETAILS.md#getting-everything-for-you-experimental) for what it does and what would
+confirm each guess.
