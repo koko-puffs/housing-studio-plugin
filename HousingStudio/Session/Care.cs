@@ -68,6 +68,9 @@ public sealed class Care
     // Every frame.
 
     private bool watching;
+    private (Side?, uint, uint, ulong, int?) homeOf;
+    private IReadOnlyList<PlanEntry>? runEntries;
+    private bool writeFailed;
     private string? runHome;
     private Side runSide;
     private string? runDesign;
@@ -100,11 +103,19 @@ public sealed class Care
     private void TickNow(HousingContext ctx)
     {
         var world = Services.PlayerState.IsLoaded ? Services.PlayerState.CurrentWorld.RowId : 0;
-        CurrentHome = Homes.Key(ctx.Side, world, ctx.TerritoryId, ctx.HouseId, ctx.Plot);
+        // Made again only when the home changes (not a string every frame).
+        var where = (ctx.Side, world, ctx.TerritoryId, ctx.HouseId, ctx.Plot);
+        if (where != homeOf)
+        {
+            homeOf = where;
+            CurrentHome = Homes.Key(ctx.Side, world, ctx.TerritoryId, ctx.HouseId, ctx.Plot);
+        }
 
+        // A new run is told by the pieces it was given (a run that ends and another that starts between
+        // two frames still count as two).
+        if (watching && (!runner.Active || !ReferenceEquals(runner.Entries, runEntries))) RunEnded(ctx);
         if (!watching && runner.Active && !runner.DryRun) RunStarted(ctx);
-        else if (watching && runner.Active) KeepProgress(force: false);
-        else if (watching) RunEnded(ctx);
+        else if (watching) KeepProgress(force: false);
 
         if (putBack != null) StartPutBack();
 
@@ -134,6 +145,8 @@ public sealed class Care
     private void RunStarted(HousingContext ctx)
     {
         watching = true;
+        runEntries = runner.Entries;
+        writeFailed = false;
         runHome = CurrentHome;
         runSide = ctx.Side ?? Side.Interior;
         runDesign = session.FilePath;
@@ -159,20 +172,26 @@ public sealed class Care
     private void KeepProgress(bool force)
     {
         if (runHome == null || runDesign == null || runPieces.Count == 0) return;
+        // Looked at a few times a second (the counts go through the run's pieces), and written when they change.
+        if (!force && DateTime.UtcNow - writtenAt < ProgressEvery) return;
         var ended = runner.Done + runner.Failed + runner.Skipped;
         var total = runBase + runner.Total + runner.DyesStillExpected;
         var now = (runBase + ended, Math.Max(total, runBase + ended), runner.Phase ?? RunPhase.Move);
-        if (now == written) return;
-        if (!force && DateTime.UtcNow - writtenAt < ProgressEvery) return;
-        var p = new RunProgress(runDesign, runTitle, runHome, runSide, runPieces, now.Item1, Math.Max(1, now.Item2), now.Item3, DateTime.UtcNow);
-        if (Write(ResumePath, p.ToJson(), "the run's progress")) written = now;
         writtenAt = DateTime.UtcNow;
+        if (now == written) return;
+        var p = new RunProgress(runDesign, runTitle, runHome, runSide, runPieces, now.Item1, Math.Max(1, now.Item2), now.Item3, DateTime.UtcNow);
+        // A write that fails (a full disk) is said once a run, not twice a second.
+        if (Write(ResumePath, p.ToJson(), "the run's progress", quiet: writeFailed)) written = now;
+        else writeFailed = true;
         Progress = p;
     }
 
     private void RunEnded(HousingContext ctx)
     {
         watching = false;
+        runEntries = null;
+        // Another run has started already (in between two frames): how this one ended can't be read any more; the new one's start takes over.
+        if (runner.Active) return;
         var finished = runner.State == RunState.Finished;
         var byYou = runner.StopReason?.StartsWith("Stopped by you", StringComparison.Ordinal) == true;
         if (finished || byYou) Forget();
@@ -374,7 +393,7 @@ public sealed class Care
 
     // ---------------------------------------------------------------------------------------------
 
-    private bool Write(string path, string text, string what)
+    private bool Write(string path, string text, string what, bool quiet = false)
     {
         var temp = path + ".saving";
         try
@@ -386,7 +405,7 @@ public sealed class Care
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            log.Warn($"Couldn't keep {what}: {ex.Message}");
+            if (!quiet) log.Warn($"Couldn't keep {what}: {ex.Message}");
             try
             {
                 if (File.Exists(temp)) File.Delete(temp);

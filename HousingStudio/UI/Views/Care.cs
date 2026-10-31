@@ -64,28 +64,36 @@ public sealed partial class MainWindow
         {
             var places = entries.Count(e => e.State is PieceState.FromStoreroom or PieceState.FromInventory);
             var check = ItemLimits.Check(side, ctx.HouseSize, layout.Pieces(side).Count(), session.Live.Count, plan.Extras.Count, places);
-            if (check is { } c && CareWords.Limit(c, side, ctx.HouseSize) is { } words)
+            if (check is { } c && CareWords.Limit(c, side, ctx.HouseSize) is { } limitWords)
             {
-                AlertNote(words, c.Over > 0 ? Palette.Danger : Palette.Dim, c.Over > 0 ? Icon.Alert : Icon.Info, Palette.Text);
+                AlertNote(limitWords, c.Over > 0 ? Palette.Danger : Palette.Dim, c.Over > 0 ? Icon.Alert : Icon.Info, Palette.Text);
                 Kit.Gap(10);
             }
         }
 
-        var clashes = ClashesNow();
+        ClashesNow();
+        var words = clashCache.Words;
+        if (words.WrongSide != null)
+        {
+            AlertNote(words.WrongSide, Palette.Danger, textColor: Palette.Text);
+            Kit.Gap(10);
+        }
+        if (words.Rest > 0)
+        {
+            var lead = CareWords.ClashLead(words.Rest, config.PlaceAnywhere, false);
+            if (config.PlaceAnywhere) AlertNote($"{lead} Pieces lists them.", Palette.Dim, Icon.Info);
+            else AlertNote($"{lead} {words.RestList}. Pieces lists them with Show where.", Palette.Danger, textColor: Palette.Text);
+            Kit.Gap(10);
+        }
+    }
+
+    /// <summary>The clashes in words, made once per clash list: the other side's line, and the rest's count and list.</summary>
+    private (string? WrongSide, int Rest, string RestList, int All) ClashWords(List<Clash> clashes)
+    {
         var wrongSide = clashes.Where(c => c.Kind == ClashKind.WrongSide).ToList();
         var rest = clashes.Where(c => c.Kind != ClashKind.WrongSide).ToList();
-        if (wrongSide.Count > 0)
-        {
-            AlertNote($"{CareWords.ClashLead(Clashes.PieceCount(wrongSide), config.PlaceAnywhere, true)} {ClashList(wrongSide)}.", Palette.Danger, textColor: Palette.Text);
-            Kit.Gap(10);
-        }
-        if (rest.Count > 0)
-        {
-            var lead = CareWords.ClashLead(Clashes.PieceCount(rest), config.PlaceAnywhere, false);
-            if (config.PlaceAnywhere) AlertNote($"{lead} Pieces lists them.", Palette.Dim, Icon.Info);
-            else AlertNote($"{lead} {ClashList(rest)}. Pieces lists them with Show where.", Palette.Danger, textColor: Palette.Text);
-            Kit.Gap(10);
-        }
+        var side = wrongSide.Count > 0 ? $"{CareWords.ClashLead(Clashes.PieceCount(wrongSide), false, true)} {ClashList(wrongSide)}." : null;
+        return (side, Clashes.PieceCount(rest), ClashList(rest), Clashes.PieceCount(clashes));
     }
 
     /// <summary>"Oak Table ×2 sit on others of the same at the same spot; Bed is below the floor".</summary>
@@ -96,12 +104,17 @@ public sealed partial class MainWindow
             return $"{CareWords.Names(pieces.Select(t => t.ItemId), data.ItemName)} {CareWords.Reason(g.Key, pieces.Count)}";
         }));
 
-    private (object? Of, Side Side, string? Size, string? District, List<Clash> List) clashCache;
+    private (object? Of, Side Side, string? Size, string? District, List<Clash> List, (string? WrongSide, int Rest, string RestList, int All) Words) clashCache =
+        (null, Side.Interior, null, null, new List<Clash>(), (null, 0, string.Empty, 0));
 
     /// <summary>The design's clashes for the side shown, worked out again only when the plan, the side or the home changes.</summary>
     private List<Clash> ClashesNow()
     {
-        if (session.Layout == null) return new List<Clash>();
+        if (session.Layout == null)
+        {
+            if (clashCache.Of != null) clashCache = (null, Side.Interior, null, null, new List<Clash>(), (null, 0, string.Empty, 0));
+            return clashCache.List;
+        }
         var side = ReadySide;
         var ctx = session.Context;
         // Inside, the heights and walls are the home's you're in, else the design's own size.
@@ -111,7 +124,8 @@ public sealed partial class MainWindow
         if (!ReferenceEquals(clashCache.Of, of) || clashCache.Side != side || clashCache.Size != size || clashCache.District != district)
         {
             var targets = session.Plan is { } plan && session.PlanSide == side ? plan.Entries.Select(e => e.Target).ToList() : session.Targets(side, toList: true);
-            clashCache = (of, side, size, district, Clashes.Find(targets, side, size, district, item => data.PlaceableOn(item, side)));
+            var found = Clashes.Find(targets, side, size, district, item => data.PlaceableOn(item, side));
+            clashCache = (of, side, size, district, found, ClashWords(found));
         }
         return clashCache.List;
     }
@@ -152,6 +166,7 @@ public sealed partial class MainWindow
     // Check for changes since the last run, and Put them back where they were.
 
     private bool driftChecking;
+    private (DriftCheck? Check, List<string> Lines) driftLines = (null, new List<string>());
 
     private void DrawDrift()
     {
@@ -213,18 +228,23 @@ public sealed partial class MainWindow
         Kit.Gap(12);
         var at = Kit.At;
         Kit.Divider(Kit.Panel.Start.X, Kit.Panel.Start.X + Kit.Panel.Width, at.Y - S(6));
-        Txt.Para(new[] { new Run($"{CareWords.Drift(r)} (checked {Clock(check.CheckedAt)})", Face.Sans, 14, r.Unchanged ? Palette.Success : Palette.Ivory) });
-        var lines = new List<string>();
-        if (r.Moved.Count > 0) lines.Add($"Moved: {CareWords.Names(r.Moved.Select(m => m.Was.ItemId), data.ItemName)}");
-        if (r.Gone.Count > 0) lines.Add($"Taken away: {CareWords.Names(r.Gone.Select(t => t.ItemId), data.ItemName)}");
-        if (r.Redyed.Count > 0) lines.Add($"In another dye: {CareWords.Names(r.Redyed.Select(m => m.Was.ItemId), data.ItemName)}");
-        if (r.Added.Count > 0) lines.Add($"Added since: {CareWords.Names(r.Added.Select(p => p.ItemId), data.ItemName)} (these stay)");
-        foreach (var line in lines)
+        if (!ReferenceEquals(driftLines.Check, check))
+        {
+            // Made once per check, not every frame.
+            var made = new List<string> { $"{CareWords.Drift(r)} (checked {Clock(check.CheckedAt)})" };
+            if (r.Moved.Count > 0) made.Add($"Moved: {CareWords.Names(r.Moved.Select(m => m.Was.ItemId), data.ItemName)}");
+            if (r.Gone.Count > 0) made.Add($"Taken away: {CareWords.Names(r.Gone.Select(t => t.ItemId), data.ItemName)}");
+            if (r.Redyed.Count > 0) made.Add($"In another dye: {CareWords.Names(r.Redyed.Select(m => m.Was.ItemId), data.ItemName)}");
+            if (r.Added.Count > 0) made.Add($"Added since: {CareWords.Names(r.Added.Select(p => p.ItemId), data.ItemName)} (these stay)");
+            driftLines = (check, made);
+        }
+        Txt.Para(new[] { new Run(driftLines.Lines[0], Face.Sans, 14, r.Unchanged ? Palette.Success : Palette.Ivory) });
+        foreach (var line in driftLines.Lines.Skip(1))
         {
             Kit.Gap(4);
             Txt.Note(line);
         }
-        if (!r.CanPutBack && r.Added.Count == 0) return;
+        if (!r.CanPutBack) return;
 
         Kit.Gap(12);
         var row = Kit.At;
@@ -283,7 +303,7 @@ public sealed partial class MainWindow
     {
         var clashes = ClashesNow();
         if (clashes.Count == 0) return;
-        var count = Clashes.PieceCount(clashes);
+        var count = clashCache.Words.All;
         var chip = Words.Count(count, "piece");
         var hard = !config.PlaceAnywhere || clashes.Any(c => c.Kind == ClashKind.WrongSide);
         Kit.BeginPanel("##clashes", 0, 0, 0);
