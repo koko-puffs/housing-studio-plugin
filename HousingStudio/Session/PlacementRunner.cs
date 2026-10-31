@@ -44,7 +44,7 @@ public sealed record RunProblem(RunJob Job, string Name, ProblemKind Kind, strin
 /// <see cref="TimeLeft"/>, <see cref="Problems"/>, <see cref="DyeShortfall"/>, <see cref="RetryProblems"/>,
 /// <see cref="LastBackupPath"/> and <see cref="RestoreBackup"/>.
 /// </summary>
-public sealed unsafe class PlacementRunner : IDisposable
+public sealed unsafe partial class PlacementRunner : IDisposable
 {
     private const float LandedDistance = 0.05f;
     private const float LandedYaw = 0.03f;
@@ -280,6 +280,7 @@ public sealed unsafe class PlacementRunner : IDisposable
     public string? CanStart(bool dryRun)
     {
         if (Active) return "Already running.";
+        if (OtherRunActive?.Invoke() == true) return "Wait until the fixtures are set.";
         if (session.PlacingBlocked(out var why)) return why;
         var ctx = session.Context;
         if (ctx.Busy) return "Wait until you're free (not in combat, a cutscene or between areas).";
@@ -305,6 +306,8 @@ public sealed unsafe class PlacementRunner : IDisposable
         jobsVersion++;
         timeLeftUntil = DateTime.MinValue;
         jobs.AddRange(RunSequence.Build(entries));
+        // Clear out (chosen in Ready): the pieces not in the design go first, and the rest is planned once they're gone.
+        PlanClearOut(dryRun);
         var dyes = config.DyeAfterPlacing || forceDyes;
         // The same calculation as the dye phase's (PlanDyes), predicting what placing will leave.
         dyesExpected = dyes ? DyeCounts.ToApply(entries) : 0;
@@ -355,13 +358,21 @@ public sealed unsafe class PlacementRunner : IDisposable
         nextJobAt = DateTime.UtcNow;
         editorMayCloseUntil = DateTime.UtcNow + ModeSwitchGrace;
 
-        if (!dryRun && config.BackupBeforePlacing)
+        if (!dryRun && (config.BackupBeforePlacing || keepAs != null))
         {
-            if (Backups.Save(session, data, log, "before placing") is { } saved)
+            if (SaveBackup() is { } saved)
             {
                 LastBackupPath = saved;
                 var c = session.Context;
                 backupOf = (c.Kind, c.TerritoryId, c.HouseId, c.Plot);
+            }
+            else if (keepAs != null)
+            {
+                // A swap keeps what's here to swap back to: without it, it doesn't start.
+                StopReason = "Couldn't keep what's here (see the log), so the swap didn't start.";
+                log.Warn(StopReason);
+                keepAs = null;
+                return;
             }
             else log.Warn("No backup was saved for this run (see why above): Put them back won't be offered for it.");
         }
@@ -418,6 +429,7 @@ public sealed unsafe class PlacementRunner : IDisposable
         }
         why = string.Empty;
         restorePath = LastBackupPath;
+        restoreClearsFirst = false;
         log.Info($"Restoring the backup {LastBackupPath}: it starts once it's matched against the house.");
         return true;
     }
@@ -467,7 +479,7 @@ public sealed unsafe class PlacementRunner : IDisposable
         var backupHas = session.PlanSide == Side.Interior ? session.Layout?.Interior.Count : session.Layout?.Garden.Count;
         IReadOnlyList<PlacedPiece> putAway = backupHas > 0 ? session.Plan.Extras : Array.Empty<PlacedPiece>();
         if (backupHas is not > 0) log.Warn("The backup has no pieces here, so nothing is put away.");
-        Start(false, session.Plan.Entries, forceDyes: true, putAway: putAway);
+        StartRestore(putAway);
         if (!Active) notice = StopReason ?? "Couldn't start putting them back.";
     }
 
@@ -636,6 +648,7 @@ public sealed unsafe class PlacementRunner : IDisposable
         index++;
         if (index >= jobs.Count)
         {
+            if (AfterClearOut()) return;
             if (!dyesPlanned)
             {
                 dyesPlanned = true;

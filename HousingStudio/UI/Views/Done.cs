@@ -44,7 +44,7 @@ public sealed partial class MainWindow
         y += titleH + S(10);
         string sentence;
         if (preview)
-            sentence = $"Every spot was marked and nothing was moved. Start works on {Words.Count(runner.Count(RunPhase.Move) + runner.Count(RunPhase.Place), "piece")}{(config.DyeAfterPlacing ? ", then the dyes" : string.Empty)}.";
+            sentence = $"Every spot was marked and nothing was moved. Start works on {Words.Count(runner.Count(RunPhase.Move) - runner.ClearOutCount + runner.Count(RunPhase.Place), "piece")}{(config.DyeAfterPlacing ? ", then the dyes" : string.Empty)}.";
         else if (stopped)
             sentence = (vm.StoppedByYou ? "You stopped it." : runner.StopReason ?? "It stopped.") + (needYou > 0 ? $" {needYou} {(needYou == 1 ? "needs" : "need")} you." : string.Empty);
         else if (vm.Figure >= vm.RunPieces && needYou == 0)
@@ -58,6 +58,7 @@ public sealed partial class MainWindow
 
         Frame.BeginBody("##done", "done-foot", 22, 22);
         DrawTally(preview);
+        DrawPutAwayLine(preview);
         if (issues.Count > 0)
         {
             Kit.Gap(18);
@@ -70,7 +71,8 @@ public sealed partial class MainWindow
         if (!preview && runner.LastBackupPath != null && vm.BackupAt is { } savedAt && savedAt >= vm.RunStartedAt.AddMinutes(-1))
         {
             Kit.Gap(18);
-            DrawPutBack(savedAt);
+            if (runner.KeptAs != null) DrawSwapBack(savedAt);
+            else DrawPutBack(savedAt);
         }
 
         var layout = session.Layout;
@@ -103,7 +105,8 @@ public sealed partial class MainWindow
         var h = S(14) * 2 + S(28) + S(4) + noteH;
         var cells = new[]
         {
-            (runner.Count(RunPhase.Move, JobOutcome.Done), preview ? "to move" : "moved"),
+            // Pieces put away count with the moves in the runner; they're told apart under the tally.
+            (runner.Count(RunPhase.Move, JobOutcome.Done) - runner.PutAwayDone, preview ? "to move" : "moved"),
             (runner.Count(RunPhase.Place, JobOutcome.Done), preview ? "to place" : "placed"),
             (runner.Count(RunPhase.Dye, JobOutcome.Done), preview ? "to dye" : "dyed"),
         };

@@ -198,13 +198,16 @@ public sealed partial class MainWindow : Window
     private bool Narrowed => config.NearMe || !config.ShowBasement || !config.ShowGround || !config.ShowUpper;
 
     /// <param name="onStarted">Runs once the run has started (the Done view goes then, not when it can't start).</param>
-    private void StartRun(bool dryRun, List<PlanEntry>? entries = null, Action? onStarted = null)
+    /// <param name="keepAs">A swap: the name its backup is kept under.</param>
+    private void StartRun(bool dryRun, List<PlanEntry>? entries = null, Action? onStarted = null, string? keepAs = null)
     {
         entries ??= Filtered().ToList();
+        // Clear out, when it's on for this design (Ready): the pieces not in it go to the storeroom first.
+        var clearOut = ChosenClearOut();
         vm.Starting(entries);
         OnFramework(() =>
         {
-            runner.Start(dryRun, entries);
+            runner.Start(dryRun, entries, clearOut, keepAs);
             if (runner.Active)
             {
                 onStarted?.Invoke();
