@@ -17,9 +17,9 @@ namespace HousingStudio.UI;
 /// </summary>
 public sealed partial class MainWindow
 {
-    private GameLink? link;
+    private GameLink? gameLink;
 
-    internal void Use(GameLink l) => link = l;
+    internal void Use(GameLink l) => gameLink = l;
 
     /// <summary>How many of what's waiting Start lists (the newest).</summary>
     private const int FromSiteShown = 5;
@@ -31,7 +31,7 @@ public sealed partial class MainWindow
     /// </summary>
     private void DrawFromSite()
     {
-        if (link is not { Usable: true } l) return;
+        if (gameLink is not { Usable: true } l) return;
         var items = l.Inbox;
         var note = l.InboxNote;
         if (items.Count == 0 && note == null) return;
@@ -111,8 +111,8 @@ public sealed partial class MainWindow
     /// </summary>
     private void DrawSiteHome()
     {
-        if (link == null) return;
-        var l = link;
+        if (gameLink == null) return;
+        var l = gameLink;
         string? clicked;
         if (!l.Linked)
         {
@@ -174,7 +174,7 @@ public sealed partial class MainWindow
                 OpenSettings(SettingsTab.Getting);
                 return;
             case "retry":
-                link?.RetryHome();
+                gameLink?.RetryHome();
                 return;
             case "post":
                 Dalamud.Utility.Util.OpenLink(SiteLink.NewDesignUrl);
@@ -237,9 +237,9 @@ public sealed partial class MainWindow
     /// <summary>This house's Take a shot, in its row of buttons, when the home is verified as one of your designs.</summary>
     private void ShotButton(ref Kit.Wrap row, float bh)
     {
-        if (link?.ShotDesign(session.Context) is not { } design) return;
+        if (gameLink?.ShotDesign(session.Context) is not { } design) return;
         const string label = "Take a shot";
-        var cant = link.CantShoot(session.Context);
+        var cant = gameLink.CantShoot(session.Context);
         if (Kit.Button("##take-shot", row.Next(Kit.ButtonWidth(label, BtnSize.Tiny, Icon.Camera), bh), label, Btn.Glass, BtnSize.Tiny, Icon.Camera, 0, cant != null,
                 cant ?? $"A picture of this home from where the camera is, for “{design.Name}”'s page beside its 3D view from the same spot"))
             TakeShot();
@@ -248,15 +248,15 @@ public sealed partial class MainWindow
     /// <summary>Takes a shot on the framework thread, where the game and its camera are read.</summary>
     private void TakeShot() => OnFramework(() =>
     {
-        if (link != null && !link.TakeShot(HousingContext.Read(Plugin.Plots), out var why)) Notify(why);
+        if (gameLink != null && !gameLink.TakeShot(HousingContext.Read(Plugin.Plots), out var why)) Notify(why);
     });
 
     /// <summary>Under This house's buttons when a shot can be taken: the hint for a clean picture, or why the last one didn't come out.</summary>
     private void DrawShotHint()
     {
-        if (link?.ShotDesign(session.Context) == null) return;
+        if (gameLink?.ShotDesign(session.Context) == null) return;
         Kit.Gap(8);
-        if (link.ShotNote is { } why) AlertNote(why, Palette.Danger);
+        if (gameLink.ShotNote is { } why) AlertNote(why, Palette.Danger);
         else AlertNote("For a clean picture, hide the HUD (Scroll Lock) or use Group Pose, then type /hstudio shot.", Palette.Dim, Icon.Info, Palette.Dim);
     }
 

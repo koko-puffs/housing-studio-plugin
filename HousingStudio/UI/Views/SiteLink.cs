@@ -42,7 +42,7 @@ public sealed partial class MainWindow
         if (Linked)
         {
             // The site may have refused it since (revoked there): it says so, and Unlink makes room for a new one.
-            var refused = link?.TokenRefused == true;
+            var refused = gameLink?.TokenRefused == true;
             if (linkedNote.Token != config.SiteToken || linkedNote.Refused != refused)
                 linkedNote = (config.SiteToken, refused, refused
                     ? $"Not accepted by the site · {SiteLink.Masked(config.SiteToken)}: unlink, then link a new token"

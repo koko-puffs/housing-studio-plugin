@@ -8,7 +8,17 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.6.0. Placing works in the game; the newer features haven't all been tried in it yet.**
+> **Status: 0.7.0. Placing works in the game; the newer features haven't all been tried in it yet.**
+> 0.7.0: the plugin and the site, closer, with the token from Settings → Getting (none of it yet
+> tried in the game). **From the site** on Start: builds and designs sent with the site's Send to
+> game wait there (checked about once a minute; a new one is said in chat and a notification),
+> Open loads one ([Things sent from the site](#things-sent-from-the-site)). **This house** says
+> whether the home is one of your designs on the site, **Verified in game**, or offers **Verify as
+> …** or **Post it** ([Verified homes](#verified-homes)). In anyone's home that's a published,
+> verified design, a small **visitor panel** shows it, with Like, Save and Stamp
+> ([Visitors](#visitors)). In your verified home, **Take a shot** (or `/hstudio shot`) sends a
+> picture with where the camera was to the design's page ([Shots from the game](#shots-from-the-game)).
+> Settings → Getting has two new switches for the first two.
 > 0.6.0: a tidier window, from the flow mock-up (docs/mockups/flow.html). Ready is three steps,
 > **Get**, **Place** and **Finish**, with one brass button whose words say what it does ("Get 12,
 > then place", "Clear out 14, then place", "Swap and place"); the warnings and the item limit are
@@ -303,7 +313,12 @@ One window, no tabs: what it shows follows what you're doing.
   wallpaper on partitions and the paintings in frames, and the plot. A garden needs Outdoor
   Furnishings opened once, as the game loads its list only then. The name you type gets `.build`.
   Beside it, **Send to my builds** sends the same home straight to your builds on the site (see
-  [Sending a house to the site](#sending-a-house-to-the-site)). Then **Recent** (your files, the
+  [Sending a house to the site](#sending-a-house-to-the-site)). Linked, the card has a line about
+  the home on the site ("On Housing Studio: Cozy Café · Verified in game · Open", **Verify as …**, or
+  "Not on Housing Studio yet · Post it"; [Verified homes](#verified-homes)), and, verified, **Take a
+  shot** ([Shots from the game](#shots-from-the-game)). Then **From the site**, when anything sent
+  from the site is waiting (each with **Open** and ×; [Things sent from the site](#things-sent-from-the-site)),
+  then **Recent** (your files, the
   backups runs saved, and what a swap kept, marked KEPT; right-click a file to take it off the list)
   and "Looking for a design? **Browse designs**" (opens Housing Studio's Browse page).
 - **Ready** (a design loaded): whether it fits your home (the header's pill); a banner when a run
@@ -352,7 +367,8 @@ One window, no tabs: what it shows follows what you're doing.
   storeroom and bags apart, floors to place, marker options, save what's placed as a build),
   **Getting** (market prices from Universalis; the errands' market ceiling, other worlds and spare
   bag slots; the **Housing Studio account**: the token that lets Send to my builds work, masked once
-  linked, with **Unlink**), **Beta** (one switch for the features not yet tried in the game, then
+  linked, with **Unlink** ("Not accepted by the site" when the site has refused it); **Check for
+  things sent from the site** and **Show homes on Housing Studio when I visit**, both on), **Beta** (one switch for the features not yet tried in the game, then
   each feature's own with its Beta tag: [Get everything for me](#getting-everything-for-you-experimental),
   Get things first from Ready, [Set the fixtures for me](#setting-the-fixtures-experimental), Set
   fixtures after placing, Put back what changed) and **Help** (step by step, the old preview method,
@@ -360,6 +376,13 @@ One window, no tabs: what it shows follows what you're doing.
   The tab is kept while the window is open.
 
 While a run goes, Pieces and Settings are hidden, so nothing that steers the run changes under it.
+
+Two small panels of their own, apart from the window, in the same look (glass, no title bar, sized
+to what they hold): the **visitor panel** ([Visitors](#visitors)) and a **shot's preview**
+([Shots from the game](#shots-from-the-game)). Neither takes focus when it appears, closes on Esc,
+or makes a sound; they aren't drawn in combat, cutscenes or between zones, and Dalamud hides them
+with the HUD and in Group Pose, as it does the window. They first appear on the right of the
+screen; drag them anywhere, and they come back there.
 [docs/UI.md](docs/UI.md) maps each part of the design to the code that draws it.
 
 ## Shopping
@@ -571,6 +594,101 @@ one saved there.
   sent this way has no preview on its card until it's saved once on the site (the site makes the
   preview from the furniture's sizes).
 
+## Things sent from the site
+
+On Housing Studio, **Send to game** on a build or a design puts it in your plugin's inbox (the site's
+`hs_send_to_game`: only what you could download yourself; sending again brings it back to the top;
+30 at most). With the account linked and **Check for things sent from the site** on (Settings →
+Getting, on by default), the plugin asks what's waiting (`hs_plugin_inbox_list`, a light read)
+about once a minute while you're logged in, five seconds after logging in and ten after the plugin
+loads; never during a run, in combat, a cutscene or between zones. After a failure it asks less
+often (2, 4, 8 minutes, at most every 15), back to once a minute on the next answer; a token the
+site refuses stops it until you link again. Something newer than the newest already told of
+(`InboxSeenAt` in the config) is said in chat and as a Dalamud notification: "“Cozy Café” arrived
+from Housing Studio. /hstudio to open it." (several: "… and 2 more arrived …").
+
+Start lists the newest five under **From the site**, above Recent: a badge (a file for a build, a
+house for a design), the name, "Design · sent today 21:04" (· opened, once it has been). **Open**
+fetches it (`hs_plugin_inbox_get`, counted as an action, 120 an hour), writes its layout as JSON to
+`FromSite/<its file name>` in the plugin's config folder (the site's file name, made safe: only its
+last part, no letters Windows won't have, 80 at most, `.build` or `.json` kept; an older copy of
+the same name is replaced), and loads it as choosing that file does (it goes in Recent). It's
+greyed out during a run; one that arrives while a run starts waits in Recent. **×** takes it off
+the inbox (`hs_plugin_inbox_remove`). What went wrong is said under the list in the site's words:
+one that's gone (deleted, or no longer shared) is taken off the list.
+
+## Verified homes
+
+A design's address on the site (world, district, ward, plot or apartment) can be **verified in
+game**: the plugin, in the home, tells the site it's that design (`hs_plugin_verify`), and its page
+says so for as long as its address stays the same.
+
+- **Where you are, as the site's address** (`Game/HomeReader.cs` reads, `Core/SiteHome.cs` makes
+  it): the world you're on now (its English name, from the World sheet; the house id may not carry
+  it, see 0.4.2), the district from the house id's territory ("s1…" Mist, "f1…" the Lavender Beds,
+  "w1…" the Goblet, "e1…" Shirogane, "r1…" Empyreum; then the house's original territory, for a
+  Minimalist interior, then the interior's own name), the ward (the house id's, counted from 1), and:
+  a **house**, its plot 1–60 (the house id's plot index counts both divisions, 0–29 the main ward and
+  30–59 the subdivision, so the subdivision is 31–60); an **apartment**, its number as the game shows
+  it ("Apartment No. 41") and its building (the house id's division: 0 the main ward's, 1 the
+  subdivision's); a **private chamber**, its house's plot and its number ("Private Chambers 3"). The
+  house id's room is 0 for the house itself, so a chamber's or an apartment's number is taken as
+  the game shows it, from 1. A company workshop isn't a home on the site. A garden is the house on
+  its plot.
+- **This house** (Start, in a home you may decorate, linked): once a visit (and again after
+  verifying), the site is asked which of your designs have this address (`hs_plugin_home`, a light
+  read; in a garden, once you've stayed on the plot two seconds). The card then says "On Housing
+  Studio: Cozy Café · Verified in game · Open" (Open goes to its page), or, with designs at this
+  address not yet verified, **Verify as Cozy Café** (one button each, three at most; inside only:
+  a garden says to verify from inside), or "Not on Housing Studio yet · Post it" (opens the site's
+  new design page). An address the site says isn't the design's (`address`), and anything else that
+  went wrong, is said in the site's words with **Try again**. Not linked: "Link your account to
+  verify this home · Settings".
+
+## Visitors
+
+In any home's interior, yours or anyone's, with **Show homes on Housing Studio when I visit** on
+(Settings → Getting, on by default), the plugin asks the site once a visit, two seconds after you're
+in, whether a published design is verified as this home (`hs_plugin_here`, with your token when
+linked, else as anyone: these addresses are on their postcards). If one is, a line in chat says
+"This home is on Housing Studio: Cozy Café by Koko." (not for your own), and the **visitor panel**
+shows it: "This home is on Housing Studio", its cover (the small copy, loaded once; none when the
+picture can't be read), its name, "by" its maker, ✓ Verified in game; **Like**, **Save** (a
+favourite) and **Stamp** (its postcard, stamped from inside the home; only while the site has stamps
+on), each with its count, pressed again to take it back (`hs_plugin_act`, as your account, keeping
+every rule the site's own keep; their refusals are shown in its words); your own design says "Your
+design" instead; not linked, "Link your account to like, save or stamp" opens Settings. **Open its
+page**, ‹ › between several (three at most), and × (gone for this visit). It goes when you leave the
+home. Off: nothing is asked. When the site can't be asked, nothing shows (the reason is in /xllog).
+
+## Shots from the game
+
+In your own home verified as one of your designs (inside, or its garden, while you may decorate),
+This house has **Take a shot**, and `/hstudio shot` takes one too (handy with the HUD hidden: Scroll
+Lock hides the game's HUD and with it the plugin's windows; Group Pose hides them as well). The
+picture goes to the design's page, beside its 3D view from the same spot.
+
+- **The camera**: the scene's current camera (Graphics.Scene.CameraManager's, the one drawing the
+  game, Group Pose's own while it's on). Its place and the way it looks come from its view matrix
+  (the camera is the view's inverse; which way along its axis is the projection's to say), the
+  target 10 yalms ahead; the vertical field of view from the projection (2·atan(1 / M22), in
+  degrees; the render camera's own FoV, radians, only if the projection can't say). In the game's
+  axes; a garden's both points in the plot's frame (`Transforms.WardToPlot`, as its pieces are
+  saved). `Core/ShotPose.cs` (`CameraMath`), tested.
+- **The picture**: the game's frame, grabbed before Dalamud draws its windows over it
+  (`ITextureProvider.CreateFromImGuiViewportAsync`, `TakeBeforeImGuiRender`). The camera is read when
+  it's asked for and again once the picture is in: if it moved, there's no shot ("Hold it still and
+  take it again"). On a worker, it's made 2560 at most on its long side (1920 if need be), written as
+  a JPEG at 0.9 quality, lower in steps to 0.5 until it's 3.8 MB at most, and a preview made.
+- **Before sending**: a small panel shows the preview, "For Cozy Café · 2560×1440 · 1.8 MB",
+  **Send to Cozy Café** and **Discard**. Sending posts a form to the edge function `hs-plugin-shot`
+  (the token, the design, the pose as JSON, the JPEG; 90 seconds at most); then "Sent: it's on Cozy
+  Café's page", **Open its page** and **Close**. The site's words otherwise: verify it first (This
+  house asks the site again), 12 shots a design (delete one on the site), too many this hour. With the
+  HUD hidden, chat says when it's taken or why not.
+- Every texture is let go of as soon as it's done with (the frame and the sized picture once the
+  JPEG is written, the preview with the shot); the JPEG once it's sent. Unloading lets go of them all.
+
 ## Pace
 
 Settings → Pace sets how fast a run goes. Each piece is many small steps; a pace sets the pause
@@ -648,7 +766,9 @@ It builds on Linux and macOS too (for checking); it only runs in the game on Win
 HousingStudio/
   Core/        game-free, unit-tested: reading .build/.json, axes and turns, plots, floors,
                dyes, matching, the shopping list, pacing, backups, sending to the site
-               (SiteLink); and for the automation the
+               (SiteLink) and its other calls and their answers (SiteLink.Calls: the inbox,
+               homes, visitors, shots), the site's address of a home (SiteHome, HomeAddress),
+               a shot's camera pose and size (ShotPose: CameraMath, ShotSize); and for the automation the
                step queue (StepQueue), the run's order and dye planning (RunSequence),
                callbacks as data (UiCall) and menu/list helpers (Menus); where to get what's
                missing (Sourcing: the shopping planner; Vendors, Market, Teamcraft), clearing out
@@ -660,16 +780,20 @@ HousingStudio/
                editor's state, pick up / set down), HousingActions (item menus, the dye window,
                aiming the held piece), FurnitureReader, FixtureReader (the home's fixtures, inside and out, for saving it), InventoryReader, PlaceAnywhere;
                VendorData (who sells what, where), MarketPrices (Universalis), Retainers
-               (the retainer record, Allagan Tools' IPC), AutoRetainer (retainers' names over IPC).
+               (the retainer record, Allagan Tools' IPC), AutoRetainer (retainers' names over IPC);
+               HomeReader (the home you're in as the site's address, and the camera for a shot).
   Session/     LayoutSession (the design matched to the game), PlacementRunner (the run: each
                piece's steps; PlacementRunner.ClearOut, clearing out and swapping), FixtureRunner
                (Set them for me), Care (snapshots, the run's progress, putting back), Backups
                (saving what's placed, and its JSON for sending), ActivityLog, Shopping (the
-               shopping plan, kept up to date).
+               shopping plan, kept up to date), GameLink (the site link: the inbox, verified homes
+               and visitors, shots; every call from a worker, its answer back on the framework thread).
   UI/          the window: Kit/ (the design system's tokens, fonts, icons and controls drawn with
                ImGui's draw lists), Model/ (game-free, unit-tested: words, the Pieces list, pace,
                fixture ticks, SVG icon paths), Views/ (Start, Ready, Running, Done, Pieces,
-               Shopping, Settings), ViewModel, MainWindow, Overlay (markers in the world). See docs/UI.md.
+               Shopping, Settings, GameLink: From the site, This house's line, Take a shot), ViewModel,
+               MainWindow, Overlay (markers in the world), VisitorPanel and ShotPanel (the two small
+               panels, on SmallPanel). See docs/UI.md.
 HousingStudio.Tests/   xUnit tests for Core and UI/Model
 tools/         make-plots.mjs, icon.svg + make-icon.mjs
 docs/          AUTOMATION.md, RESEARCH.md, PUBLISHING.md
