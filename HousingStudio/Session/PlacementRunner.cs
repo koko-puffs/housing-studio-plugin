@@ -2524,7 +2524,8 @@ public sealed unsafe class PlacementRunner : IDisposable
     {
         if (!storeModeUsed) return;
         storeModeUsed = false;
-        if (HousingEditor.Mode == EditorMode.Store && GameUi.Fire(UiTable.LayoutRotate)) log.Info("Back to Rotate (out of Store mode).");
+        // (Stopped by a zone change or logout: the editor may be half torn down, so it's let be.)
+        if (StillInStartHome() && HousingEditor.Mode == EditorMode.Store && GameUi.Fire(UiTable.LayoutRotate)) log.Info("Back to Rotate (out of Store mode).");
     }
 
     private void Finish()

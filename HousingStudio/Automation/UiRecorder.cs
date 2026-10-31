@@ -7,6 +7,7 @@ using Dalamud.Game.Addon.Lifecycle.AddonArgTypes;
 using Dalamud.Hooking;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Component.GUI;
+using HousingStudio.Core;
 using HousingStudio.Game;
 
 namespace HousingStudio.Automation;
@@ -112,8 +113,11 @@ public sealed unsafe class UiRecorder : IDisposable
     public static string DescribeState()
     {
         var hm = HousingManager.Instance();
-        var mode = HousingEditor.Mode;
-        var active = HousingEditor.ActiveItem;
+        // The editor's state is read only in a home, as HousingContext reads it (a recording left
+        // running out of the house, through a zone change, read it anywhere).
+        var inHome = hm != null && (hm->IndoorTerritory != null || hm->OutdoorTerritory != null);
+        var mode = inHome ? HousingEditor.Mode : EditorMode.None;
+        var active = inHome ? HousingEditor.ActiveItem : 0;
         var preview = FurnitureReader.Preview();
         var selection = InventoryReader.StoreroomSelection();
         var tab = hm != null && hm->IndoorTerritory != null && hm->IndoorTerritory->ShowStoreroomTab;

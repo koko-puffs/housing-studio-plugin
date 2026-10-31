@@ -8,7 +8,13 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.4.2, working in the game.** 0.4.2: a check of 0.4.1. The outside kept for saving
+> **Status: 0.4.3, working in the game.** 0.4.3: a scan's small fixes. Stopping a Put them
+> back run by a zone change or a logout no longer reads the editor or clicks its Rotate (the
+> editor may be half torn down then, as with a held piece in 0.4.1); a diagnostics recording
+> left running out of the house reads the editor's state only in a home; one piece reads as
+> one piece (the shopping list's Missing line, "1 needs you", Near me's count, the other
+> side's pieces).
+> 0.4.2: a check of 0.4.1. The outside kept for saving
 > is told apart by the world you're on (0.4.1 read it from the game's house ids, which may not
 > carry it in the ward, and a save from inside could then have lost its outside); a held piece
 > isn't set down while a zone change or logout is under way (it showed as that before the
