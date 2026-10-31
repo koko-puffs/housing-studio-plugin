@@ -14,7 +14,7 @@ namespace HousingStudio.UI;
 /// "Get everything for me" (Settings → Experimental): the estimate before anything starts (what you have,
 /// the trips with what each vendor sells and costs, the market's estimate under your ceiling, what can't
 /// be got, the plugins it needs), then the run (the trip, what it's doing, the gil spent, what's got,
-/// Pause and Stop), then a summary. Reached from Shopping's foot and Ready.
+/// Pause and Stop), then a summary. Reached from Shopping's foot and Ready's Get stage.
 /// </summary>
 public sealed partial class MainWindow
 {
@@ -83,7 +83,7 @@ public sealed partial class MainWindow
     }
 
     // ---------------------------------------------------------------------------------------------
-    // The way in: Shopping's foot and Ready.
+    // The way in: Shopping's foot, and Ready's brass button with "Get them for me first" on.
 
     private const string ErrandsLabel = "Get everything for me";
 
@@ -96,22 +96,6 @@ public sealed partial class MainWindow
         if (Kit.Button("##errands", pos, ErrandsLabel, Btn.Glass, BtnSize.Md, Icon.Package, 0, false,
                 "Experimental: fetches what's missing from your retainers, vendors and the market board, and places it. You see the gil first."))
             errandsOpen = true;
-    }
-
-    /// <summary>Ready's row, under what Start does (when the errands are switched on and something's missing).</summary>
-    private void DrawErrandsEntry()
-    {
-        var shop = ShopPlan();
-        if (!ErrandsOffered(shop)) return;
-        Kit.Gap(12);
-        var at = Kit.At;
-        var w = Kit.Width;
-        var bw = ErrandsButtonWidth;
-        var note = $"Experimental: fetch the {Words.Count(shop.Lines.Sum(l => l.Count), "thing")} missing and place them.";
-        var nw = w - bw - S(12);
-        Txt.Line(Kit.Dl, new Vector2(at.X, at.Y + (S(40) - S(19.5f)) / 2), Txt.Fit(note, Face.Sans, 13, nw), Face.Sans, 13, Palette.Ash, 19.5f);
-        ErrandsButton(new Vector2(at.X + w - bw, at.Y));
-        Kit.Reserve(at, w, S(40));
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -289,6 +273,8 @@ public sealed partial class MainWindow
                 {
                     Errands.Start(chosen, session.Context);
                     if (!Errands.Active && Errands.StopReason != null) Notify(Errands.StopReason);
+                    // Their placing comes after: Ready's "Set them for me after placing" follows it.
+                    if (Errands.Active) ArmFixturesAfterPlacing();
                 }));
         }
         Kit.Reserve(at, w, S(46));

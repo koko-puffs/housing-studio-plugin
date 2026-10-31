@@ -10,9 +10,10 @@ using static HousingStudio.UI.Theme;
 namespace HousingStudio.UI;
 
 /// <summary>
-/// Ready's "Set them for me" (Settings → Experimental): under the fixtures to set yourself, what the
-/// plugin can set from your bags here, the button, and while it runs the step it's on with Continue
-/// (it goes step by step) and Stop.
+/// Setting the fixtures for you (Settings → Experimental): in Ready's Finish stage, "Set them for me
+/// after placing" (it starts by itself when a placing run started from Ready finishes) and, under Tick
+/// off, what the plugin can set from your bags here with "Set them for me"; while it runs, the step
+/// it's on with Continue (it goes step by step) and Stop, in Ready's Finish stage and on Done.
 /// </summary>
 public sealed partial class MainWindow
 {
@@ -29,46 +30,115 @@ public sealed partial class MainWindow
 
     private bool fixturesWereActive;
 
-    private void DrawSetFixtures()
+    /// <summary>
+    /// While the fixtures are being set: the brass panel with the step, Continue and Stop, with the
+    /// gaps around it (Ready's Finish stage, and the top of Done). Returns false (and draws nothing)
+    /// when they aren't.
+    /// </summary>
+    private bool DrawFixtureRunPanel(float gapBefore = 0, float gapAfter = 18)
     {
         var run = Plugin.FixtureRun;
-        if (!run.Enabled && !run.Active) return;
-        Kit.PushBox(Kit.Left + S(20), Kit.Width - S(40));
-        Kit.Gap(4);
-        if (run.Active)
-        {
-            fixturesWereActive = true;
-            DrawFixturesRunning(run);
-        }
-        else
+        if (!run.Active)
         {
             if (fixturesWereActive)
             {
                 // Seen once it ends: read again, so what was set shows as set.
                 fixturesWereActive = false;
                 fixturePlan.Until = DateTime.MinValue;
+                finishLine.Until = DateTime.MinValue;
             }
-            DrawFixturesIdle(run);
+            return false;
         }
+        fixturesWereActive = true;
+        if (gapBefore > 0) Kit.Gap(gapBefore);
+        DrawFixturesRunning(run);
+        if (gapAfter > 0) Kit.Gap(gapAfter);
+        return true;
+    }
+
+    /// <summary>Under Tick off: what the plugin can set from your bags here, and Set them for me (when it's switched on).</summary>
+    private void DrawSetFixtures()
+    {
+        var run = Plugin.FixtureRun;
+        if (!run.Enabled || run.Active) return;
+        DrawFixturesIdle(run);
         Kit.Gap(10);
-        Kit.PopBox();
+    }
+
+    /// <summary>"4 fixtures to set from your bags · 2 not in your bags · 1 yours to set", for where you are.</summary>
+    private string FixtureBagWords()
+    {
+        if (session.Context.Side == null) return "Go to your home to see which the plugin can set";
+        var tasks = FixturePlan();
+        var toSet = tasks.Count(t => t.State == FixtureState.ToSet);
+        var notOwned = tasks.Count(t => t.State == FixtureState.NotOwned);
+        var byHand = tasks.Count(t => t.State == FixtureState.ByHand);
+        var parts = new List<string> { toSet == 0 ? "None to set from your bags here" : $"{Words.Count(toSet, "fixture")} to set from your bags" };
+        if (notOwned > 0) parts.Add($"{notOwned} not in your bags");
+        if (byHand > 0) parts.Add($"{byHand} yours to set");
+        return string.Join(" · ", parts);
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // After placing: a placing run started from Ready (or the errands' placing) that finishes starts
+    // setting the fixtures, when "Set them for me after placing" is on.
+
+    private enum AfterPlacing
+    {
+        Off,
+
+        /// <summary>Waiting for the placing run to start (the errands go first).</summary>
+        Armed,
+
+        /// <summary>The placing run is going.</summary>
+        Placing,
+
+        /// <summary>It finished: the fixtures start once nothing else runs.</summary>
+        Due,
+    }
+
+    private AfterPlacing afterPlacing;
+
+    /// <summary>
+    /// Call when a placing run is started on Ready's behalf (its brass button, Carry on, a swap; the
+    /// errands once they're sent out, as their placing comes after): when that run finishes, the
+    /// fixtures are set if "Set them for me after placing" is on. Once per run.
+    /// </summary>
+    private void ArmFixturesAfterPlacing() => afterPlacing = runner.Active ? AfterPlacing.Placing : AfterPlacing.Armed;
+
+    /// <summary>Every frame: follows the armed run, and starts setting the fixtures once it has finished.</summary>
+    private void FixturesAfterPlacing()
+    {
+        switch (afterPlacing)
+        {
+            case AfterPlacing.Armed:
+                if (runner.Active) afterPlacing = AfterPlacing.Placing;
+                else if (!Errands.Active) afterPlacing = AfterPlacing.Off;
+                return;
+            case AfterPlacing.Placing:
+                if (runner.Active) return;
+                afterPlacing = runner.State == RunState.Finished && !runner.DryRun ? AfterPlacing.Due : AfterPlacing.Off;
+                return;
+            case AfterPlacing.Due:
+                if (runner.Active || Errands.Active) return;
+                afterPlacing = AfterPlacing.Off;
+                var run = Plugin.FixtureRun;
+                if (!config.FixturesAfterPlacing || !run.Enabled || run.Active || session.Layout is not { } layout) return;
+                if (FixturesDone(layout) >= FixtureCount(layout)) return;
+                OnFramework(() =>
+                {
+                    run.Start();
+                    Notify(run.Active ? "Setting the fixtures…" : run.StopReason ?? "Couldn't start setting the fixtures");
+                });
+                return;
+        }
     }
 
     private void DrawFixturesIdle(FixtureRunner run)
     {
         var tasks = FixturePlan();
         var toSet = tasks.Count(t => t.State == FixtureState.ToSet);
-        var notOwned = tasks.Count(t => t.State == FixtureState.NotOwned);
-        var byHand = tasks.Count(t => t.State == FixtureState.ByHand);
-        var parts = new List<string>();
-        if (session.Context.Side == null) parts.Add("Go to your home to see which the plugin can set");
-        else
-        {
-            parts.Add(toSet == 0 ? "None to set from your bags here" : $"{Words.Count(toSet, "fixture")} to set from your bags");
-            if (notOwned > 0) parts.Add($"{notOwned} not in your bags");
-            if (byHand > 0) parts.Add($"{byHand} yours to set");
-        }
-        var line = string.Join(" · ", parts);
+        var line = FixtureBagWords();
         if (run.Result != null || run.StopReason != null)
             line += $". Last time: {(run.State == RunState.Stopped ? $"stopped ({run.StopReason}) " : string.Empty)}{run.Result ?? run.StopReason}";
 

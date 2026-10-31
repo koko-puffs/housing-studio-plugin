@@ -108,6 +108,12 @@ public sealed partial class Configuration : IPluginConfiguration
     public bool SetFixturesForYou { get; set; }
 
     /// <summary>
+    /// Ready's Finish stage, "Set them for me after placing": when a placing run started from Ready
+    /// finishes, setting the fixtures starts by itself (only while <see cref="SetFixturesForYou"/> counts).
+    /// </summary>
+    public bool FixturesAfterPlacing { get; set; }
+
+    /// <summary>
     /// The furnishing list's storeroom rows learnt in each house (by house id), kept while the
     /// storeroom holds the same pieces, so a later run doesn't pick its way down the list again.
     /// </summary>

@@ -130,7 +130,9 @@ its exact spot, then dyes everything to match.
 - **How full it is**: Start shows how many pieces are placed where you are against what the home
   holds ("312 of 450 pieces placed inside"). The numbers are the site's (`Core/ItemLimits.cs`, from
   `ITEM_LIMITS` and `OUTDOOR_LIMIT`): inside an apartment 150, a cottage 300, a house 450, a mansion
-  600; a garden 40, 60 or 80. Ready says when a design won't fit: the design alone ("This design has
+  600; a garden 40, 60 or 80. Ready's first check chip is the count once Start is done against the
+  limit ("447 of 450", with a small meter that warms near full and goes danger past it; a chosen
+  Clear out's pieces don't count). Its detail says when a design won't fit: the design alone ("This design has
   480 pieces inside; a house (medium) holds 450."), or with the pieces already there that aren't in
   it (they stay, and count), and what Start does then: it places pieces until the home is full, the
   game refuses the rest, and after a few refused in a row the run stops. Near me and the floors
@@ -143,15 +145,16 @@ its exact spot, then dyes everything to match.
   0.05 of slack; between two floors isn't told, as the stairs run there), spots outside the
   house's walls (the box its model fills, by size), and an indoor furnishing in the garden or an
   outdoor one inside (the game's HousingFurniture and HousingYardObject sheets). Ready says so in a
-  line (in danger with Place anywhere off; a quiet note with it on, as the game takes them then;
-  always for the other side's furnishings), and Pieces lists each under **Pieces the game may
-  refuse**, with Show where.
+  check chip, "2 may be refused" (in danger with Place anywhere off; neutral with it on, as the game
+  takes them then) and "1 can't go here" for the other side's furnishings, whose detail names them
+  with **Show where**; Pieces lists each under **Pieces the game may refuse**, with Show where.
 - **Carry on after a crash or a disconnect** (`Core/RunProgress.cs`, `Session/Care.cs`): while a run
   goes, its progress is kept in `resume.json` in the plugin's folder (the design file, the home, the
   design's pieces it was given, how many are through and the phase), written beside it and moved
   over it at most twice a second. When it finishes, or you stop it, the file goes. Otherwise (the
   game closed, you were disconnected or changed zones, or the run stopped for safety), the next time
-  that design is loaded in that home Ready offers **Carry on from piece N of M** or **Forget it**.
+  that design is loaded in that home Ready's banner says "A run was cut off at piece N of M." with
+  **Carry on** or **Forget**.
   Carrying on starts a run on those pieces as they're matched now, so the ones done are in place and
   nothing is done twice; its numbers go on from the run cut off. A file that's cut short or edited
   reads as none (and is dropped). A restore's pieces to put away aren't carried on.
@@ -159,7 +162,7 @@ its exact spot, then dyes everything to match.
   a snapshot of the home (`snapshots/<home>.build`, the same file a backup is; the home is told by
   side, world, territory, house and plot). It's dropped when the next run starts and made again when
   it ends in the home, so a run that ended away (a zone change) leaves none rather than a stale one.
-  On Start or Ready, in a home you may decorate with a snapshot, **Since your last run** has **Check
+  On Start, in a home you may decorate with a snapshot, **Since your last run** has **Check
   for changes**: what's placed now against the snapshot, paired as the matching pairs pieces (the
   same item, the same dye, the nearest; within 0.05 yalms and 0.03 radians counts as unmoved): moved,
   added, taken away, in another dye, with **Show where they were**. Nothing is touched by checking.
@@ -192,8 +195,9 @@ its exact spot, then dyes everything to match.
 
 ## Clearing out and swapping
 
-**Clear out what isn't in the design** (Ready, under What Start does; off until you turn it on, and
-only for the design loaded). The pieces placed in your home that the design doesn't use
+**Clear out** (Ready's Place stage, one choice of **Keep what's here / Clear out N / Swap**; Keep
+until you choose another, and only for the design loaded; Clear out is greyed when there's nothing
+to clear). The pieces placed in your home that the design doesn't use
 (`Plan.Extras`) are put away in the storeroom before the design is placed, with the editor's Store
 mode, the same steps Put them back uses (`PlacementRunner.StoreSteps`: the Store button, each piece
 picked with the editor's own pick, a yes/no answered, the piece watched leaving the furniture list).
@@ -209,7 +213,8 @@ with Show where, to put away by hand ("Try again" puts those away again, last). 
 first ("Would put … away"). Not yet seen in the game: Store mode from the plugin (also new in Put
 them back, 0.3.5).
 
-**Swap to this design** (Ready, under Clear out; not for a backup loaded as the design): clears out,
+**Swap** (Ready's Place stage; not for a backup loaded as the design; the brass button then reads
+"Swap and place" and asks first): clears out,
 places the design, and keeps the backup it saves under a name you'll know, "<home> before
 <design>" ("Medium house in Mist, plot 12 before Winter Lodge"; `Core/SwapNames`), in the backups
 folder. That backup is saved even with the backup switched off (a swap doesn't start without it),
@@ -217,16 +222,18 @@ isn't one of the backups' own names so it's never pruned, and goes second on the
 first is the design that reopens when the game starts). Done then offers **Swap back** in place of
 Put them back: it loads that backup as the design and runs it with what isn't in it put away
 first (Put them back puts it away last), only in the home the backup is of. Another day, open it
-from Recent, turn on Clear out, and Start placing.
+from Recent, choose Clear out, and press the brass button.
 
 ## Setting the fixtures (experimental)
 
-Settings → Experimental → **Set the fixtures for me** (with Experimental on) gives Ready's fixtures a
-**Set them for me** button: the design's fixtures for the side you're on (inside, each floor's
+Settings → Experimental → **Set the fixtures for me** (with Experimental on) gives Ready's Finish
+stage **Set them for me after placing** (Beta; when a placing run started from Ready, or the
+errands' placing, finishes and fixtures are left, setting them starts by itself, once) and, under
+**Tick off**, a **Set them for me** button: the design's fixtures for the side you're on (inside, each floor's
 wall, flooring and light; on your plot, the outside's parts) that are in your bags are set through
 the game's own fixtures window (`Session/FixtureRunner`, with `Core/FixtureJobs` for the plan,
 tested). Nothing of it has been tried in the game, so it goes **step by step** whatever Settings
-says: before each action it holds, shows it, and waits for **Continue** (in Ready's fixtures, or
+says: before each action it holds, shows it, and waits for **Continue** (in Ready's Finish stage or at the top of Done, or
 `/hstudio continue`). The steps:
 
 1. The furnishing editor is closed (its own close) or the Housing menu opened (the housing agent),
@@ -274,11 +281,22 @@ One window, no tabs: what it shows follows what you're doing.
   Beside it, **Send to my builds** sends the same home straight to your builds on the site (see
   [Sending a house to the site](#sending-a-house-to-the-site)); **Recent** (your files and the backups runs saved; right-click a file
   to take it off the list) and **Browse designs** (opens Housing Studio's Browse page).
-- **Ready** (a design loaded): whether it fits your home, **What Start does** (how many pieces it
-  moves, places from your storeroom and bags, and dyes, with the dyes you're missing under
-  **See which**), the **Fixtures to set yourself** (tick them as you set them; the ticks are kept per
-  design), then **Start placing** or **Preview first**, with about how long it takes at your pace.
-  The header has **Pieces**, **Settings** and **×** (close this design).
+- **Ready** (a design loaded): whether it fits your home (the header's pill); a banner when a run
+  of it was cut off (**Carry on** / **Forget**); **check chips** for what's worth knowing (the item
+  limit as a meter, pieces the game may refuse, dyes short, the storeroom not read, Near me, floors
+  left out, pieces placed from the other side), each opening a short detail with its actions (Show
+  where, Pieces, See which, Copy list); then three numbered stages:
+  **1 · Get** (how many things are missing and about what they cost, where they come from:
+  retainers, vendors, market, craft; **Get them for me first** (Beta, with the errands switched on);
+  **See the list**), **2 · Place** (how many to do and already in place, to move / to place / to dye,
+  and **Keep what's here / Clear out N / Swap** with a line saying what it does) and **3 · Finish**
+  (the fixtures left and ticked, what they are, **Set them for me after placing** (Beta), and **Tick
+  off**: tick them as you set them, kept per design). The stage in hand has a brass number, done ones
+  a tick. One brass button says what it does ("Get 12, then place", "Clear out 14, then place",
+  "Swap and place", "Start placing", with " · fixtures" when they follow), beside **Preview**, with
+  about how long it takes at your pace (and the errands' trips first). Its tooltip says what it does
+  to the game (stay in the house, the editor, the backup). The header has **Pieces**, **Settings**
+  and **×** (close this design).
 - **Running** (a run or a preview): the pieces done, the three phases, the piece in hand with its dye
   and the step being done, what it's doing (the last lines of the log, with Copy), **Pause** /
   **Resume** and **Stop**. In step-by-step mode a brass callout says what the next click does, with
@@ -312,9 +330,10 @@ While a run goes, Pieces and Settings are hidden, so nothing that steers the run
 ## Shopping
 
 What a design needs that you don't have (its missing pieces, and the dyes it needs beyond those in your
-bags) and where each comes from. Ready's summary says what buying it costs in one line ("Buying what's
-missing: about 98,400 gil (12,000 gil at vendors, about 86,400 gil on the market board)."); the
-**Shopping list** view (Pieces' foot, Done) lists it by source, and **Copy list** copies the same,
+bags) and where each comes from. Ready's Get stage says how many things are missing and about what
+they cost ("12 missing · about 61,400 gil"), with a chip for each source ("4 retainers", "5 vendors",
+"2 market", "1 craft"); the **Shopping list** view (Ready's **See the list**, Pieces' foot, Done)
+lists it by source, and **Copy list** copies the same,
 with each source and price, to paste anywhere.
 
 Each thing is taken from the first source that has it, in this order (`Core/Sourcing.cs`,
@@ -383,8 +402,9 @@ The live plan is `Plugin.Shop.Plan(...)` (`Session/Shopping.cs`), and every vend
 behind two switches (Settings → Experimental, and **Get everything for me** under it), and nothing
 moves or is bought until you've seen the estimate and said yes to the gil it names.
 
-With both on, the Shopping list's foot and Ready (when something's missing) get **Get everything
-for me**. Its screen is an estimate first:
+With both on, the Shopping list's foot gets **Get everything for me**, and Ready's Get stage **Get
+them for me first** (when something's missing): with it on, Ready's brass button ("Get 12, then
+place") opens the same screen. Its screen is an estimate first:
 
 - **Plugins it uses**: [vnavmesh](https://github.com/awgil/ffxiv_navmesh) (walking) and
   [Lifestream](https://github.com/NightmareXIV/Lifestream) (teleports, going home, other worlds) are

@@ -119,9 +119,10 @@ public sealed partial class MainWindow : Window
     private void DrawBody()
     {
         vm.Observe();
+        FixturesAfterPlacing();
         using (fonts.Push(Face.Sans, 14))
         {
-            // (Setting the fixtures: its Continue and Stop are in Ready.)
+            // (Setting the fixtures: its Continue and Stop are in Ready's Finish stage and on Done.)
             if (runner.Active || Plugin.FixtureRun.Active) sub = Sub.None;
             if (ErrandsShown())
             {

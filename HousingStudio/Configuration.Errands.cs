@@ -9,6 +9,12 @@ public sealed partial class Configuration
     /// </summary>
     public bool ErrandsForYou { get; set; }
 
+    /// <summary>
+    /// Ready's Get stage, "Get them for me first": the brass button opens the errands (to get what's
+    /// missing, then place) instead of placing. Only while <see cref="ErrandsForYou"/> counts.
+    /// </summary>
+    public bool GetFirst { get; set; }
+
     /// <summary>The most the errands may spend on the market board in all, in gil (0: nothing bought there).</summary>
     public long ErrandsMarketCeiling { get; set; } = 100_000;
 

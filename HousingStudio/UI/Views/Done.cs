@@ -57,6 +57,7 @@ public sealed partial class MainWindow
         Frame.EndHeader();
 
         Frame.BeginBody("##done", "done-foot", 22, 22);
+        DrawFixtureRunPanel();
         DrawTally(preview);
         DrawPutAwayLine(preview);
         if (issues.Count > 0)

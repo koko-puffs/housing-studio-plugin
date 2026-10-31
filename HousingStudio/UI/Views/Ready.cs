@@ -11,9 +11,16 @@ using static HousingStudio.UI.Theme;
 
 namespace HousingStudio.UI;
 
-/// <summary>Ready (mockup 2): a design loaded. What Start does, the fixtures to set yourself, and Start / Preview.</summary>
+/// <summary>
+/// Ready (the 0.6 flow, docs/mockups/flow.html): a design loaded. The header; a banner when a run was
+/// cut off; check chips (the item limit, clashes, dyes short…) that open a short detail; three stage
+/// cards, Get (what's missing, where from, Get them for me first), Place (what Start does, and Keep /
+/// Clear out / Swap) and Finish (the fixtures, Set them for me after placing, Tick off); and one
+/// brass button whose words say what it does, with Preview.
+/// </summary>
 public sealed partial class MainWindow
 {
+    /// <summary>Finish's Tick off: the fixtures' tick list shows.</summary>
     private bool fixturesOpen;
     private (Plan? Plan, int Count, Pace Pace, bool Dyes, TimeSpan Time) estimate;
 
@@ -69,7 +76,7 @@ public sealed partial class MainWindow
         var piecesW = Kit.ButtonWidth(piecesLabel, BtnSize.Md, Icon.List);
         var buttonsW = piecesW + S(8) + S(40) + S(8) + S(40);
         var leftW = w - buttonsW - S(16);
-        var kind = layout.BuildName != null ? "Build file" : "MakePlace file";
+        var kind = layout.BuildName != null ? "Build" : "MakePlace";
         var eyebrowH = Kit.Eyebrow(at, $"{kind} · {(side == Side.Garden ? "garden" : "inside")}", null, leftW);
         var y = at.Y + eyebrowH + S(8);
         var titleH = Title(new Vector2(at.X, y), session.Title, null, leftW);
@@ -91,7 +98,7 @@ public sealed partial class MainWindow
         Kit.Reserve(at, w, y - at.Y);
         Frame.EndHeader();
 
-        Frame.BeginBody("##ready", "ready-foot", 22, 22);
+        Frame.BeginBody("##ready", "ready-foot", 20, 22);
         if (DraggingLayout) DragHint();
 
         foreach (var warning in session.Warnings.ToArray())
@@ -99,35 +106,11 @@ public sealed partial class MainWindow
             AlertNote(warning, Palette.Danger, textColor: Palette.Text);
             Kit.Gap(10);
         }
-        DrawReadyCare(entries);
-
-        Kit.EyebrowRow("What Start does");
-        Kit.Gap(10);
-        if (plan == null) DrawNotMatched();
-        else DrawStartSteps(summary);
-        var line = SummaryLine(summary, entries.Count, plan);
-        if (line.Length > 0)
-        {
-            Kit.Gap(10);
-            Txt.Note(line);
-        }
-        if (plan != null) DrawClearOut(plan);
-        if (plan != null) DrawErrandsEntry();
-
-        if (layout.InteriorFixtures.Count + layout.ExteriorFixtures.Count > 0)
-        {
-            Kit.Gap(18);
-            DrawFixtures(layout);
-        }
-        DrawDrift();
-
-        Frame.BeginBottom("ready-bottom");
-        var stay = side == Side.Garden ? "Stay on your plot while it runs."
-            : session.Context.HouseSize == "Apartment" ? "Stay in the apartment while it runs." : "Stay in the house while it runs.";
-        var editor = side == Side.Garden ? "It opens the outdoor furnishing editor" : "It opens the furnishing editor";
-        var backup = config.BackupBeforePlacing ? ", and saves a backup of what's placed first." : ". No backup is saved first (Settings).";
-        AlertNote($"{stay} {editor} and switches its modes for you{backup}", Palette.Dim, Icon.Info);
-        Frame.EndBottom();
+        CareNotice();
+        DrawCarryOnBanner();
+        DrawReadyChecks(summary, entries.Count);
+        DrawStages(layout, plan, summary);
+        DyesPopover();
         Frame.EndBody();
         DropTarget();
 
@@ -147,92 +130,6 @@ public sealed partial class MainWindow
         Txt.Line(Kit.Dl, new Vector2(at.X + (w - tw) / 2, at.Y), text, Face.Sans, 14, Palette.BrassSoft, h / S(1));
         Kit.Reserve(at, w, h);
         Kit.Gap(18);
-    }
-
-    /// <summary>Before you're home: one row saying so, in the steps' shape.</summary>
-    private void DrawNotMatched()
-    {
-        Kit.BeginPanel("##steps-none", 0, 0, 0);
-        StepRow(0, Icon.House, null, "Go to your home to see what it does",
-            new[] { Run.Note("What's placed there is matched against the design: what moves, what comes from your storeroom and bags, and what gets dyed.") });
-        Kit.EndPanel();
-    }
-
-    private void DrawStartSteps(StartSummary s)
-    {
-        Kit.BeginPanel("##steps", 0, 0, 0);
-        var index = 0;
-        if (s.Moves.Count > 0)
-        {
-            var names = s.Moves.Select(e => data.ItemName(e.Target.ItemId)).Distinct().ToList();
-            var line = s.Moves.Count == 1 ? "Move the piece that's in the wrong spot" : $"Move the {s.Moves.Count} pieces that are in the wrong spot";
-            StepRow(index++, Icon.Move, s.Moves.Count, line, new[] { Run.Note(Words.Some(names)) });
-        }
-        if (s.Places > 0)
-        {
-            var garden = ReadySide == Side.Garden;
-            var storeroomByHand = s.Storeroom > 0 && (garden || !config.StoreroomAutomatic);
-            var bagsByHand = s.Bags > 0 && !config.BagsAutomatic;
-            var line = s.Storeroom > 0 && s.Bags > 0 ? "Place pieces from your storeroom and bags"
-                : s.Storeroom > 0 ? "Place pieces from your storeroom" : "Place pieces from your bags";
-            string note;
-            if ((storeroomByHand || s.Storeroom == 0) && (bagsByHand || s.Bags == 0))
-                note = "You put each one down, anywhere; it's then set exactly where the design has it";
-            else
-            {
-                note = s.Storeroom > 0 && s.Bags > 0 ? $"{s.Storeroom} from your storeroom, {s.Bags} from your bags · each set exactly where the design has it" : "Each set exactly where the design has it";
-                if (storeroomByHand) note += " · you put the storeroom ones down";
-                if (bagsByHand) note += " · you put the ones from your bags down";
-            }
-            StepRow(index++, Icon.Package, s.Places, line, new[] { Run.Note(note) });
-        }
-        if (s.Dyes > 0)
-        {
-            var missing = vm.MissingDyes;
-            var note = missing.Count > 0
-                ? new[]
-                {
-                    Run.Note(Words.Count(missing.Count, "dye") + " missing", Palette.Danger),
-                    Run.Note(" · those pieces stay undyed · "),
-                    new Run("See which", Face.Sans, 13, Palette.BrassSoft, Link: "dyes"),
-                }
-                : new[] { Run.Note("With dyes from your bags") };
-            if (StepRow(index++, Icon.Droplet, s.Dyes, "Dye pieces to match", note) == "dyes") ImGui.OpenPopup("##dyes-missing");
-            DyesPopover();
-        }
-        if (index == 0)
-            StepRow(0, Icon.Check, null, "Nothing to do here", new[] { Run.Note("Every piece you have is where the design has it, in its dye.") }, done: true);
-        Kit.EndPanel();
-    }
-
-    /// <summary>
-    /// A step of "What Start does": the round brass-wash icon, the serif number, the line and its
-    /// note; 16px 20px inside, a faint line between. Returns the link pressed in the note.
-    /// </summary>
-    private static string? StepRow(int index, Icon icon, int? number, string line, IReadOnlyList<Run> note, bool done = false)
-    {
-        var at = Kit.At;
-        var w = Kit.Width;
-        if (index > 0) Kit.Divider(at.X, at.X + w, at.Y - 0.5f);
-        var x = at.X + S(20);
-        var numText = number?.ToString() ?? string.Empty;
-        var numW = number != null ? Txt.Measure(numText, Face.Serif, 26).X + S(16) : 0;
-        var wordsX = x + S(40) + S(16) + numW;
-        var wordsW = at.X + w - S(20) - wordsX;
-        var lineH = Txt.Natural(Face.Sans, 15);
-        var noteH = Txt.Flow(Vector2.Zero, wordsW, note, 19.5f, out _, draw: false);
-        var wordsH = lineH + S(3) + noteH;
-        var h = S(16) * 2 + MathF.Max(S(40), wordsH);
-        var mid = at.Y + h / 2;
-
-        var dl = Kit.Dl;
-        Kit.Round(new Vector2(x, mid - S(20)), S(40), icon, S(16), done ? Palette.SuccessWash : Palette.BrassWash, done ? Palette.Success : Palette.Brass);
-        if (number != null) Txt.Line(dl, new Vector2(x + S(56), mid - S(13)), numText, Face.Serif, 26, Palette.Ivory, 26);
-        var top = mid - wordsH / 2;
-        Txt.Line(dl, new Vector2(wordsX, top), Txt.Fit(line, Face.Sans, 15, wordsW), Face.Sans, 15, Palette.Ivory);
-        Txt.Flow(new Vector2(wordsX, top + lineH + S(3)), wordsW, note, 19.5f, out var clicked);
-        Kit.Reserve(at, w, h);
-        return clicked;
     }
 
     /// <summary>"See which": the dyes this design needs beyond your bags, with Copy list.</summary>
@@ -277,27 +174,151 @@ public sealed partial class MainWindow
         return sb.ToString().TrimEnd();
     }
 
-    /// <summary>"2 pieces are already in place. 29 pieces in your home aren't in this design and stay where they are." and the like.</summary>
-    private string SummaryLine(StartSummary s, int shown, Plan? plan)
+    // ---------------------------------------------------------------------------------------------
+    // The three stages: Get, Place, Finish. The first not done is the one in hand.
+
+    private void DrawStages(Layout layout, Plan? plan, StartSummary s)
     {
-        var parts = new List<string>();
-        if (plan != null)
+        var shop = ShopPlan();
+        var getDone = plan != null && shop.IsEmpty;
+        var placeDone = plan != null && s.Moves.Count + s.Places + s.Dyes == 0 && ChosenClearOut() == null;
+        var fixtures = FixtureCount(layout);
+        var ticked = fixtures > 0 ? FixturesDone(layout) : 0;
+        var finishDone = ticked >= fixtures;
+
+        DrawGetStage(plan, shop, getDone ? StageState.Done : StageState.Now);
+        DrawPlaceStage(layout, plan, s, placeDone ? StageState.Done : getDone ? StageState.Now : StageState.Todo);
+        if (fixtures > 0)
+            DrawFinishStage(layout, fixtures, ticked, finishDone ? StageState.Done : getDone && placeDone ? StageState.Now : StageState.Todo);
+    }
+
+    private const string ReadyGet = "GET";
+    private const string SeeList = "See the list";
+    private const string GetFirstLabel = "Get them for me first";
+
+    /// <summary>The Get stage's words for a shopping plan (made again only when the plan changes).</summary>
+    private (ShoppingPlan? Shop, int Things, string Big, string? Aside, (Icon Icon, string Count, string Label)[] Sources) getWords =
+        (null, 0, string.Empty, null, Array.Empty<(Icon, string, string)>());
+
+    private static readonly (SourceKind Source, Icon Icon, string Label)[] GetSources =
+    {
+        (SourceKind.Retainer, Icon.Bell, "retainers"),
+        (SourceKind.Vendor, Icon.Store, "vendors"),
+        (SourceKind.Market, Icon.Scale, "market"),
+        (SourceKind.Craft, Icon.Hammer, "craft"),
+        (SourceKind.Unknown, Icon.Info, "not known"),
+    };
+
+    private (ShoppingPlan? Shop, int Things, string Big, string? Aside, (Icon Icon, string Count, string Label)[] Sources) GetWords(ShoppingPlan shop)
+    {
+        if (ReferenceEquals(getWords.Shop, shop)) return getWords;
+        var things = shop.Lines.Sum(l => l.Count);
+        var sources = new List<(Icon, string, string)>();
+        foreach (var (source, icon, label) in GetSources)
+            if (shop.Count(source) is > 0 and var n) sources.Add((icon, n.ToString(), label));
+        return getWords = (shop, things, $"{things} missing", shop.TotalGil > 0 ? $"about {ShoppingList.Gil(shop.TotalGil)}" : null, sources.ToArray());
+    }
+
+    /// <summary>"Get them for me first" is on and there's something to get: the brass button opens the errands.</summary>
+    private bool GettingFirst(ShoppingPlan shop) => config.GetFirst && Errands.Enabled && session.Plan != null && !shop.IsEmpty;
+
+    /// <summary>Get: what's missing (pieces and dyes) with the gil, where it comes from, Get them for me first, and See the list.</summary>
+    private void DrawGetStage(Plan? plan, ShoppingPlan shop, StageState state)
+    {
+        Kit.BeginStage("##stage-get", 1, state, first: true);
+        if (plan == null)
         {
-            if (s.InPlace > 0) parts.Add(s.InPlace == 1 ? "1 piece is already in place." : $"{s.InPlace} pieces are already in place.");
-            if (s.Missing > 0) parts.Add(s.Missing == 1 ? "You don't have 1 piece, so it's skipped (Pieces lists it)." : $"You don't have {s.Missing} pieces, so they're skipped (Pieces lists them).");
-            if (ShopPlan() is { TotalGil: > 0 } shop) parts.Add($"Buying what's missing: {ShoppingList.TotalWords(shop)}.");
-            if (config.NearMe) parts.Add($"Near me is on: only the {Words.Count(shown, "piece")} within {config.NearMeRadius:0} yalms of you.");
-            var off = new[] { (config.ShowBasement, "basement"), (config.ShowGround, "ground floor"), (config.ShowUpper, "upper floor") }.Where(f => !f.Item1).Select(f => f.Item2).ToList();
-            if (off.Count > 0 && ReadySide == Side.Interior) parts.Add($"The {Words.List(off)} {(off.Count == 1 ? "is" : "are")} left out (Settings → More options).");
-            if (ReadySide == Side.Interior && !session.StoreroomLoaded)
-                parts.Add("The storeroom isn't read yet: open Housing → Indoor Furnishings and its Storeroom tab once, and its pieces count too.");
+            Kit.StageHead(ReadyGet, "Not known yet");
+            Kit.Gap(4);
+            Txt.Note("Go to your home: what's missing is worked out from your storeroom and bags there.");
         }
-        var layout = session.Layout!;
-        if (session.Context.Side == Side.Interior && layout.Garden.Count > 0)
-            parts.Add($"Its {Words.Count(layout.Garden.Count, "garden piece")} {(layout.Garden.Count == 1 ? "is" : "are")} placed from your plot.");
-        else if (session.Context.Side == Side.Garden && layout.Interior.Count > 0)
-            parts.Add($"Its {Words.Count(layout.Interior.Count, "piece")} inside {(layout.Interior.Count == 1 ? "is" : "are")} placed from inside the house.");
-        return string.Join(" ", parts);
+        else if (shop.IsEmpty)
+        {
+            Kit.StageHead(ReadyGet, "You have everything");
+        }
+        else
+        {
+            var g = GetWords(shop);
+            Kit.StageHead(ReadyGet, g.Big, g.Aside);
+            Kit.Gap(10);
+            var row = new Kit.Wrap(8);
+            foreach (var (icon, count, label) in g.Sources)
+                Kit.CountChip(row.Next(Kit.CountChipWidth(count, label, icon), S(26)), count, label, icon);
+            row.End();
+            Kit.Gap(10);
+            var at = Kit.At;
+            var w = Kit.Width;
+            var listW = Kit.MoreButtonWidth(SeeList);
+            var listAt = new Vector2(at.X + w - listW, at.Y);
+            var h = S(30);
+            if (Errands.Enabled)
+            {
+                var beside = Kit.LabeledSwitchWidth(GetFirstLabel, true) + S(12) + listW <= w;
+                if (Kit.LabeledSwitch("##get-first", new Vector2(at.X, at.Y + S(3)), config.GetFirst, GetFirstLabel, true,
+                        "Experimental: the button below opens the errands first. They fetch what's missing from your retainers, vendors and the market board, then place. You see the gil before anything is bought."))
+                {
+                    config.GetFirst = !config.GetFirst;
+                    config.Save();
+                }
+                if (!beside)
+                {
+                    listAt = new Vector2(at.X, at.Y + S(30) + S(6));
+                    h += S(6) + S(30);
+                }
+            }
+            if (Kit.MoreButton("##see-list", listAt, SeeList, Icon.ChevronRight, "Where each thing comes from, with the gil and Copy list"))
+                OpenShopping(Sub.None);
+            Kit.Reserve(at, w, h);
+        }
+        Kit.EndStage();
+    }
+
+    private const string ReadyPlace = "PLACE";
+
+    /// <summary>The Place stage's words and cells for what Start does (made again only when the counts change).</summary>
+    private (int Moves, int Places, int Dyes, int InPlace, string Big, string? Aside, (int, string)[] Cells) placeWords =
+        (-1, 0, 0, 0, string.Empty, null, Array.Empty<(int, string)>());
+
+    /// <summary>Place: what Start does (to move, to place, to dye), what's already in place, and Keep / Clear out / Swap.</summary>
+    private void DrawPlaceStage(Layout layout, Plan? plan, StartSummary s, StageState state)
+    {
+        Kit.BeginStage("##stage-place", 2, state);
+        if (plan == null)
+        {
+            var count = ReadySide == Side.Garden ? layout.Garden.Count : layout.Interior.Count;
+            Kit.StageHead(ReadyPlace, Words.Count(count, "piece"));
+            Kit.Gap(4);
+            Txt.Note("Go to your home to see what Start does: what's placed there is matched against the design, what moves, what comes from your storeroom and bags, and what gets dyed.");
+            Kit.EndStage();
+            return;
+        }
+        var p = placeWords;
+        if (p.Moves != s.Moves.Count || p.Places != s.Places || p.Dyes != s.Dyes || p.InPlace != s.InPlace)
+            p = placeWords = (s.Moves.Count, s.Places, s.Dyes, s.InPlace, ReadyWords.PlaceBig(s.Moves.Count + s.Places, s.Dyes),
+                s.InPlace > 0 ? $"{s.InPlace} already in place" : null,
+                new[] { (s.Moves.Count, "to move"), (s.Places, "to place"), (s.Dyes, "to dye") });
+        Kit.StageHead(ReadyPlace, p.Big, p.Aside);
+        if (s.Moves.Count + s.Places + s.Dyes > 0)
+        {
+            Kit.Gap(10);
+            Kit.StatCells(p.Cells);
+        }
+        if (s.Places > 0)
+        {
+            // Placing by hand (Settings): you put each piece down, then it's set where the design has it.
+            var storeroomByHand = s.Storeroom > 0 && (ReadySide == Side.Garden || !config.StoreroomAutomatic);
+            var bagsByHand = s.Bags > 0 && !config.BagsAutomatic;
+            if (storeroomByHand || bagsByHand)
+            {
+                Kit.Gap(8);
+                Txt.Note((storeroomByHand || s.Storeroom == 0) && (bagsByHand || s.Bags == 0)
+                    ? "You put each one down, anywhere; it's then set exactly where the design has it."
+                    : storeroomByHand ? "You put the storeroom ones down, anywhere; each is then set where the design has it."
+                    : "You put the ones from your bags down, anywhere; each is then set where the design has it.");
+            }
+        }
+        DrawPlaceChoice(plan);
+        Kit.EndStage();
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -333,40 +354,90 @@ public sealed partial class MainWindow
         return string.Join(", ", parts);
     }
 
-    private void DrawFixtures(Layout layout)
+    private static int FixtureCount(Layout layout) => layout.InteriorFixtures.Count + layout.ExteriorFixtures.Count;
+
+    private const string ReadyFinish = "FINISH";
+    private const string AfterLabel = "Set them for me after placing";
+    private const string TickOff = "Tick off";
+
+    /// <summary>Finish's line: what the fixtures are, and what the plugin can set from your bags (read again once a second).</summary>
+    private (Layout? Layout, DateTime Until, string Line) finishLine = (null, DateTime.MinValue, string.Empty);
+
+    private string FinishLine(Layout layout)
     {
-        var all = Fixtures(layout).ToList();
-        var done = FixturesDone(layout);
-        Kit.BeginPanel("##fixtures", 0, 0, 0);
-        var chip = $"{done} of {all.Count} done";
-        var allDone = done == all.Count;
-        Disclosure("##fixtures-row", ref fixturesOpen, "Fixtures to set yourself", FixtureSummary(layout), 16, Kit.ChipWidth(chip, allDone), S(24),
-            (p, _) => Kit.Chip(p, chip, allDone), false);
-        // While "Set them for me" runs, its step and Continue show here.
-        if (Plugin.FixtureRun.Active) fixturesOpen = true;
-        if (fixturesOpen)
+        var now = DateTime.UtcNow;
+        if (ReferenceEquals(finishLine.Layout, layout) && now < finishLine.Until) return finishLine.Line;
+        var line = FixtureSummary(layout) + ".";
+        if (Plugin.FixtureRun.Enabled && session.Context.Side != null) line += $" {FixtureBagWords()}.";
+        finishLine = (layout, now + TimeSpan.FromSeconds(1), line);
+        return line;
+    }
+
+    /// <summary>
+    /// Finish: the fixtures still to set and how many are ticked, what they are, "Set them for me
+    /// after placing" (Experimental), and Tick off (the tick list, with Set them for me). While the
+    /// plugin sets them, its step, Continue and Stop.
+    /// </summary>
+    private void DrawFinishStage(Layout layout, int all, int done, StageState state)
+    {
+        var left = all - done;
+        Kit.BeginStage("##stage-finish", 3, state);
+        Kit.StageHead(ReadyFinish, left <= 0 ? "All set" : Words.Count(left, "fixture"), $"{done} of {all} set");
+        Kit.Gap(4);
+        Txt.Note(FinishLine(layout));
+        if (!DrawFixtureRunPanel(10, 0))
         {
-            Kit.PushBox(Kit.Left + S(20), Kit.Width - S(40));
-            Txt.Note(Plugin.FixtureRun.Enabled
-                ? "Set them with the game's Housing → Remodel Interior (or Remodel Exterior), or let the plugin put them in from your bags (experimental). Tick each one as it's set."
-                : "The plugin doesn't set these: use the game's Housing → Remodel Interior (or Remodel Exterior), and tick each one as you set it.");
-            Kit.Gap(6);
-            Kit.PopBox();
-            DrawSetFixtures();
-            var design = DesignKey;
-            var groups = all.GroupBy(f => f.Level).OrderBy(g => LevelRank(g.Key));
-            foreach (var group in groups)
+            Kit.Gap(10);
+            var at = Kit.At;
+            var w = Kit.Width;
+            var chevron = fixturesOpen ? Icon.ChevronDown : Icon.ChevronRight;
+            var tickW = Kit.MoreButtonWidth(TickOff, chevron);
+            var tickAt = new Vector2(at.X + w - tickW, at.Y);
+            var h = S(30);
+            if (Plugin.FixtureRun.Enabled && left > 0)
             {
-                var at = Kit.At;
-                var w = Kit.Width;
-                Kit.Divider(at.X, at.X + w, at.Y);
-                var h = S(14) + Txt.Natural(Face.Mono, 12) + S(4);
-                Txt.Spaced(Kit.Dl, at + new Vector2(S(20), S(14)), LevelName(group.Key).ToUpperInvariant(), Face.Mono, 12, Palette.Dim, 0.18f);
-                Kit.Reserve(at, w, h);
-                var list = group.ToList();
-                foreach (var f in list) FixtureRow(design, f);
+                var beside = Kit.LabeledSwitchWidth(AfterLabel, true) + S(12) + tickW <= w;
+                if (Kit.LabeledSwitch("##fixtures-after", new Vector2(at.X, at.Y + S(3)), config.FixturesAfterPlacing, AfterLabel, true,
+                        "Experimental: when placing from here finishes, the game's fixtures window is opened and each fixture put in from your bags, step by step. You press its apply."))
+                {
+                    config.FixturesAfterPlacing = !config.FixturesAfterPlacing;
+                    config.Save();
+                }
+                if (!beside)
+                {
+                    tickAt = new Vector2(at.X, at.Y + S(30) + S(6));
+                    h += S(6) + S(30);
+                }
             }
-            Kit.Gap(8);
+            if (Kit.MoreButton("##tick-off", tickAt, TickOff, chevron, "Tick each fixture as it's set (kept for this design)")) fixturesOpen = !fixturesOpen;
+            Kit.Reserve(at, w, h);
+            if (fixturesOpen) DrawFixtureTicks(layout);
+        }
+        Kit.EndStage();
+    }
+
+    /// <summary>Tick off: how to set them, Set them for me (Experimental), and the fixtures by floor, each with its tick box.</summary>
+    private void DrawFixtureTicks(Layout layout)
+    {
+        Kit.Gap(10);
+        Txt.Note(Plugin.FixtureRun.Enabled
+            ? "Set them with the game's Housing → Remodel Interior (or Remodel Exterior), or let the plugin put them in from your bags (experimental). Tick each one as it's set."
+            : "The plugin doesn't set these: use the game's Housing → Remodel Interior (or Remodel Exterior), and tick each one as you set it.");
+        Kit.Gap(10);
+        DrawSetFixtures();
+        var design = DesignKey;
+        Kit.BeginPanel("##fixture-ticks", 0, 0, 8, Palette.Well, Palette.Line, Palette.RadiusCard);
+        var first = true;
+        foreach (var group in Fixtures(layout).GroupBy(f => f.Level).OrderBy(g => LevelRank(g.Key)))
+        {
+            var at = Kit.At;
+            var w = Kit.Width;
+            if (!first) Kit.Divider(at.X, at.X + w, at.Y);
+            first = false;
+            var h = S(14) + Txt.Natural(Face.Mono, 12) + S(4);
+            Txt.Spaced(Kit.Dl, at + new Vector2(S(20), S(14)), LevelName(group.Key).ToUpperInvariant(), Face.Mono, 12, Palette.Dim, 0.18f);
+            Kit.Reserve(at, w, h);
+            foreach (var f in group) FixtureRow(design, f);
         }
         Kit.EndPanel();
     }
@@ -447,44 +518,71 @@ public sealed partial class MainWindow
     }
 
     // ---------------------------------------------------------------------------------------------
-    // The footer: Start placing, Preview first, and how long.
+    // The footer: one brass button that says what it does, Preview, and how long.
+
+    private (ReadyMode Mode, int Things, int Clear, bool Getting, bool Fixtures, string Label) goLabel = (ReadyMode.Keep, -1, 0, false, false, string.Empty);
+    private (TimeSpan Time, Pace Pace, bool Getting, int Trips, string Hint) goHint = (TimeSpan.Zero, Pace.Quick, false, -1, string.Empty);
+    private (Side Side, bool Apartment, bool Backup, string Tip) goTip = (Side.Interior, false, false, string.Empty);
+
+    /// <summary>The brass button's tooltip: what Start does to the game while it runs (the old note under Ready).</summary>
+    private string StartTip(Side side)
+    {
+        var apartment = session.Context.HouseSize == "Apartment";
+        var t = goTip;
+        if (t.Tip.Length > 0 && t.Side == side && t.Apartment == apartment && t.Backup == config.BackupBeforePlacing) return t.Tip;
+        var stay = side == Side.Garden ? "Stay on your plot while it runs." : apartment ? "Stay in the apartment while it runs." : "Stay in the house while it runs.";
+        var editor = side == Side.Garden ? "It opens the outdoor furnishing editor" : "It opens the furnishing editor";
+        var backup = config.BackupBeforePlacing ? ", and saves a backup of what's placed first." : ". No backup is saved first (Settings).";
+        goTip = (side, apartment, config.BackupBeforePlacing, $"{stay} {editor} and switches its modes for you{backup}");
+        return goTip.Tip;
+    }
 
     private void DrawReadyFooter(StartSummary s, List<PlanEntry> entries)
     {
         Frame.BeginFooter("ready-foot", 18, 22);
         var at = Kit.At;
         var w = Kit.Width;
-        var nothing = session.Plan != null && s.Moves.Count + s.Places + s.Dyes == 0 && ChosenClearOut() == null;
-        var blocked = runner.CanStart(false) ?? (nothing ? "Nothing to do: every piece you have is in place" : null);
+        var shop = ShopPlan();
+        var getting = GettingFirst(shop);
+        var mode = ModeNow;
+        var clear = ChosenClearOut();
+        var nothing = session.Plan != null && s.Moves.Count + s.Places + s.Dyes == 0 && clear == null;
+        // Getting first opens the errands' estimate, which says itself why they can't go yet.
+        var blocked = getting ? null : runner.CanStart(false) ?? (nothing ? "Nothing to do: every piece you have is in place" : null);
         var previewBlocked = runner.CanStart(true) ?? (nothing ? "Nothing to preview" : null);
 
-        const string preview = "Preview first";
+        var things = getting ? GetWords(shop).Things : 0;
+        var fixturesAfter = config.FixturesAfterPlacing && Plugin.FixtureRun.Enabled && session.Layout is { } layout
+                            && FixtureCount(layout) > 0 && FixturesDone(layout) < FixtureCount(layout);
+        var g = goLabel;
+        if (g.Mode != mode || g.Things != things || g.Clear != (clear?.Count ?? 0) || g.Getting != getting || g.Fixtures != fixturesAfter)
+            g = goLabel = (mode, things, clear?.Count ?? 0, getting, fixturesAfter, ReadyWords.Go(mode, things, clear?.Count ?? 0, getting, fixturesAfter));
+
+        const string preview = "Preview";
         var pw = Kit.ButtonWidth(preview, BtnSize.Lg, Icon.Eye);
-        if (Kit.Button("##start", at, "Start placing", Btn.Primary, BtnSize.Lg, Icon.Play, w - pw - S(10), blocked != null, blocked))
-            StartFromReady(entries);
-        if (Kit.Button("##preview", new Vector2(at.X + w - pw, at.Y), preview, Btn.Glass, BtnSize.Lg, Icon.Eye, 0, previewBlocked != null,
+        // Side by side when the button's words fit beside Preview; else Preview goes under it.
+        var beside = Kit.ButtonWidth(g.Label, BtnSize.Lg, Icon.Play, Btn.Primary) <= w - pw - S(10);
+        var goW = beside ? w - pw - S(10) : w;
+        var tip = getting ? "Opens what the errands would get, the trips and the gil, before anything is bought. They place it all after." : StartTip(ReadySide);
+        if (Kit.Button("##start", at, g.Label, Btn.Primary, BtnSize.Lg, Icon.Play, goW, blocked != null, blocked ?? tip))
+        {
+            if (getting) errandsOpen = true;
+            else if (mode == ReadyMode.Swap && clear != null) AskSwap(KeepAsName(), clear.Count);
+            else StartFromReady(entries);
+        }
+        var previewAt = beside ? new Vector2(at.X + w - pw, at.Y) : new Vector2(at.X, at.Y + S(46) + S(10));
+        if (Kit.Button("##preview", previewAt, preview, Btn.Glass, BtnSize.Lg, Icon.Eye, beside ? 0 : w, previewBlocked != null,
                 previewBlocked ?? "Walks through every piece, marking each spot in your home, and moves nothing."))
             StartRun(true, entries);
-        Kit.Reserve(at, w, S(46));
+        Kit.Reserve(at, w, beside ? S(46) : S(46) * 2 + S(10));
         Kit.Gap(12);
 
-        var left = blocked ?? $"{Words.Capital(Words.About(Estimate(s, entries)))} at a {PaceSetting.Word(config.Pace)} pace";
-        const string right = "Preview marks each spot, moving nothing";
-        var row = Kit.At;
-        var lw = Txt.Measure(left, Face.Sans, 13).X;
-        var rw = Txt.Measure(right, Face.Sans, 13).X;
-        var dl = Kit.Dl;
-        if (lw + S(16) + rw <= w)
-        {
-            Txt.Line(dl, row, left, Face.Sans, 13, Palette.Ash, 19.5f);
-            Txt.Line(dl, new Vector2(row.X + w - rw, row.Y), right, Face.Sans, 13, Palette.Ash, 19.5f);
-            Kit.Reserve(row, w, S(19.5f));
-        }
-        else
-        {
-            Txt.Para(new[] { Run.Note(left) });
-            Txt.Para(new[] { Run.Note(right) });
-        }
+        var time = Estimate(s, entries);
+        var trips = getting ? ErrandEstimate().Plan.Trips.Count : 0;
+        var hint = goHint;
+        if (hint.Time != time || hint.Pace != config.Pace || hint.Getting != getting || hint.Trips != trips)
+            hint = goHint = (time, config.Pace, getting, trips, ReadyWords.Hint(Words.About(time), PaceSetting.Word(config.Pace), getting, trips));
+        Txt.Para(new[] { Run.Note(blocked ?? hint.Hint) });
         Frame.EndFooter();
     }
 }

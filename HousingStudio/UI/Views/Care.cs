@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using Dalamud.Bindings.ImGui;
 using HousingStudio.Core;
 using HousingStudio.Session;
 using HousingStudio.UI.Model;
@@ -46,48 +47,184 @@ public sealed partial class MainWindow
     }
 
     // ---------------------------------------------------------------------------------------------
-    // Ready: a run to carry on, whether it fits, what the game would refuse.
+    // Ready: a run to carry on (a banner), and the check chips: whether it fits, what the game would
+    // refuse, dyes short, what's left out. Each chip opens a short detail with its words and actions.
 
-    private void DrawReadyCare(List<PlanEntry> entries)
+    /// <summary>What a chip's detail offers to do.</summary>
+    [Flags]
+    private enum CheckActions
     {
-        CareNotice();
-        var plan = session.Plan;
-        var ctx = session.Context;
+        None = 0,
+        ShowClashes = 1,
+        ShowWrongSide = 2,
+        Pieces = 4,
+        SeeDyes = 8,
+        CopyDyes = 16,
+    }
 
-        if (care != null && plan != null && care.Offer(session.FilePath, session.PlanSide) is { } progress)
+    private sealed record ReadyCheck(CheckChipSpec Chip, Run[] Detail, CheckActions Actions);
+
+    /// <summary>Everything the chips are made from: they're made again only when one of these changes.</summary>
+    private readonly record struct ChecksKey(
+        Plan? Of, Layout? Design, Side? PlanSide, Side Side, Side? Here, string? Size, int Live, int Clearing, int Places, int Shown,
+        object? Clashes, bool Anywhere, object? Dyes, bool Dyeing, bool Storeroom, bool NearMe, float Reach, bool B, bool G, bool U);
+
+    private (ChecksKey Key, List<ReadyCheck>? Checks, CheckChipSpec[] Chips) readyChecks = (default, null, Array.Empty<CheckChipSpec>());
+
+    /// <summary>The chip whose detail shows (one at a time; pressing it again closes it).</summary>
+    private string? openCheck;
+
+    private void DrawReadyChecks(StartSummary s, int shown)
+    {
+        var checks = ReadyChecks(s, shown);
+        if (checks.Count == 0)
         {
-            DrawCarryOn(progress, plan);
-            Kit.Gap(12);
+            openCheck = null;
+            return;
         }
-
-        if (plan != null && session.PlanSide is { } side && session.Layout is { } layout)
+        var pressed = Kit.CheckChips(readyChecks.Chips, openCheck);
+        if (pressed >= 0) openCheck = openCheck == checks[pressed].Chip.Id ? null : checks[pressed].Chip.Id;
+        ReadyCheck? open = null;
+        foreach (var c in checks)
+            if (c.Chip.Id == openCheck) open = c;
+        if (open == null) openCheck = null;
+        else
         {
-            var places = entries.Count(e => e.State is PieceState.FromStoreroom or PieceState.FromInventory);
-            // A chosen clear out puts its pieces away before placing: they don't count against the limit.
-            var clearing = ChosenClearOut()?.Count ?? 0;
-            var check = ItemLimits.Check(side, ctx.HouseSize, layout.Pieces(side).Count(), session.Live.Count - clearing,
-                Math.Max(0, plan.Extras.Count - clearing), places);
-            if (check is { } c && CareWords.Limit(c, side, ctx.HouseSize) is { } limitWords)
+            Kit.Gap(10);
+            Kit.BeginDetail();
+            Txt.Para(open.Detail);
+            if (open.Actions != CheckActions.None)
             {
-                AlertNote(limitWords, c.Over > 0 ? Palette.Danger : Palette.Dim, c.Over > 0 ? Icon.Alert : Icon.Info, Palette.Text);
-                Kit.Gap(10);
+                Kit.Gap(8);
+                CheckActionsRow(open.Actions);
+            }
+            Kit.EndDetail();
+        }
+        Kit.Gap(14);
+    }
+
+    private void CheckActionsRow(CheckActions actions)
+    {
+        var row = new Kit.Wrap(8);
+        var h = Kit.ButtonHeight(BtnSize.Tiny);
+        var cantShow = session.Context.Side == null ? "Go to your home to see where they go" : null;
+        if ((actions & (CheckActions.ShowClashes | CheckActions.ShowWrongSide)) != 0)
+        {
+            const string show = "Show where";
+            var wrongSide = (actions & CheckActions.ShowWrongSide) != 0;
+            if (Kit.Button("##check-show", row.Next(Kit.ButtonWidth(show, BtnSize.Tiny, Icon.MapPin), h), show, Btn.Glass, BtnSize.Tiny, Icon.MapPin, 0,
+                    cantShow != null, cantShow))
+                ShowWhere(ClashesNow().Where(c => (c.Kind == ClashKind.WrongSide) == wrongSide).SelectMany(c => c.Pieces));
+        }
+        if ((actions & CheckActions.Pieces) != 0)
+        {
+            const string pieces = "Pieces";
+            if (Kit.Button("##check-pieces", row.Next(Kit.ButtonWidth(pieces, BtnSize.Tiny, Icon.List), h), pieces, Btn.Glass, BtnSize.Tiny, Icon.List, 0, false,
+                    "Pieces lists them under “Pieces the game may refuse”, each with Show where."))
+                sub = Sub.Pieces;
+        }
+        if ((actions & CheckActions.SeeDyes) != 0)
+        {
+            const string see = "See which";
+            if (Kit.Button("##check-see-dyes", row.Next(Kit.ButtonWidth(see, BtnSize.Tiny, Icon.Droplet), h), see, Btn.Glass, BtnSize.Tiny, Icon.Droplet))
+                ImGui.OpenPopup("##dyes-missing");
+        }
+        if ((actions & CheckActions.CopyDyes) != 0)
+        {
+            const string copy = "Copy list";
+            if (Kit.Button("##check-copy-dyes", row.Next(Kit.ButtonWidth(copy, BtnSize.Tiny, Icon.Clipboard), h), copy, Btn.Glass, BtnSize.Tiny, Icon.Clipboard))
+            {
+                ImGui.SetClipboardText(DyeList(vm.MissingDyes.Select(m => (m.Name, m.Count))));
+                Notify("Dye list copied");
             }
         }
+        row.End();
+    }
 
-        ClashesNow();
-        var words = clashCache.Words;
-        if (words.WrongSide != null)
+    /// <summary>
+    /// The chips Ready shows, made again only when what they're made from changes: the item limit as a
+    /// meter (a chosen clear out's pieces don't count), the pieces the game may refuse, those that can't
+    /// go on this side, the dyes short, the storeroom not read, Near me, the floors left out, and the
+    /// pieces placed from the other side. None when there's nothing to say.
+    /// </summary>
+    private List<ReadyCheck> ReadyChecks(StartSummary s, int shown)
+    {
+        var plan = session.Plan;
+        var ctx = session.Context;
+        var layout = session.Layout!;
+        // A chosen clear out (or swap) puts its pieces away before placing: they don't count against the limit.
+        var clearing = ChosenClearOut()?.Count ?? 0;
+        var clashes = ClashesNow();
+        var dyes = vm.MissingDyes;
+        var side = ReadySide;
+        var key = new ChecksKey(plan, layout, session.PlanSide, side, ctx.Side, ctx.HouseSize, session.Live.Count, clearing, s.Places, shown,
+            clashes, config.PlaceAnywhere, dyes, s.Dyes > 0, session.StoreroomLoaded, config.NearMe, config.NearMeRadius,
+            config.ShowBasement, config.ShowGround, config.ShowUpper);
+        if (readyChecks.Checks != null && readyChecks.Key == key) return readyChecks.Checks;
+
+        var list = new List<ReadyCheck>();
+        static Run[] Para(string text) => new[] { Run.Note(text, Palette.Text) };
+        static Run[] Lead(string lead, string rest) => new[] { new Run(lead, Face.SansMedium, 13, Palette.Ivory), Run.Note(rest, Palette.Text) };
+
+        if (plan != null && session.PlanSide is { } planSide)
         {
-            AlertNote(words.WrongSide, Palette.Danger, textColor: Palette.Text);
-            Kit.Gap(10);
+            var check = ItemLimits.Check(planSide, ctx.HouseSize, layout.Pieces(planSide).Count(), session.Live.Count - clearing,
+                Math.Max(0, plan.Extras.Count - clearing), s.Places);
+            if (check is { } c)
+                list.Add(new ReadyCheck(new CheckChipSpec("##check-limit", $"{c.After} of {c.Limit}", c.Over > 0 ? ChipTone.Warn : ChipTone.Normal, null,
+                        c.Limit > 0 ? (float)c.After / c.Limit : 0, "Pieces in the home once Start is done, of the most it holds"),
+                    Para(CareWords.LimitDetail(c, planSide, ctx.HouseSize, clearing > 0)), CheckActions.None));
         }
+
+        var words = clashCache.Words;
         if (words.Others > 0)
         {
             var lead = CareWords.ClashLead(words.Others, config.PlaceAnywhere, false);
-            if (config.PlaceAnywhere) AlertNote($"{lead} Pieces lists them.", Palette.Dim, Icon.Info);
-            else AlertNote($"{lead} {words.OthersList}. Pieces lists them with Show where.", Palette.Danger, textColor: Palette.Text);
-            Kit.Gap(10);
+            list.Add(new ReadyCheck(new CheckChipSpec("##check-refuse", $"{words.Others} may be refused", config.PlaceAnywhere ? ChipTone.Normal : ChipTone.Warn,
+                Icon.AlertTriangle), Lead(lead, $" {words.OthersList}."), CheckActions.ShowClashes | CheckActions.Pieces));
         }
+        if (words.WrongSide != null)
+            list.Add(new ReadyCheck(new CheckChipSpec("##check-side", $"{words.All - words.Others} can't go here", ChipTone.Warn, Icon.AlertTriangle),
+                Para(words.WrongSide), CheckActions.ShowWrongSide));
+
+        if (s.Dyes > 0 && dyes.Count > 0)
+        {
+            var count = dyes.Sum(d => d.Count);
+            var names = Words.Some(dyes.Select(d => $"{d.Name} ×{d.Count}").ToList(), 3);
+            var one = dyes.Count == 1 && count == 1;
+            list.Add(new ReadyCheck(new CheckChipSpec("##check-dyes", ReadyWords.DyesShort(count), ChipTone.Normal, Icon.Flask),
+                Lead(names, $" {(one ? "isn't" : "aren't")} in your bags. {(one ? "It's" : "They're")} on the list to get; until then, those pieces stay undyed."),
+                CheckActions.SeeDyes | CheckActions.CopyDyes));
+        }
+
+        if (plan != null && side == Side.Interior && !session.StoreroomLoaded)
+            list.Add(new ReadyCheck(new CheckChipSpec("##check-storeroom", "Storeroom not read", ChipTone.Normal, Icon.Info),
+                Para("The storeroom isn't read yet: open Housing → Indoor Furnishings and its Storeroom tab once, and its pieces count too."), CheckActions.None));
+        if (plan != null && config.NearMe)
+            list.Add(new ReadyCheck(new CheckChipSpec("##check-near", $"Near me · {Words.Count(shown, "piece")}", ChipTone.Brass, Icon.MapPin),
+                Para($"Near me is on: only the {Words.Count(shown, "piece")} within {config.NearMeRadius:0} yalms of you are worked on (Settings → More options)."),
+                CheckActions.None));
+        if (plan != null && side == Side.Interior)
+        {
+            var off = new List<string>();
+            if (!config.ShowBasement) off.Add("basement");
+            if (!config.ShowGround) off.Add("ground floor");
+            if (!config.ShowUpper) off.Add("upper floor");
+            if (off.Count > 0)
+                list.Add(new ReadyCheck(new CheckChipSpec("##check-floors", ReadyWords.FloorsLeftOut(off), ChipTone.Normal, Icon.Shelf),
+                    Para($"The {Words.List(off)} {(off.Count == 1 ? "is" : "are")} left out (Settings → More options)."), CheckActions.None));
+        }
+
+        if (ctx.Side == Side.Interior && layout.Garden.Count > 0)
+            list.Add(new ReadyCheck(new CheckChipSpec("##check-other", $"{layout.Garden.Count} in the garden", ChipTone.Normal, Icon.House),
+                Para($"Its {Words.Count(layout.Garden.Count, "garden piece")} {(layout.Garden.Count == 1 ? "is" : "are")} placed from your plot."), CheckActions.None));
+        else if (ctx.Side == Side.Garden && layout.Interior.Count > 0)
+            list.Add(new ReadyCheck(new CheckChipSpec("##check-other", $"{layout.Interior.Count} inside", ChipTone.Normal, Icon.House),
+                Para($"Its {Words.Count(layout.Interior.Count, "piece")} inside {(layout.Interior.Count == 1 ? "is" : "are")} placed from inside the house."),
+                CheckActions.None));
+
+        readyChecks = (key, list, list.Select(c => c.Chip).ToArray());
+        return list;
     }
 
     /// <summary>The clashes in words, made once per clash list: the other side's line, and the rest's count and list.</summary>
@@ -133,36 +270,41 @@ public sealed partial class MainWindow
         return clashCache.List;
     }
 
-    private void DrawCarryOn(RunProgress progress, Plan plan)
+    private (RunProgress? Of, DateTime Day, string Text, string? When, string Tip) carryOnWords = (null, DateTime.MinValue, string.Empty, null, string.Empty);
+
+    /// <summary>Ready's banner when a run of this design was cut off: Carry on (from where it stopped) or Forget.</summary>
+    private void DrawCarryOnBanner()
     {
-        var when = When.Relative(progress.SavedUtc.ToLocalTime(), DateTime.Now, Clock);
-        Kit.BeginPanel("##carry-on", 16, 20, 16, Palette.BrassWash, Palette.BrassEdge);
-        Txt.Para(new[] { Run.Note(CareWords.CutOff(progress, progress.SavedUtc == DateTime.MinValue ? null : when), Palette.Text) });
-        Kit.Gap(12);
-        var at = Kit.At;
-        var label = CareWords.CarryOn(progress);
-        var lw = Kit.ButtonWidth(label, BtnSize.Sm, Icon.Play, Btn.Primary);
-        var blocked = runner.CanStart(false);
-        if (Kit.Button("##carry-on-btn", at, label, Btn.Primary, BtnSize.Sm, Icon.Play, 0, blocked != null, blocked))
+        var plan = session.Plan;
+        if (care == null || plan == null || care.Offer(session.FilePath, session.PlanSide) is not { } progress) return;
+        if (!ReferenceEquals(carryOnWords.Of, progress) || carryOnWords.Day != DateTime.Today)
         {
-            var again = progress.EntriesOf(plan.Entries);
-            var summary = StartSummary.Of(again, config.DyeAfterPlacing);
-            if (again.Count == 0 || summary.Moves.Count + summary.Places + summary.Dyes == 0)
-            {
-                Notify(again.Count == 0 ? "None of that run's pieces are in this design now" : "Every piece of that run is done");
-                OnFramework(care!.Forget);
-            }
-            else
-            {
-                care!.CarryingOn(progress);
-                StartRun(false, again);
-            }
+            var when = progress.SavedUtc == DateTime.MinValue ? null : When.Relative(progress.SavedUtc.ToLocalTime(), DateTime.Now, Clock);
+            carryOnWords = (progress, DateTime.Today, CareWords.CutOffShort(progress), when != null ? $"({when})" : null, CareWords.CutOff(progress, when));
         }
-        if (Kit.Button("##carry-on-forget", new Vector2(at.X + lw + S(8), at.Y), "Forget it", Btn.Quiet, BtnSize.Sm, null, 0, false,
-                "Forgets the run that was cut off. Start placing still does what's left."))
+        var w = carryOnWords;
+        var blocked = runner.CanStart(false);
+        var pressed = Kit.Banner("##carry-on", Icon.Refresh, w.Text, w.When, "Carry on", "Forget", blocked != null, blocked ?? w.Tip,
+            "Forgets the run that was cut off. Start placing still does what's left.");
+        if (pressed == 1) CarryOn(progress, plan);
+        else if (pressed == 2) OnFramework(care!.Forget);
+        Kit.Gap(14);
+    }
+
+    private void CarryOn(RunProgress progress, Plan plan)
+    {
+        var again = progress.EntriesOf(plan.Entries);
+        var summary = StartSummary.Of(again, config.DyeAfterPlacing);
+        if (again.Count == 0 || summary.Moves.Count + summary.Places + summary.Dyes == 0)
+        {
+            Notify(again.Count == 0 ? "None of that run's pieces are in this design now" : "Every piece of that run is done");
             OnFramework(care!.Forget);
-        Kit.Reserve(at, Kit.Width, Kit.ButtonHeight(BtnSize.Sm));
-        Kit.EndPanel();
+        }
+        else
+        {
+            care!.CarryingOn(progress);
+            StartRun(false, again, ArmFixturesAfterPlacing);
+        }
     }
 
     // ---------------------------------------------------------------------------------------------

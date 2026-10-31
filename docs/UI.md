@@ -10,14 +10,15 @@ Paths are under `HousingStudio/UI/`.
 | --- | --- | --- |
 | Routing | `MainWindow.cs` → `Draw` | Picks the view: Settings or Pieces when opened from a header, else `ViewModel.View` (Start → Ready → Running → Done). Pieces and Settings are hidden while a run goes. |
 | View state | `ViewModel.cs` | The run's figure and piece count, whether Done is waiting, the step in words, missing dyes (cached per plan), the Recent list. |
-| Game-free logic | `Model/*.cs` | Words (counts, home sizes, "about 25 minutes"), `PaceSetting`, `When` ("today 05.24"), `PieceRows` (stacking, chip counts), `StartSummary`, `FixtureTicks`, `StepWords`, `SvgPath`, `Dashes` (the dashed edge, with bounded loops). Tested in `HousingStudio.Tests/UiModelTests.cs`. |
+| Game-free logic | `Model/*.cs` | Words (counts, home sizes, "about 25 minutes"), `PaceSetting`, `When` ("today 05.24"), `PieceRows` (stacking, chip counts), `StartSummary`, `FixtureTicks`, `ReadyWords` (Ready's button, Keep / Clear out / Swap, the estimate; `ReadyMode`), `StepWords`, `SvgPath`, `Dashes` (the dashed edge, with bounded loops). Tested in `HousingStudio.Tests/UiModelTests.cs`. |
 | Tokens | `Kit/Palette.cs` | Every `hs-*` colour from tokens.json, radii, control heights. Translucent tokens keep their alpha; panel glass is flattened over ink (ImGui can't blur). |
-| Fonts | `Kit/Fonts.cs` | Geist 400 (15/14/13/12), 500 (15/14/13), 600 (15/14); Geist Mono (13/12/11); Cormorant Garamond 500 (56/32/28/26/22) and 400 italic (32), through Dalamud's font atlas. CSS sizes are converted to ImGui's line-based sizes (Geist ×1.3, Cormorant ×1.211) so 14px is 14px. |
+| Fonts | `Kit/Fonts.cs` | Geist 400 (15/14/13/12), 500 (15/14/13), 600 (15/14); Geist Mono (13/12/11/10, 10 for the Beta tag); Cormorant Garamond 500 (56/32/28/26/22) and 400 italic (32), through Dalamud's font atlas. CSS sizes are converted to ImGui's line-based sizes (Geist ×1.3, Cormorant ×1.211) so 14px is 14px. |
 | Window frame | `Kit/Theme.cs` → `PushFrame` | Dalamud's title bar in walnut with ivory words, a 10px window radius and the 0.2 ivory edge. Only colours and the frame are pushed before `ImGui.Begin`: the title bar's font, height and ☰ ▼ × buttons are Dalamud's own, so they sit and hit as in every Dalamud window. |
 | Layout | `Kit/Frame.cs` | Header (fixed), body (scrolls), footer (walnut, pinned, faint top line); `BeginBottom` is the mockups' `flex:1` spacer; toasts. |
 | Text | `Kit/Txt.cs` | CSS line boxes (half-leading), letter-spacing glyph by glyph, ellipses, wrapped runs of mixed styles with inline links and dye swatches. |
-| Icons | `Kit/Icons.cs` | Lucide icons parsed from the mockups' SVG path data, stroked at 1.8 in the 24-unit grid (1.6 at 24px), round caps. |
-| Controls | `Kit/Kit.cs` | Buttons (primary, glass, quiet, danger, picked; 30/34/40/46 tall), icon buttons, switch (40×24, animated), segmented pill, filter chip, status pill, chip, state pill, swatch, round icon well, thumbnail, tick box, stepper, field, progress bar, eyebrow, dashed border, panels, row fills, tooltips, menus. Hover (edges to the 0.34 line), press, keyboard focus ring (2px brass-soft, 2px out) and disabled (50% buttons, 40% small controls). |
+| Icons | `Kit/Icons.cs` | Lucide icons parsed from the mockups' SVG path data, stroked at 1.8 in the 24-unit grid (1.6 at 24px), round caps. The flow mock-up's (`docs/mockups/flow.html`) are there too: Bell, Store, Scale, Hammer, Flask, Brick, Sofa, Undo, Send, Save, File, Link, AlertTriangle. |
+| Controls | `Kit/Kit.cs` | Buttons (primary, glass, quiet, danger, picked; 30/34/40/46 tall), icon buttons, switch (40×24, animated), segmented pill (items can be greyed out, and it shrinks its padding to fit a width), filter chip, status pill, chip, state pill, swatch, round icon well, thumbnail, tick box, stepper, field, progress bar, eyebrow, dashed border, panels, row fills, tooltips, menus. Hover (edges to the 0.34 line), press, keyboard focus ring (2px brass-soft, 2px out) and disabled (50% buttons, 40% small controls). |
+| The flow's controls | `Kit/Flow.cs` (`Kit` is partial) | From the 0.6 flow mock-up: `Wrap` (lays things left to right, wrapping), `CheckChip` / `CheckChips` (30px pill: an icon or a 64×6 `Meter`, its words; `ChipTone` Normal / Warn / Brass; the open one's edge lit) with `BeginDetail` / `EndDetail` (the dashed detail under the row), `BeginStage` / `EndStage` (a glass card with a 34px number column, a 1px line joining it to the card above), `StageNumber` (`StageState` Todo / Now / Done), `StageHead` (mono label, serif 22 words, an aside on the right), `CountChip` ("4 retainers"), `BetaTag`, `LabeledSwitch` (a switch with its words and Beta tag), `MoreButton` (quiet, "See the list ›"), `Banner` (one brass line with up to two small buttons; returns which was pressed), `StatCells` (serif numbers over their words; 0 dim), `Journey` (stops in a row on a 2px track, brass up to the one in hand; for the errands' run). |
 | Markers in the world | `Overlay.cs` | Markers, plus `Highlight` for Show where: a pulsing ring and label, or an arrow at the screen's edge when the spot is out of view. |
 
 ## Start (`Views/Start.cs`)
@@ -32,20 +33,22 @@ Paths are under `HousingStudio/UI/`.
 | Recent eyebrow and rows (badge, name, "N pieces · House (medium) · today 05.24", MAKEPLACE / BUILD / BACKUP, chevron) | `DrawRecent`, rows from `ViewModel.Recent` (files read in the background); right-click → "Take it off this list" |
 | "Looking for a design?" + Browse designs | `DrawBrowse` → `Util.OpenLink(https://www.kokos-tools.com/housing-studio/browse)` |
 
-## Ready (`Views/Ready.cs`)
+## Ready (`Views/Ready.cs`, the 0.6 flow: `docs/mockups/flow.html`)
 
 | Mockup | Code |
 | --- | --- |
-| Eyebrow "MAKEPLACE FILE · INSIDE", title, pill | `DrawReady` header; `ReadyPill` (fits / size mismatch / can't decorate / go home / garden) |
+| Eyebrow "BUILD · INSIDE", title, pill | `DrawReady` header; `ReadyPill` (fits / size mismatch / can't decorate / go home / garden) |
 | Pieces, Settings, × | header buttons in `DrawReady` |
-| "What Start does" rows (Move / Place / Dye; icon, serif number, line, note; hidden at 0) | `DrawStartSteps` → `StepRow`, counts from `Model/StartSummary` (dyes from `Core/DyeCounts.ToApply`) |
-| "N dyes missing" + See which | a popover listing the dyes with Copy list (`DyesPopover`), from `LayoutSession.MissingDyes` |
-| "2 pieces are already in place. 29 pieces…" | `SummaryLine` (also: missing pieces, Near me, floors left out, storeroom not read, the other side's pieces) |
-| Fixtures disclosure with "x of 11 done" | `DrawFixtures` → `Disclosure`, `Kit.Chip`; ticks in `Configuration.FixturesDone` via `Model/FixtureTicks` |
-| Info note | the bottom block of `DrawReady` |
-| Clear out what isn't in the design (switch), Swap to this design | `Views/ClearOut.cs` → `DrawClearOut` (`SwitchRow`, `SetRow`); the pieces from `Core/ClearOut.Pick` (cached per plan and filters); Start placing asks first (`StartFromReady`), Swap asks (`AskSwap`) and starts with `keepAs` |
-| Set them for me (Settings → Experimental) | `Views/SetFixtures.cs` → `DrawSetFixtures` under the fixtures' note: the plan's counts (`FixtureRunner.Plan`, read once a second), the button, and while it runs a brass panel with the step, Continue and Stop |
-| Start placing / Preview first; "About N minutes at a quick pace"; "Preview marks each spot, moving nothing" | `DrawReadyFooter`; estimate from `Core/RunEstimate` (cached), words from `Words.About`. When Start can't run, it's at 50% and the left line says why (`runner.CanStart`). |
+| The plot's warnings | `AlertNote`s from `session.Warnings`, above the rest |
+| Carry on banner: "A run was cut off at piece N of M." · Carry on · Forget | `DrawCarryOnBanner` (`Views/Care.cs`) → `Kit.Banner`, from `Care.Offer`; Carry on → `CarryOn` (the run's pieces as matched now) |
+| Check chips and their detail (one open at a time; press again to close) | `DrawReadyChecks` → `ReadyChecks` (`Views/Care.cs`, made again only when what they're made from changes, `ChecksKey`) → `Kit.CheckChips`, the detail in `Kit.BeginDetail` with `CheckActionsRow` (Show where, Pieces, See which, Copy list). Chips: the item limit as a meter (`ItemLimits.Check`, a chosen clear out's pieces not counted; words `CareWords.LimitDetail`), "N may be refused" and "N can't go here" (`ClashesNow`), "N dyes short" (`vm.MissingDyes`, opens `DyesPopover`), "Storeroom not read", "Near me · N pieces", floors left out, the other side's pieces. None when there's nothing to say. |
+| 1 · Get: "N missing", "about X gil", source chips, Get them for me first (Beta), See the list › | `DrawGetStage`: `ShopPlan()` (`Plugin.Shop`), words cached per plan in `GetWords`; `Kit.CountChip` per `SourceKind`; the switch only with `Errands.Enabled` (`Configuration.GetFirst`); See the list opens Shopping. Done ("You have everything") when nothing's missing; "Not known yet" away from home. |
+| 2 · Place: "N to do", "N already in place", to move / to place / to dye | `DrawPlaceStage` (`Model/StartSummary`, words `ReadyWords.PlaceBig`), `Kit.StatCells`; a line when you put pieces down by hand (Settings) |
+| Keep what's here / Clear out N / Swap, and its line | `DrawPlaceChoice` (`Views/ClearOut.cs`) → `Kit.Segmented` (Clear out greyed with nothing to clear; Swap too, or for a backup), words `ReadyWords.ModeNote`. The choice is `Mode` (per design, Keep for another), `ModeNow` what it comes to (Keep when it can't), `SwapKeepAs` the swap's name (`KeepAsName`, read once a second), `ChosenClearOut()` the pieces put away first (Clear out or Swap). |
+| 3 · Finish: "N fixtures", "x of y set", what they are, Set them for me after placing (Beta), Tick off | `DrawFinishStage`: `FinishLine` (`FixtureSummary` and, with the fixtures run on, `FixtureBagWords`; once a second), the switch with `Plugin.FixtureRun.Enabled` (`Configuration.FixturesAfterPlacing`); Tick off → `DrawFixtureTicks` (Set them for me, `DrawSetFixtures`, and the tick rows, `Configuration.FixturesDone` via `Model/FixtureTicks`). While it runs, `DrawFixtureRunPanel` (step, Continue, Stop) in its place. Hidden with no fixtures. |
+| Stage numbers | `DrawStages`: the first stage not done is Now (brass), done ones a tick (`Kit.StageState`) |
+| The brass button, Preview, the estimate | `DrawReadyFooter`: words `ReadyWords.Go` (cached), tooltip `StartTip` (the old note: stay in the house, the editor, the backup); with Get on it opens the errands (`errandsOpen`), Swap asks (`AskSwap`), else `StartFromReady` (asks before a clear out). Preview goes under it when the words don't fit beside it. The line: `ReadyWords.Hint` (`Core/RunEstimate`, cached; with Get on, the errands' trips first). When Start can't run it's at 50% and the line says why (`runner.CanStart`). |
+| Fixtures after placing | `ArmFixturesAfterPlacing` (Ready's starts, Carry on, a swap, the errands once sent out) and `FixturesAfterPlacing` (each frame from `DrawBody`): when that run finishes (not a preview), with the switch on and fixtures left, `Plugin.FixtureRun.Start()` once, after the errands too (`Views/SetFixtures.cs`) |
 
 ## Running (`Views/Running.cs`)
 
@@ -72,6 +75,7 @@ Paths are under `HousingStudio/UI/`.
 | "N pieces not in the design were put away" | `DrawPutAwayLine` (`Views/ClearOut.cs`), under the tally; the moved cell leaves them out (`runner.PutAwayDone`) |
 | After a swap: "Swap back?" + Swap back | `DrawSwapBack` (`Views/ClearOut.cs`) in place of Put them back → `runner.SwapBack` |
 | "Not what you wanted?" + Put them back | `DrawPutBack` → a confirmation (`MainWindow.Ask`) → `runner.RestoreBackup` |
+| Setting the fixtures (step, Continue, Stop) | `DrawFixtureRunPanel` at the top of the body while `Plugin.FixtureRun.Active` (after placing with Set them for me after placing on) |
 | Fixtures note | the bottom block of `DrawDone` (hidden when all are ticked) |
 | Try the N again / Carry on / Done | `DrawDoneFooter` (`runner.RetryProblems`; Carry on starts again with what's left; a preview offers Start placing; nothing needs you → Done alone, in brass) |
 
@@ -112,9 +116,9 @@ Paths are under `HousingStudio/UI/`.
 | Part | Code |
 | --- | --- |
 | Start: "312 of 450 pieces placed inside" | `DrawHomeCare`, the count from `Session/Care.Count` (read every 2 s while Start shows), words from `Model/CareWords.HowFull` |
-| Start and Ready: "Since your last run", Check for changes, the changes, Show where they were, Put them back where they were | `DrawDrift` → `DrawDriftResult` → `AskPutBack` (`MainWindow.Ask`), from `Care.CheckForChanges` / `Care.PutBack` |
-| Ready: "A run of this design was cut off…", Carry on from piece N of M, Forget it | `DrawCarryOn` (brass-wash panel), from `Care.Offer` |
-| Ready: won't fit, pieces the game may refuse | `DrawReadyCare` → `AlertNote` (danger, or dim when Place anywhere takes them) |
+| Start: "Since your last run", Check for changes, the changes, Show where they were, Put them back where they were | `DrawDrift` → `DrawDriftResult` → `AskPutBack` (`MainWindow.Ask`), from `Care.CheckForChanges` / `Care.PutBack` |
+| Ready: "A run was cut off at piece N of M.", Carry on, Forget | `DrawCarryOnBanner` (`Kit.Banner`), from `Care.Offer` |
+| Ready: the item limit, pieces the game may refuse, and the other chips | `DrawReadyChecks` (see Ready) |
 | Pieces: "Pieces the game may refuse" with Show where | `DrawPiecesClashes` → `Disclosure` + Done's `IssueRow` |
 
 ## Decisions and differences from the mockups
@@ -134,6 +138,13 @@ Paths are under `HousingStudio/UI/`.
 - Paused is neutral, waiting for you is brass-picked, running is brass-wash with a breathing dot.
 - The step-by-step callout, the empty and not-at-home states, toasts and the confirmation dialog
   aren't in the mockups; they're built from the same tokens.
+- Ready (the 0.6 flow mock-up): the brass button's words follow the brief's shorter forms ("Get 12,
+  then clear out 14" rather than "…, then clear out 14, then place"), so they fit beside Preview at
+  520px; Preview drops under it when they still don't. The estimate with Get on says the errands'
+  trips come first ("2 trips first, then about 25 minutes at a quick pace"): the errands' own time
+  isn't known. The mock's 36×22 switch is the kit's 40×24, its 12.5px words 13px, and the Beta tag's
+  9.5px mono 10px. Tick off shows a chevron, as it opens and closes the tick list. With the fixtures
+  run on, Tick off also has Set them for me (now, without placing), which the mock leaves out.
 
 ## What the runner could add
 
