@@ -235,3 +235,26 @@ public class ErrandWordsTests
         Assert.Contains("1 trip", words);
     }
 }
+
+public class MarketQuestionTests
+{
+    [Fact]
+    public void TheQuestionMustNameTheListingChosen()
+    {
+        // 3 at 1,000 each: 3,000, 3,150 with tax.
+        Assert.True(MarketRule.QuestionMatches("Purchase Wooden Loft ×3 for 3,150 gil?", 1000, 3, 3150));
+        Assert.True(MarketRule.QuestionMatches("Purchase for 3.000 gil?", 1000, 3, 3150));
+        Assert.True(MarketRule.QuestionMatches("1 000 gil each", 1000, 3, 3150));
+        Assert.False(MarketRule.QuestionMatches("Purchase Wooden Loft ×3 for 9,450 gil?", 1000, 3, 3150));
+        Assert.False(MarketRule.QuestionMatches("Leave the estate?", 1000, 3, 3150));
+        Assert.False(MarketRule.QuestionMatches(string.Empty, 1000, 3, 3150));
+        Assert.False(MarketRule.QuestionMatches(null, 1000, 3, 3150));
+    }
+
+    [Fact]
+    public void NumbersAreReadWithTheirGrouping()
+    {
+        Assert.Equal(new long[] { 1234567, 3 }, MarketRule.Numbers("1,234,567 gil for 3."));
+        Assert.Equal(new long[] { 12, 5 }, MarketRule.Numbers("12, 5"));
+    }
+}

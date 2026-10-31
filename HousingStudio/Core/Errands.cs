@@ -353,6 +353,45 @@ public static class MarketRule
     public static long Cost(uint unitPrice, int quantity, uint totalTax) =>
         (long)unitPrice * quantity + (totalTax > 0 ? totalTax : (long)Math.Ceiling(unitPrice * (double)quantity * Tax));
 
+    /// <summary>
+    /// The board's "buy this?" question names the listing about to be bought: one of its numbers is
+    /// its cost with tax, its cost without, or its price for one. When none is (another row was
+    /// clicked, or the question isn't the purchase's), the purchase isn't confirmed. The numbers are
+    /// read with any grouping (1,234 / 1.234 / 1 234).
+    /// </summary>
+    public static bool QuestionMatches(string? question, uint unitPrice, int quantity, long cost)
+    {
+        if (string.IsNullOrEmpty(question)) return false;
+        var want = new[] { cost, (long)unitPrice * quantity, unitPrice };
+        foreach (var n in Numbers(question))
+            if (Array.IndexOf(want, n) >= 0) return true;
+        return false;
+    }
+
+    /// <summary>The whole numbers in a text, a digit group's separators (, . space, no-break spaces) left out.</summary>
+    public static List<long> Numbers(string text)
+    {
+        var list = new List<long>();
+        long n = 0;
+        var digits = 0;
+        for (var i = 0; i <= text.Length; i++)
+        {
+            var c = i < text.Length ? text[i] : '\0';
+            if (c is >= '0' and <= '9')
+            {
+                if (digits < 18) n = n * 10 + (c - '0');
+                digits++;
+                continue;
+            }
+            // A separator between digit groups: the number goes on.
+            if (digits > 0 && c is ',' or '.' or ' ' or '\u00a0' or '\u202f' && i + 1 < text.Length && text[i + 1] is >= '0' and <= '9') continue;
+            if (digits > 0) list.Add(n);
+            n = 0;
+            digits = 0;
+        }
+        return list;
+    }
+
     /// <summary>Why a listing isn't bought, or null when it may be.</summary>
     public static string? WhyNot(uint unitPrice, int quantity, uint totalTax, uint maxUnitPrice, int stillWanted, long itemGilLeft, long ceilingLeft, long gilOnHand)
     {

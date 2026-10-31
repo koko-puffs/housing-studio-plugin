@@ -971,6 +971,13 @@ public sealed class ErrandRunner : IDisposable
                 {
                     if (GameUi.YesNoText() is { } question && now == before)
                     {
+                        // Only a question about this purchase is answered yes (it names the item).
+                        var itemName = Name(item.ItemId);
+                        if (itemName.Length == 0 || !question.Contains(itemName, StringComparison.OrdinalIgnoreCase))
+                        {
+                            GameUi.Close(UiTable.YesNo);
+                            return StepOutcome.Halt($"The shop asked \"{question}\", which doesn't name {(itemName.Length == 0 ? "the item" : itemName)}: nothing was bought.");
+                        }
                         queue.InsertNext(new[] { Yes(question), Bought() });
                         return StepOutcome.Done;
                     }
@@ -1042,6 +1049,8 @@ public sealed class ErrandRunner : IDisposable
         var before = 0;
         long gilBefore = 0;
         long cost = 0;
+        uint unit = 0;
+        var quantity = 0;
         var name = Name(item.ItemId);
         // Listings bought (or tried): the board's list may still show one for a moment after.
         var tried = new HashSet<ulong>();
@@ -1071,6 +1080,8 @@ public sealed class ErrandRunner : IDisposable
                         if (ErrandGame.FreeSlots() < ErrandPlanner.Stacks(l.Quantity, ErrandGame.StackSize(item.ItemId)))
                             return StepOutcome.Halt($"Your bags are full ({ErrandGame.FreeSlots()} free slots).");
                         cost = MarketRule.Cost(l.UnitPrice, l.Quantity, l.TotalTax);
+                        unit = l.UnitPrice;
+                        quantity = l.Quantity;
                         tried.Add(l.ListingId);
                         before = ErrandGame.BagCount(item.ItemId);
                         gilBefore = gil;
@@ -1087,7 +1098,18 @@ public sealed class ErrandRunner : IDisposable
                 Label = $"Answer yes (buy {name})",
                 IsAction = true,
                 Key = Guess,
-                Run = () => GameUi.Fire(UiTable.YesNoYes) ? StepOutcome.Done : StepOutcome.Halt("The yes/no closed."),
+                Run = () =>
+                {
+                    // Only the listing chosen: the question must name its price (another row clicked, or
+                    // another question, is said no to and stops the errands).
+                    var question = GameUi.YesNoText();
+                    if (!MarketRule.QuestionMatches(question, unit, quantity, cost))
+                    {
+                        GameUi.Close(UiTable.YesNo);
+                        return StepOutcome.Halt($"The board asked \"{question}\", which isn't the {cost:N0} gil listing chosen: nothing was bought.");
+                    }
+                    return GameUi.Fire(UiTable.YesNoYes) ? StepOutcome.Done : StepOutcome.Halt("The yes/no closed.");
+                },
             },
             new Step
             {
