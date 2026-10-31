@@ -68,7 +68,9 @@ public sealed partial class MainWindow
             for (var i = 0; i < issues.Count; i++) IssueRow(i, issues[i]);
             Kit.EndPanel();
         }
-        if (!preview && runner.LastBackupPath != null && vm.BackupAt is { } savedAt && savedAt >= vm.RunStartedAt.AddMinutes(-1))
+        // A swap's backup is from its first run: Try again and Carry on keep it, so it may be older.
+        if (!preview && runner.LastBackupPath != null && vm.BackupAt is { } savedAt
+            && (runner.KeptAs != null || savedAt >= vm.RunStartedAt.AddMinutes(-1)))
         {
             Kit.Gap(18);
             if (runner.KeptAs != null) DrawSwapBack(savedAt);
@@ -85,7 +87,9 @@ public sealed partial class MainWindow
                 Frame.BeginBottom("done-bottom");
                 var menus = layout.InteriorFixtures.Count > 0 && layout.ExteriorFixtures.Count > 0 ? "Interior Fixtures and Exterior Fixtures"
                     : layout.ExteriorFixtures.Count > 0 ? "Exterior Fixtures" : "Interior Fixtures";
-                Txt.Note($"Fixtures aren't set by the plugin: {left} still to do from Housing → {menus}.", center: true);
+                Txt.Note(Plugin.FixtureRun.Enabled
+                    ? $"{left} fixtures still to do: Set them for me in Ready's fixtures, or from Housing → {menus}."
+                    : $"Fixtures aren't set by the plugin: {left} still to do from Housing → {menus}.", center: true);
                 Frame.EndBottom();
             }
         }

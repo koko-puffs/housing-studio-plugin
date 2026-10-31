@@ -63,7 +63,10 @@ public sealed partial class MainWindow
         if (plan != null && session.PlanSide is { } side && session.Layout is { } layout)
         {
             var places = entries.Count(e => e.State is PieceState.FromStoreroom or PieceState.FromInventory);
-            var check = ItemLimits.Check(side, ctx.HouseSize, layout.Pieces(side).Count(), session.Live.Count, plan.Extras.Count, places);
+            // A chosen clear out puts its pieces away before placing: they don't count against the limit.
+            var clearing = ChosenClearOut()?.Count ?? 0;
+            var check = ItemLimits.Check(side, ctx.HouseSize, layout.Pieces(side).Count(), session.Live.Count - clearing,
+                Math.Max(0, plan.Extras.Count - clearing), places);
             if (check is { } c && CareWords.Limit(c, side, ctx.HouseSize) is { } limitWords)
             {
                 AlertNote(limitWords, c.Over > 0 ? Palette.Danger : Palette.Dim, c.Over > 0 ? Icon.Alert : Icon.Info, Palette.Text);

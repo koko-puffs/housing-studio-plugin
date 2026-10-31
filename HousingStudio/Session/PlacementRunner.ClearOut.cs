@@ -43,6 +43,22 @@ public sealed unsafe partial class PlacementRunner
     /// <summary>The name the last run kept what was here under (a swap), or null.</summary>
     public string? KeptAs { get; private set; }
 
+    /// <summary>The design a swap placed (its file): a later run of it (Try again, Carry on) is still that swap.</summary>
+    private string? swapDesign;
+
+    /// <summary>
+    /// This run carries on the last swap: the same design, in the same home, and not a swap of its own.
+    /// It keeps the swap's backup (what was here before it) for Swap back, rather than saving the
+    /// half-swapped home over it.
+    /// </summary>
+    private bool CarriesOnSwap(bool dryRun)
+    {
+        if (dryRun || keepAs != null || KeptAs == null || swapDesign == null || backupOf == null) return false;
+        if (!string.Equals(session.FilePath, swapDesign, StringComparison.OrdinalIgnoreCase)) return false;
+        var c = session.Context;
+        return (c.Kind, c.TerritoryId, c.HouseId, c.Plot) == backupOf.Value;
+    }
+
     /// <summary>How many pieces this run put away in the storeroom (clearing out, or putting things back).</summary>
     public int PutAwayDone
     {
@@ -127,7 +143,12 @@ public sealed unsafe partial class PlacementRunner
         clearOutDoneAt = null;
         clearOutWanted = new HashSet<(int, uint)>();
         clearOutCount = 0;
-        KeptAs = null;
+        // A preview leaves the swap as it was; a run that isn't the swap carried on forgets it.
+        if (!dryRun && !CarriesOnSwap(dryRun))
+        {
+            KeptAs = null;
+            swapDesign = null;
+        }
         if (pieces is not { Count: > 0 }) return;
 
         // (The run's side is set after this: it's where you are now.)
@@ -226,6 +247,7 @@ public sealed unsafe partial class PlacementRunner
         var path = Backups.SaveKept(session, data, log, keepAs);
         if (path == null) return null;
         KeptAs = keepAs;
+        swapDesign = session.FilePath;
         // On the Recent list, so it's found again to swap back to another day; second, as the first
         // is the design that reopens when the game starts.
         config.RecentFiles.RemoveAll(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase));

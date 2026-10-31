@@ -77,7 +77,7 @@ public sealed partial class MainWindow : Window
     /// <summary>Opens Settings (Dalamud's cog, /hstudio settings); during a run, the run.</summary>
     public void ShowSettings()
     {
-        sub = runner.Active ? Sub.None : Sub.Settings;
+        sub = runner.Active || Plugin.FixtureRun.Active ? Sub.None : Sub.Settings;
         IsOpen = true;
     }
 
@@ -121,7 +121,8 @@ public sealed partial class MainWindow : Window
         vm.Observe();
         using (fonts.Push(Face.Sans, 14))
         {
-            if (runner.Active) sub = Sub.None;
+            // (Setting the fixtures: its Continue and Stop are in Ready.)
+            if (runner.Active || Plugin.FixtureRun.Active) sub = Sub.None;
             if (sub == Sub.Settings)
             {
                 DrawSettings();

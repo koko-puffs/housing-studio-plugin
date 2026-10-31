@@ -322,6 +322,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             return;
         }
 
+        RunNumber++;
         var ctx = session.Context;
         startKind = ctx.Kind;
         startTerritory = ctx.TerritoryId;
@@ -358,7 +359,12 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         nextJobAt = DateTime.UtcNow;
         editorMayCloseUntil = DateTime.UtcNow + ModeSwitchGrace;
 
-        if (!dryRun && (config.BackupBeforePlacing || keepAs != null))
+        if (!dryRun && KeptAs != null)
+        {
+            // Carrying on a swap (PlanClearOut kept it): its backup stays the one to swap back to.
+            log.Info($"Carrying on the swap: what was here before it is still kept as “{KeptAs}”.");
+        }
+        else if (!dryRun && (config.BackupBeforePlacing || keepAs != null))
         {
             if (SaveBackup() is { } saved)
             {
@@ -509,6 +515,9 @@ public sealed unsafe partial class PlacementRunner : IDisposable
 
     /// <summary>Step-by-step mode: do the click it's holding before.</summary>
     public void Continue() => queue.Continue();
+
+    /// <summary>A restore (Put them back, Swap back) still waiting to be matched doesn't start.</summary>
+    public void CancelPending() => restorePath = null;
 
     public void Stop(string reason)
     {

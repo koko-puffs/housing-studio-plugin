@@ -115,6 +115,8 @@ public sealed class Plugin : IDalamudPlugin
             Safely(() => runner.Pause("The window couldn't be drawn (see /xllog); /hstudio resume or stop."));
             // Setting fixtures waits for Continue in the window: without it, it stops.
             Safely(() => FixtureRun.Stop("The window couldn't be drawn (see /xllog)."));
+            Safely(runner.CancelPending);
+            Safely(care.Cancel);
         }
     }
 
@@ -181,6 +183,8 @@ public sealed class Plugin : IDalamudPlugin
             case "stop":
                 runner.Stop("Stopped by you (/hstudio stop).");
                 FixtureRun.Stop("Stopped by you (/hstudio stop).");
+                runner.CancelPending();
+                care.Cancel();
                 break;
             case "pause":
                 runner.Pause("Paused by you (/hstudio pause).");

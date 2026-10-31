@@ -69,7 +69,10 @@ public sealed class Care
 
     private bool watching;
     private (Side?, uint, uint, ulong, int?) homeOf;
-    private IReadOnlyList<PlanEntry>? runEntries;
+    private int runNumber;
+
+    /// <summary>A carried-on run that clears out first: its numbers are worked out once the design is planned again.</summary>
+    private RunProgress? baseFrom;
     private bool writeFailed;
     private string? runHome;
     private Side runSide;
@@ -111,9 +114,9 @@ public sealed class Care
             CurrentHome = Homes.Key(ctx.Side, world, ctx.TerritoryId, ctx.HouseId, ctx.Plot);
         }
 
-        // A new run is told by the pieces it was given (a run that ends and another that starts between
-        // two frames still count as two).
-        if (watching && (!runner.Active || !ReferenceEquals(runner.Entries, runEntries))) RunEnded(ctx);
+        // A new run is told by the runner's count (a run that ends and another that starts between two
+        // frames still count as two; a clear out planning the design again is the same run).
+        if (watching && (!runner.Active || runner.RunNumber != runNumber)) RunEnded(ctx);
         if (!watching && runner.Active && !runner.DryRun) RunStarted(ctx);
         else if (watching) KeepProgress(force: false);
 
@@ -145,7 +148,8 @@ public sealed class Care
     private void RunStarted(HousingContext ctx)
     {
         watching = true;
-        runEntries = runner.Entries;
+        runNumber = runner.RunNumber;
+        baseFrom = null;
         writeFailed = false;
         runHome = CurrentHome;
         runSide = ctx.Side ?? Side.Interior;
@@ -156,8 +160,10 @@ public sealed class Care
         // Carrying on a run cut off: its numbers go on from where it was ("piece 38 of 120"), and its pieces stay its own.
         if (carryFrom is { } carry && DateTime.UtcNow < carry.Until && carry.Progress is var from && from.Fits(runDesign, runHome, runSide))
         {
-            runBase = Math.Max(0, from.Total - (runner.Total + runner.DyesStillExpected));
             runPieces = from.Pieces.ToList();
+            // While a clear out goes first, the run's jobs are only its put-aways: the numbers wait for the design's.
+            if (runner.ClearingOutFirst) baseFrom = from;
+            else runBase = Math.Max(0, from.Total - (runner.Total + runner.DyesStillExpected));
         }
         carryFrom = null;
         written = (-1, -1, RunPhase.Move);
@@ -172,6 +178,14 @@ public sealed class Care
     private void KeepProgress(bool force)
     {
         if (runHome == null || runDesign == null || runPieces.Count == 0) return;
+        if (baseFrom != null)
+        {
+            // (Until then the run cut off's progress stays as it was, to carry on from again.)
+            if (runner.ClearingOutFirst) return;
+            runBase = Math.Max(0, baseFrom.Total - (runner.Total + runner.DyesStillExpected));
+            baseFrom = null;
+            force = true;
+        }
         // Looked at a few times a second (the counts go through the run's pieces), and written when they change.
         if (!force && DateTime.UtcNow - writtenAt < ProgressEvery) return;
         var ended = runner.Done + runner.Failed + runner.Skipped;
@@ -189,7 +203,7 @@ public sealed class Care
     private void RunEnded(HousingContext ctx)
     {
         watching = false;
-        runEntries = null;
+        // (baseFrom stays: a run stopped while still clearing out leaves the progress it carried on from as it was.)
         // Another run has started already (in between two frames): how this one ended can't be read any more; the new one's start takes over.
         if (runner.Active) return;
         var finished = runner.State == RunState.Finished;
@@ -361,6 +375,9 @@ public sealed class Care
         log.Info("Putting back what changed since the run: it starts once the snapshot is matched against the home.");
         return null;
     }
+
+    /// <summary>A put-back still waiting to be matched doesn't start (/hstudio stop, a window that can't be drawn).</summary>
+    public void Cancel() => putBack = null;
 
     private void StartPutBack()
     {

@@ -46,6 +46,9 @@ public sealed unsafe class FixtureRunner
     private ulong startHouse;
     private int? startPlot;
     private string designKey = string.Empty;
+
+    /// <summary>The design loaded when it started (a new one is loaded as a new layout).</summary>
+    private object? startLayout;
     private List<FixtureTask> toSet = new();
 
     /// <summary>The window's slots were found to hold what's set, in the order guessed: fixtures are put in them by the plugin.</summary>
@@ -146,6 +149,7 @@ public sealed unsafe class FixtureRunner
         var tasks = Plan();
         toSet = tasks.Where(t => t.State == FixtureState.ToSet && t.Slot != null).ToList();
         designKey = FixtureTicks.DesignKey(session.FilePath, session.Title);
+        startLayout = session.Layout;
         // What's set already is ticked (the ticks are kept per design).
         TickSet(tasks.Where(t => t.State == FixtureState.Set).Select(t => t.Fixture));
         if (toSet.Count == 0)
@@ -202,6 +206,12 @@ public sealed unsafe class FixtureRunner
         if (ctx.Busy)
         {
             Stop("The game got busy (combat, a cutscene, or a zone change).");
+            return;
+        }
+        // Its Continue and Stop are in the design's Ready: closing the design or opening another stops it.
+        if (!ReferenceEquals(session.Layout, startLayout))
+        {
+            Stop("The design was closed or another was opened.");
             return;
         }
         if (!ctx.HasPermission)
