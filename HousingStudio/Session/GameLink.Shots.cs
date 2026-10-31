@@ -123,7 +123,12 @@ public sealed partial class GameLink
             spot = s;
         }
         var pose = HomeReader.Camera(h.Side, spot, out why, out var detail);
-        if (pose is not { } p) return false;
+        if (pose is not { } p)
+        {
+            // (What the camera held, for /xllog: what to look at when it can't be read.)
+            Services.Log.Warning($"Housing Studio: couldn't read the camera for a shot ({why}): {detail}");
+            return false;
+        }
         try
         {
             grab = Services.Textures.CreateFromImGuiViewportAsync(

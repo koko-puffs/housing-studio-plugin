@@ -104,21 +104,35 @@ public static unsafe class HomeReader
         why = "Couldn't read the camera.";
         detail = string.Empty;
         var cm = SceneCameraManager.Instance();
-        if (cm == null) return null;
+        if (cm == null)
+        {
+            detail = "no scene camera manager";
+            return null;
+        }
         var index = cm->CameraIndex;
-        if (index < 0 || index >= cm->Cameras.Length) return null;
+        if (index < 0 || index >= cm->Cameras.Length)
+        {
+            detail = $"camera index {index} out of range";
+            return null;
+        }
         SceneCamera* cam = cm->Cameras[index];
-        if (cam == null || cam->RenderCamera == null) return null;
+        if (cam == null || cam->RenderCamera == null)
+        {
+            detail = cam == null ? $"camera {index} missing" : $"camera {index} has no render camera";
+            return null;
+        }
         Matrix4x4 view = cam->ViewMatrix;
         Matrix4x4 projection = cam->RenderCamera->ProjectionMatrix;
         Vector3 lookAt = cam->LookAtVector;
+        // (The camera's place in the world: its scene object's, which the view is made from.)
+        Vector3 position = ((FFXIVClientStructs.FFXIV.Client.Graphics.Scene.Object*)cam)->Position;
         var fovField = cam->RenderCamera->FoV;
         var aspectField = cam->RenderCamera->AspectRatio;
-        var pose = CameraMath.Pose(view, projection, fovField, lookAt, side, plot, out why);
+        var pose = CameraMath.Pose(view, projection, fovField, lookAt, position, side, plot, out why);
         // For checking in the game: the field of view from the projection beside the camera's own
         // (radians, read as vertical), and the projection's shape beside its aspect.
         detail = FormattableString.Invariant(
-            $"camera {index}: fov {CameraMath.VerticalFov(projection) ?? 0:0.00}° from the projection, {CameraMath.Degrees(fovField) ?? 0:0.00}° from its FoV ({fovField:0.0000}), aspect {(projection.M11 != 0 ? projection.M22 / projection.M11 : 0):0.000} ({aspectField:0.000}), M34 {projection.M34:0.###}");
+            $"camera {index}: fov {CameraMath.VerticalFov(projection) ?? 0:0.00}° from the projection, {CameraMath.Degrees(fovField) ?? 0:0.00}° from its FoV ({fovField:0.0000}), aspect {(projection.M11 != 0 ? projection.M22 / projection.M11 : 0):0.000} ({aspectField:0.000}), M34 {projection.M34:0.###}; object at ({position.X:0.00}, {position.Y:0.00}, {position.Z:0.00}), looking at ({lookAt.X:0.00}, {lookAt.Y:0.00}, {lookAt.Z:0.00}); view's fourth column ({view.M14:0.###}, {view.M24:0.###}, {view.M34:0.###}, {view.M44:0.###}), its last row ({view.M41:0.00}, {view.M42:0.00}, {view.M43:0.00})");
         return pose;
     }
 }

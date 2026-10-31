@@ -8,7 +8,13 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.7.6. Placing works in the game; the newer features haven't all been tried in it yet.**
+> **Status: 0.7.7. Placing works in the game; the newer features haven't all been tried in it yet.**
+> 0.7.7: **Take a shot** reads the camera again ("Couldn't read the camera" in 0.7.0 to 0.7.6). The
+> game keeps the camera's view as an affine transform whose fourth column isn't filled in, so as
+> it stood it couldn't be inverted; that column is now set before it's read, the camera's own place
+> in the world wins when the view puts it elsewhere, and a view that still can't be read falls back
+> to where the camera is and what it looks at. When it can't be read at all, /xllog says what the
+> camera held.
 > 0.7.6: the errands get about faster. For a walk of 35 yalms or more they take the **mount roulette**
 > where the zone lets you ride (its TerritoryType row's Mount: not a city's streets, not inside), else
 > **Sprint**, and Sprint again whenever it's ready; off the mount before talking to someone or using

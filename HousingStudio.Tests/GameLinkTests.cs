@@ -143,6 +143,48 @@ public class ShotPoseTests
     }
 
     [Fact]
+    public void ReadsTheGamesViewWhoseFourthColumnIsntKept()
+    {
+        // The game keeps a view as an affine transform: its fourth column zeros, which as a 4×4
+        // can't be inverted (0.7.0 said "Couldn't read the camera" for it).
+        var view = Matrix4x4.CreateLookAt(Eye, At, Vector3.UnitY);
+        view.M14 = 0;
+        view.M24 = 0;
+        view.M34 = 0;
+        view.M44 = 0;
+        var projection = Matrix4x4.CreatePerspectiveFieldOfView(45 * MathF.PI / 180, 16f / 9, 0.1f, 1000);
+        Assert.True(CameraMath.FromView(view, projection, null, out var eye, out var forward));
+        Near(Eye, eye);
+        Near(Vector3.Normalize(At - Eye), forward);
+        Assert.NotNull(CameraMath.Pose(view, projection, 0, null, Side.Interior, null, out _));
+    }
+
+    [Fact]
+    public void WithAViewThatWontReadTheCamerasOwnPlaceAndLookDo()
+    {
+        var projection = Matrix4x4.CreatePerspectiveFieldOfView(45 * MathF.PI / 180, 16f / 9, 0.1f, 1000);
+        Assert.True(CameraMath.FromView(new Matrix4x4(), projection, At, Eye, out var eye, out var forward));
+        Near(Eye, eye);
+        Near(Vector3.Normalize(At - Eye), forward);
+        // Without them, it can't be read.
+        Assert.False(CameraMath.FromView(new Matrix4x4(), projection, null, out _, out _));
+    }
+
+    [Fact]
+    public void TheCamerasOwnPlaceWinsWhenTheViewDisagrees()
+    {
+        // (A view made about another origin would put the camera somewhere else.)
+        var view = Matrix4x4.CreateLookAt(Eye - new Vector3(50, 0, 0), At - new Vector3(50, 0, 0), Vector3.UnitY);
+        var projection = Matrix4x4.CreatePerspectiveFieldOfView(45 * MathF.PI / 180, 16f / 9, 0.1f, 1000);
+        Assert.True(CameraMath.FromView(view, projection, At, Eye, out var eye, out var forward));
+        Near(Eye, eye);
+        Near(Vector3.Normalize(At - Eye), forward);
+        // Close enough (within a yalm), the view's own is kept.
+        Assert.True(CameraMath.FromView(Matrix4x4.CreateLookAt(Eye, At, Vector3.UnitY), projection, At, Eye + new Vector3(0.2f, 0, 0), out eye, out _));
+        Near(Eye, eye);
+    }
+
+    [Fact]
     public void WithoutAPerspectiveTheLookAtPointSaysWhichWay()
     {
         var view = Matrix4x4.CreateLookAt(Eye, At, Vector3.UnitY);

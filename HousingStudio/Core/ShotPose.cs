@@ -68,15 +68,39 @@ public static class CameraMath
     /// down −z as System.Numerics' CreatePerspectiveFieldOfView, +1 for a left-handed one); when the
     /// projection doesn't say (M34 near 0), the point the camera looks at does, and failing that −z.
     /// </summary>
-    public static bool FromView(Matrix4x4 view, Matrix4x4 projection, Vector3? lookAt, out Vector3 eye, out Vector3 forward)
+    public static bool FromView(Matrix4x4 view, Matrix4x4 projection, Vector3? lookAt, out Vector3 eye, out Vector3 forward) =>
+        FromView(view, projection, lookAt, null, out eye, out forward);
+
+    /// <summary>
+    /// As above, with the camera's own place in the world (its scene object's position) when it's
+    /// known. The game keeps a view as an affine transform whose fourth column isn't kept (zeros:
+    /// as a 4×4 it can't be inverted, which said "Couldn't read the camera" in 0.7.0), so that
+    /// column is set to the identity's first. Its place: the view's, unless the object's is known
+    /// and they disagree by more than a yalm (then the object's, the world's own number); with a
+    /// view that still won't invert, the object's place and the point it looks at alone.
+    /// </summary>
+    public static bool FromView(Matrix4x4 view, Matrix4x4 projection, Vector3? lookAt, Vector3? position, out Vector3 eye, out Vector3 forward)
     {
         eye = default;
         forward = default;
-        if (!Matrix4x4.Invert(view, out var camera)) return false;
+        var place = position is { } known && Finite(known) && known.LengthSquared() > 1e-8f ? known : (Vector3?)null;
+        view.M14 = 0;
+        view.M24 = 0;
+        view.M34 = 0;
+        view.M44 = 1;
+        if (!Matrix4x4.Invert(view, out var camera) || !Finite(camera.Translation))
+        {
+            // No view to read: where the camera is and what it looks at, if both are known.
+            if (place is not { } at || lookAt is not { } target || Vector3.DistanceSquared(target, at) < 1e-6f) return false;
+            eye = at;
+            forward = Vector3.Normalize(target - at);
+            return true;
+        }
         eye = camera.Translation;
+        if (place is { } p && Vector3.DistanceSquared(p, eye) > 1) eye = p;
         var axis = new Vector3(camera.M31, camera.M32, camera.M33);
         var length = axis.Length();
-        if (!(length > 1e-6f) || !float.IsFinite(length) || !float.IsFinite(eye.X + eye.Y + eye.Z)) return false;
+        if (!(length > 1e-6f) || !float.IsFinite(length)) return false;
         axis /= length;
         float sign;
         if (projection.M34 < -0.5f) sign = -1;
@@ -100,6 +124,8 @@ public static class CameraMath
         return fov is > 0.5f and < 179 ? fov : null;
     }
 
+    private static bool Finite(Vector3 v) => float.IsFinite(v.X) && float.IsFinite(v.Y) && float.IsFinite(v.Z);
+
     /// <summary>A field of view given in radians (the render camera's own FoV), in degrees; null when it isn't one.</summary>
     public static float? Degrees(float radians) =>
         float.IsFinite(radians) && radians is > 0.01f and < 3.1f ? radians * 180 / MathF.PI : null;
@@ -110,10 +136,14 @@ public static class CameraMath
     /// in the plot's own frame. Null, with why, when the camera can't be read or is out of the
     /// site's limits.
     /// </summary>
-    public static ShotPose? Pose(Matrix4x4 view, Matrix4x4 projection, float fovRadians, Vector3? lookAt, Side side, PlotSpot? plot, out string why)
+    public static ShotPose? Pose(Matrix4x4 view, Matrix4x4 projection, float fovRadians, Vector3? lookAt, Side side, PlotSpot? plot, out string why) =>
+        Pose(view, projection, fovRadians, lookAt, null, side, plot, out why);
+
+    /// <summary>As above, with the camera's own place in the world when it's known (see FromView).</summary>
+    public static ShotPose? Pose(Matrix4x4 view, Matrix4x4 projection, float fovRadians, Vector3? lookAt, Vector3? position, Side side, PlotSpot? plot, out string why)
     {
         why = string.Empty;
-        if (!FromView(view, projection, lookAt, out var eye, out var forward))
+        if (!FromView(view, projection, lookAt, position, out var eye, out var forward))
         {
             why = "Couldn't read the camera.";
             return null;
