@@ -112,6 +112,7 @@ public sealed partial class MainWindow
             Txt.Note(line);
         }
         if (plan != null) DrawClearOut(plan);
+        if (plan != null) DrawErrandsEntry();
 
         if (layout.InteriorFixtures.Count + layout.ExteriorFixtures.Count > 0)
         {

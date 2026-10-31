@@ -280,7 +280,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
     public string? CanStart(bool dryRun)
     {
         if (Active) return "Already running.";
-        if (OtherRunActive?.Invoke() == true) return "Wait until the fixtures are set.";
+        if (OtherRunActive?.Invoke() == true) return "Wait until the other run is done (fixtures or errands).";
         if (session.PlacingBlocked(out var why)) return why;
         var ctx = session.Context;
         if (ctx.Busy) return "Wait until you're free (not in combat, a cutscene or between areas).";
