@@ -98,7 +98,7 @@ public sealed partial class MainWindow
 
     /// <summary>Why Send to my builds can't go now, or null.</summary>
     private string? CantSend() =>
-        !Linked ? "Link to Housing Studio in Settings first"
+        !Linked ? "Link your Housing Studio account in Settings → Getting first"
         : session.Context.Side == null ? "Go to your home first"
         : !session.Context.HasPermission ? "You can send a home you're allowed to decorate"
         : Sending ? "Sending…"

@@ -8,9 +8,9 @@ Paths are under `HousingStudio/UI/`.
 
 | Part | File | What it does |
 | --- | --- | --- |
-| Routing | `MainWindow.cs` → `Draw` | Picks the view: Settings or Pieces when opened from a header, else `ViewModel.View` (Start → Ready → Running → Done). Pieces and Settings are hidden while a run goes. |
+| Routing | `MainWindow.cs` → `Draw` | Picks the view: Settings (over the errands' estimate too), the errands' screens, or Pieces when opened from a header, else `ViewModel.View` (Start → Ready → Running → Done). Pieces and Settings are hidden while a run, the fixtures or the errands go. |
 | View state | `ViewModel.cs` | The run's figure and piece count, whether Done is waiting, the step in words, missing dyes (cached per plan), the Recent list. |
-| Game-free logic | `Model/*.cs` | Words (counts, home sizes, "about 25 minutes"), `PaceSetting`, `When` ("today 05.24"), `PieceRows` (stacking, chip counts), `StartSummary`, `FixtureTicks`, `ReadyWords` (Ready's button, Keep / Clear out / Swap, the estimate; `ReadyMode`), `StepWords`, `SvgPath`, `Dashes` (the dashed edge, with bounded loops). Tested in `HousingStudio.Tests/UiModelTests.cs`. |
+| Game-free logic | `Model/*.cs` | Words (counts, home sizes, "about 25 minutes"), `PaceSetting`, `When` ("today 05.24"), `PieceRows` (stacking, chip counts), `StartSummary`, `FixtureTicks`, `ReadyWords` (Ready's button, Keep / Clear out / Swap, the estimate; `ReadyMode`), `DoneWords` (Done's line), `CareWords.HouseLine` / `Changed` (This house), `StepWords`, `SvgPath`, `Dashes` (the dashed edge, with bounded loops). Tested in `HousingStudio.Tests/UiModelTests.cs`. |
 | Tokens | `Kit/Palette.cs` | Every `hs-*` colour from tokens.json, radii, control heights. Translucent tokens keep their alpha; panel glass is flattened over ink (ImGui can't blur). |
 | Fonts | `Kit/Fonts.cs` | Geist 400 (15/14/13/12), 500 (15/14/13), 600 (15/14); Geist Mono (13/12/11/10, 10 for the Beta tag); Cormorant Garamond 500 (56/32/28/26/22) and 400 italic (32), through Dalamud's font atlas. CSS sizes are converted to ImGui's line-based sizes (Geist ×1.3, Cormorant ×1.211) so 14px is 14px. |
 | Window frame | `Kit/Theme.cs` → `PushFrame` | Dalamud's title bar in walnut with ivory words, a 10px window radius and the 0.2 ivory edge. Only colours and the frame are pushed before `ImGui.Begin`: the title bar's font, height and ☰ ▼ × buttons are Dalamud's own, so they sit and hit as in every Dalamud window. |
@@ -19,19 +19,21 @@ Paths are under `HousingStudio/UI/`.
 | Icons | `Kit/Icons.cs` | Lucide icons parsed from the mockups' SVG path data, stroked at 1.8 in the 24-unit grid (1.6 at 24px), round caps. The flow mock-up's (`docs/mockups/flow.html`) are there too: Bell, Store, Scale, Hammer, Flask, Brick, Sofa, Undo, Send, Save, File, Link, AlertTriangle. |
 | Controls | `Kit/Kit.cs` | Buttons (primary, glass, quiet, danger, picked; 30/34/40/46 tall), icon buttons, switch (40×24, animated), segmented pill (items can be greyed out, and it shrinks its padding to fit a width), filter chip, status pill, chip, state pill, swatch, round icon well, thumbnail, tick box, stepper, field, progress bar, eyebrow, dashed border, panels, row fills, tooltips, menus. Hover (edges to the 0.34 line), press, keyboard focus ring (2px brass-soft, 2px out) and disabled (50% buttons, 40% small controls). |
 | The flow's controls | `Kit/Flow.cs` (`Kit` is partial) | From the 0.6 flow mock-up: `Wrap` (lays things left to right, wrapping), `CheckChip` / `CheckChips` (30px pill: an icon or a 64×6 `Meter`, its words; `ChipTone` Normal / Warn / Brass; the open one's edge lit) with `BeginDetail` / `EndDetail` (the dashed detail under the row), `BeginStage` / `EndStage` (a glass card with a 34px number column, a 1px line joining it to the card above), `StageNumber` (`StageState` Todo / Now / Done), `StageHead` (mono label, serif 22 words, an aside on the right), `CountChip` ("4 retainers"), `BetaTag`, `LabeledSwitch` (a switch with its words and Beta tag), `MoreButton` (quiet, "See the list ›"), `Banner` (one brass line with up to two small buttons; returns which was pressed), `StatCells` (serif numbers over their words; 0 dim), `Journey` (stops in a row on a 2px track, brass up to the one in hand; for the errands' run). |
+| Start, Done and Settings' controls | `Kit/Rows.cs` (`Kit` is partial) | `Section` (the mono label, "NEEDS YOU" with its count on the right), `Tabs` / `TabSpec` (small pills, the picked one in glass), `IconThumb` (the 34px thumb), `ActionCard` (a card with a thumb, a title, a line and a small button; Done's undo and fixtures), `BetaButton` (a small button with the Beta tag). |
 | Markers in the world | `Overlay.cs` | Markers, plus `Highlight` for Show where: a pulsing ring and label, or an arrow at the screen's edge when the spot is out of view. |
 
-## Start (`Views/Start.cs`)
+## Start (`Views/Start.cs`, the 0.6 flow: `docs/mockups/flow.html`)
 
 | Mockup | Code |
 | --- | --- |
-| "Housing *Studio*" | `DrawStart` → `MainWindow.Title(…, "Housing", "Studio")` |
-| Where-you-are pill (green / danger / neutral) | `WherePill` → `Kit.StatusPill` |
-| Settings icon button | `MainWindow.SettingsButton` |
-| Dashed drop zone, round upload icon, "Load a design", note, Choose a file | `DrawDropZone` (`Kit.Dashed`, `Kit.Round`, `Kit.Button`); drag & drop via `DropTarget` (the zone and the whole body) |
-| Save this house as a build, Send to my builds (side by side, stacked when narrow), and how the send went | `DrawSaveHome` → `SaveDialog`; `SendHome`, `CantSend` and `DrawSendState` in `Views/SiteLink.cs` (`Core/SiteLink` sends) |
-| Recent eyebrow and rows (badge, name, "N pieces · House (medium) · today 05.24", MAKEPLACE / BUILD / BACKUP, chevron) | `DrawRecent`, rows from `ViewModel.Recent` (files read in the background); right-click → "Take it off this list" |
-| "Looking for a design?" + Browse designs | `DrawBrowse` → `Util.OpenLink(https://www.kokos-tools.com/housing-studio/browse)` |
+| Where-you-are pill (green / danger / neutral) above "Housing *Studio*" | `DrawStart` header: `WherePill` → `Kit.StatusPill`, then `MainWindow.Title(…, "Housing", "Studio")` |
+| Settings icon button | `MainWindow.SettingsButton` (opens Settings on the tab it was last on) |
+| The drop zone as one row: round upload well, "Load a design", "Drop a .build or MakePlace file here", Choose a file | `DrawDropZone` (`Kit.Dashed`, the 44px brass well, a small glass `Kit.Button`; the button goes under the words when they'd be narrower than 170px); pressing the zone chooses a file too; drag & drop via `DropTarget` (the zone and the whole body), "Let go to load it" while a file is dragged over |
+| This house card: house thumb, "This house", "Medium house · 312 of 450 pieces placed inside", the meter | `DrawThisHouse` (only in a home you may decorate): `Kit.IconThumb`, words `Model/CareWords.HouseLine` (the count from `Session/Care.Count`, read every 2 s while Start shows; cached per count), `Kit.Meter` (how full, `ItemLimits.Of`) |
+| The "3 changed" chip and the changes | `Kit.CheckChip` with a snapshot of this home (`Care.SnapshotAt`): "Check for changes" until checked, then `CareWords.Changed` ("3 changed" brass, "Nothing changed" neutral); its tooltip `ChangesTip`. Pressing it runs `CheckForChanges` (`Care.CheckForChanges` on the framework thread) and opens `DrawChanges` (`Views/Care.cs`) under the card in `Kit.BeginDetail`: what moved, was taken away, dyed again or added, with Show where they were and Put them back where they were (`AskPutBack`); pressing it again closes it |
+| Save as a build, Send to my builds | small glass buttons in a `Kit.Wrap` row → `SaveDialog`; `SendHome`, `CantSend` and `DrawSendState` in `Views/SiteLink.cs` |
+| Recent label and rows (badge, name, "447 pieces · House (medium) · today 05.24", MAKEPLACE / BUILD / BACKUP / KEPT, chevron) | `DrawRecent` (`Kit.Section`), rows from `ViewModel.Recent` (files read in the background); a swap's kept home (`Core/SwapNames.IsKept`: in the backups folder, not a backup's own name, named "… before …") is KEPT with "Kept from a swap · 391 pieces · yesterday"; right-click → "Take it off this list" |
+| "Looking for a design? Browse designs" | `DrawBrowse` (a centred line with the link) → `Util.OpenLink(https://www.kokos-tools.com/housing-studio/browse)` |
 
 ## Ready (`Views/Ready.cs`, the 0.6 flow: `docs/mockups/flow.html`)
 
@@ -65,19 +67,19 @@ Paths are under `HousingStudio/UI/`.
 | Centred note | the bottom block of `DrawRunning` |
 | Pause / Resume, Stop, footer note | `DrawRunningFooter` |
 
-## Done (`Views/Done.cs`)
+## Done (`Views/Done.cs`, the 0.6 flow)
 
 | Mockup | Code |
 | --- | --- |
-| Check mark, "<name> is *in*", sentence | `DrawDone` header; "Stopped at N of M" (neutral square, or danger when stopped for safety); "Preview *done*" after a preview |
-| Tally cells | `DrawTally` |
-| Needs you (icon, name, reason, Show where / Copy list) | `Issues` → `IssueRow`: each problem from `runner.Problems`; "N pieces left undyed" grouped with Copy list; "N pieces you don't have" grouped with Shopping list (opens the Shopping view) |
+| Tick well, "<name> is *in*", one line of what happened | `DrawDone` header, centred: the 52px well (green; a neutral square when you stopped it, danger when stopped for safety), `CenteredTitle` ("Stopped at N of M", "Preview *done*"), `DoneLine` (cached): `Model/DoneWords.Line` ("445 of 447 pieces · 12 got on 2 trips for 58,920 gil"), the stop's reason, or what a preview found |
+| The errands' trips and gil | `DoneErrands`: only when this Done is about the errands' placing (`NoteErrandsRun`, every frame from `DrawBody`, notes the run `Plugin.Errands.Placing` started); `ErrandRunner.GotCount`, `Trip`, `Spent` |
+| Tally cells | `DrawTally` → `Kit.StatCells(…, 32)` (one array, filled in place) |
 | "N pieces not in the design were put away" | `DrawPutAwayLine` (`Views/ClearOut.cs`), under the tally; the moved cell leaves them out (`runner.PutAwayDone`) |
-| After a swap: "Swap back?" + Swap back | `DrawSwapBack` (`Views/ClearOut.cs`) in place of Put them back → `runner.SwapBack` |
-| "Not what you wanted?" + Put them back | `DrawPutBack` → a confirmation (`MainWindow.Ask`) → `runner.RestoreBackup` |
-| Setting the fixtures (step, Continue, Stop) | `DrawFixtureRunPanel` at the top of the body while `Plugin.FixtureRun.Active` (after placing with Set them for me after placing on) |
-| Fixtures note | the bottom block of `DrawDone` (hidden when all are ticked) |
-| Try the N again / Carry on / Done | `DrawDoneFooter` (`runner.RetryProblems`; Carry on starts again with what's left; a preview offers Start placing; nothing needs you → Done alone, in brass) |
+| "Needs you 2" and its rows (thumb, name, one line of why, Show / Copy / Shopping list) | `Kit.Section("Needs you", count)`; `Issues` (made again only when the problems change) → `IssueRow`: each problem from `runner.Problems` (the whole reason is the tooltip); "N left undyed" grouped with Copy; "N pieces you don't have" grouped with Shopping list (opens the Shopping view) |
+| One undo card: "Not what you wanted?" + Swap back / Put them back | `Kit.ActionCard`: after a swap `DrawSwapBack` (`Views/ClearOut.cs`, "What was here is kept as “X”") → `runner.SwapBack`; else `DrawPutBack` ("A backup of the 447 pieces you had, saved at 18.57") → `runner.RestoreBackup`; each asks first (`MainWindow.Ask`) |
+| Fixtures card: "8 fixtures to set", what they are, Set them (Beta) | `DrawFixturesCard` (`Kit.ActionCard` with `Kit.BetaButton`): with `Plugin.FixtureRun.Enabled`, Set them asks (`AskSetFixtures`, as Ready's) and starts the fixtures run; else the line says to set them from Housing → Remodel Interior. Hidden after a preview, with none left, or while it runs |
+| Setting the fixtures (step, Continue, Stop) | `DrawFixtureRunPanel` at the top of the body while `Plugin.FixtureRun.Active` |
+| Try the N again / Carry on / Done | `DrawDoneFooter` (`runner.RetryProblems`; Carry on starts again with what's left; nothing needs you → Done alone, in brass). After a preview the brass button says what Ready's choice does (`ReadyWords.Go`: "Start placing", "Clear out 14, then place", "Swap and place") and starts it as Ready does: Swap → `AskSwap` with `KeepAsName`, Clear out → `StartFromReady` (asks first) |
 
 ## Pieces (`Views/Pieces.cs`)
 
@@ -100,23 +102,25 @@ Paths are under `HousingStudio/UI/`.
 | Open in Teamcraft | `TeamcraftRow` (`Core/Teamcraft.ImportUrl`) |
 | Copy list + the total | `DrawShoppingFooter`, `CopyShoppingList` (`ShoppingList.WithSources`) |
 
-## Settings (`Views/Settings.cs`)
+## Settings (`Views/Settings.cs`, the 0.6 flow)
 
 | Mockup | Code |
 | --- | --- |
-| Start does: Place pieces for me, Dye, Backup, Pace | `DrawSettings` → `SwitchRow`, `SetRow` + `Kit.Segmented`. Place pieces for me sets both `StoreroomAutomatic` and `BagsAutomatic`. Pace: Steady, Quick (the default) or Daring, the `Pacing.Profiles` (`Model/PaceSetting`), with a line under it saying what the one chosen does. |
-| In the world: Show where pieces go | `ShowMarkers` |
-| Housing Studio: Link to Housing Studio (token field, masked; Link, Get a token) or Linked (masked token, Unlink) | `DrawSiteLink` in `Views/SiteLink.cs`; `Configuration.SiteToken` |
-| More options (13) | `DrawMoreOptions`: place anywhere, pace variation (±5% steps), when to stop, chat, market prices (Universalis), Near me reach, storeroom / bags separately, floors to place, marker labels, placed markers, marker range, save what's placed as a build, good to know |
-| Something not working? | `DrawTrouble`: step by step, move the preview before Place (old method), the recorder, the "Place" words, windows and clicks used |
-| "Housing Studio 0.3.0" + What's new | the bottom block of `DrawSettings` |
+| "Settings", back on the right | `DrawSettings` header (`Title`, `Kit.IconButton`) |
+| Tabs: Placing, Getting 5, Beta 5, Help | `Kit.Tabs` with `SettingsTabs` (`TabSpec`), in the header; the tab is `settingsTab` (`SettingsTab`), kept while the window is open (`OnClose` sets Placing again). `ShowSettings()` opens Placing, `ShowSettings(SettingsTab)` a tab (the errands' "Limits · Change" opens Getting); `OpenSettings(SettingsTab)` inside the window. Each tab's body scrolls on its own. |
+| A setting's row: name, one line, control on the right | `SetRow` (11px 14px inside; the name with an icon before it and the Beta tag after it when given; the line in 12px dim; the longer words as the tooltip over them, `tip:`; `below` for wide controls), `SwitchRow`, `StepperRow`, `ButtonRow`. The errands' screen uses them too. |
+| Placing: Place pieces for me, Dye after placing, Keep a backup, Pace, Show where pieces go, More options › | `DrawPlacingTab`. Place pieces for me sets both `StoreroomAutomatic` and `BagsAutomatic`. Pace: `Kit.Segmented` (shrinks to fit, else under its words), its line `PaceSetting.Short` ("0.15 s between pieces"), its tooltip `PaceSetting.Note`. More options (12) opens `DrawMoreOptions` in the same panel: place anywhere, pace variation, when to stop, chat, Near me's reach, storeroom / bags apart, floors to place, marker names, placed markers, marker range, save what's placed as a build, and good to know |
+| Getting: Market prices, Market ceiling, Other worlds, Spare bag slots, Housing Studio account | `DrawGettingTab`: `LookUpMarketPrices`; the errands' limits (`ErrandsMarketCeiling` stepped by `ErrandWords.StepCeiling`, `ErrandsOtherWorlds`, `ErrandsSpareSlots`); `DrawAccountRow` in `Views/SiteLink.cs` ("Linked · hsp_••••3f2a" with Unlink, or the masked token field with Link and Get a token) |
+| Beta: the features' switches with the Beta tag | `DrawBetaTab`: `Experimental` (the master switch), then Get everything for me (`ErrandsForYou`), Get things first from Ready (`GetFirst`, live with the errands on), Set the fixtures for me (`SetFixturesForYou`), Set fixtures after placing (`FixturesAfterPlacing`, live with the fixtures run on), Put back what changed (`PutBackChanges`); each greyed while what it needs is off |
+| Help | `DrawHelpTab`: step by step, the old preview method, Record what I do (Start / Stop), Copy the recording and log, Write down the windows' values (while recording), the "Place" words (the built-in ones read once per client language), Trust the new clicks (`ErrandsTrustGuesses`), and the windows and clicks used (`UiTable.All`, read once) |
+| "Housing Studio 0.6.0 · What's new" | the bottom block of `DrawSettings` (made once) |
 
 ## Looking after a home (`Views/Care.cs`, no mockup)
 
 | Part | Code |
 | --- | --- |
-| Start: "312 of 450 pieces placed inside" | `DrawHomeCare`, the count from `Session/Care.Count` (read every 2 s while Start shows), words from `Model/CareWords.HowFull` |
-| Start: "Since your last run", Check for changes, the changes, Show where they were, Put them back where they were | `DrawDrift` → `DrawDriftResult` → `AskPutBack` (`MainWindow.Ask`), from `Care.CheckForChanges` / `Care.PutBack` |
+| Start: This house, "312 of 450 pieces placed inside" | `DrawThisHouse` (`Views/Start.cs`), the count from `Session/Care.Count` (read every 2 s while Start shows), words from `Model/CareWords.HouseLine` |
+| Start: the changes chip, the changes, Show where they were, Put them back where they were | `CheckForChanges` → `DrawChanges` → `AskPutBack` (`MainWindow.Ask`), from `Care.CheckForChanges` / `Care.PutBack` |
 | Ready: "A run was cut off at piece N of M.", Carry on, Forget | `DrawCarryOnBanner` (`Kit.Banner`), from `Care.Offer` |
 | Ready: the item limit, pieces the game may refuse, and the other chips | `DrawReadyChecks` (see Ready) |
 | Pieces: "Pieces the game may refuse" with Show where | `DrawPiecesClashes` → `Disclosure` + Done's `IssueRow` |
@@ -145,6 +149,18 @@ Paths are under `HousingStudio/UI/`.
   isn't known. The mock's 36×22 switch is the kit's 40×24, its 12.5px words 13px, and the Beta tag's
   9.5px mono 10px. Tick off shows a chevron, as it opens and closes the tick list. With the fixtures
   run on, Tick off also has Set them for me (now, without placing), which the mock leaves out.
+- Start, Done and Settings (the 0.6 flow mock-up): the changes chip reads "Check for changes" until a
+  check has been made (checking reads what's placed and the snapshot, so it isn't done unasked);
+  after one it says "3 changed" or "Nothing changed", and pressing it checks again and opens the
+  changes. The mock's 40px title is 32 (the serif's sizes are 56/32/28/26/22), its 12.5px lines 13
+  (Geist is loaded at 12 and 13), its 13.5px names 14, the Settings icon and the back arrow 40px
+  (as on Ready). "This garden" in a garden; a garden's line is its count alone. The undo card
+  says when the backup was saved (Put them back) or keeps the time in its tooltip (Swap back). Market
+  prices moved from More options to Getting, so More options counts 12, as the mock does; Getting
+  has the errands' spare bag slots too (the mock shows three of its rows), and Beta has Ready's two
+  switches (Get things first from Ready, Set fixtures after placing) after the feature each needs,
+  greyed while it's off. Help also keeps the old preview method, Copy the recording and log, Write
+  down the windows' values, the "Place" words and the windows and clicks used.
 
 ## What the runner could add
 

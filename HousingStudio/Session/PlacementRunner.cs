@@ -2272,7 +2272,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         var entry = Menus.FindEntry(menu, labels);
         log.Info($"  menu entries: {string.Join(" | ", menu.Select((e, i) => $"{i}:{e}"))}");
         if (entry < 0)
-            return StepOutcome.Halt($"The menu has no entry like \"{string.Join("\" / \"", labels)}\" (it has: {string.Join(", ", menu)}). Type the right words in Settings → Something not working?.");
+            return StepOutcome.Halt($"The menu has no entry like \"{string.Join("\" / \"", labels)}\" (it has: {string.Join(", ", menu)}). Type the right words in Settings → Help → The \"Place\" words.");
         var blanks = UiCallValues.Of(("entry", entry));
         log.Info($"  → {UiTable.MenuChoose.Describe(blanks)}");
         return GameUi.Fire(UiTable.MenuChoose, blanks) ? StepOutcome.Done : StepOutcome.Halt("The menu closed.");

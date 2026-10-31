@@ -10,7 +10,7 @@ using HousingStudio.UI.Model;
 namespace HousingStudio.Session;
 
 /// <summary>
-/// "Set them for me" (Settings → Experimental): the design's fixtures for the side you're on (each
+/// "Set them for me" (Settings → Beta): the design's fixtures for the side you're on (each
 /// floor's walls, flooring and light inside; the outside's parts on your plot), set through the game's
 /// own fixtures window, with the same step, wait and check pattern as placing:
 /// <list type="number">
