@@ -13,7 +13,7 @@ dyes, fixtures, the outside and wallpapers) as a file you can upload to the site
 
 Ready can also **clear out** what isn't in the design first, or **swap** designs and swap back
 later. The **shopping list** says where each missing piece comes from (your retainers, a vendor,
-the market board, or crafting). Settings → **Experimental** holds the newer features not yet
+the market board, or crafting). Settings → **Beta** holds the newer features not yet
 tried in the game, such as **Get everything for me**, which fetches what's missing and places it
 (it needs the vnavmesh and Lifestream plugins).
 
@@ -29,9 +29,11 @@ tried in the game, such as **Get everything for me**, which fetches what's missi
 1. Open a design: drop it on the window, or use **Choose a file**.
 2. Go into your house (or onto your plot for the garden). You need permission to decorate.
 3. Open Housing → **Indoor Furnishings** (or Outdoor).
-4. Press **Start placing**, or **Preview first** to see what it will do without touching anything.
+4. Ready shows what to get, what Start does and the fixtures left, in three steps. Press the brass
+   button (**Start placing**, or whatever it says it will do), or **Preview** to see what it will do
+   without touching anything.
 
-If something goes wrong, Settings → **Something not working?** has a step-by-step mode and a
+If something goes wrong, Settings → **Help** has a step-by-step mode and a
 recorder whose output you can send along with your report.
 
 **Please note:** plugins that act in the game for you are against Square Enix's terms of

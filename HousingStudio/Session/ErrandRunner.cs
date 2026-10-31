@@ -50,10 +50,18 @@ public sealed class ErrandRunner : IDisposable
     private readonly Shopping shop;
     private readonly StepQueue queue = new(() => DateTime.UtcNow);
 
-    private readonly List<(string Title, Func<List<Step>> Steps, Func<List<Step>> Cleanup)> segments = new();
+    /// <summary>A part of a trip: its words, its steps, and where it is (for the window's journey and title).</summary>
+    private readonly record struct Segment(string Title, Func<List<Step>> Steps, Func<List<Step>> Cleanup, ErrandLeg Leg, bool Going, string? Who, ErrandItem? Item);
+
+    private readonly List<Segment> segments = new();
     private int segment = -1;
     private ErrandTrip? pendingTrip;
     private bool finishPending;
+    private ErrandTrip? trip;
+
+    /// <summary>Ready's choice, for the first placing run only: the pieces to clear out first, and a swap's name for what's here.</summary>
+    private IReadOnlyList<PlacedPiece>? clearOutFirst;
+    private string? keepAsFirst;
 
     private HomeRef? home;
     private HomeKind homeKind;
@@ -101,7 +109,7 @@ public sealed class ErrandRunner : IDisposable
     // ---------------------------------------------------------------------------------------------
     // What the window shows.
 
-    /// <summary>Settings → Experimental and its own switch are both on.</summary>
+    /// <summary>Settings → Beta: the Beta switch and its own are both on.</summary>
     public bool Enabled => config.Experimental && config.ErrandsForYou;
 
     public RunState State { get; private set; } = RunState.Idle;
@@ -122,6 +130,33 @@ public sealed class ErrandRunner : IDisposable
     public int Trip { get; private set; }
 
     public int TripsAtStart => tripsAtStart;
+
+    /// <summary>How many things the plan agreed to at the start had.</summary>
+    public int CountAtStart { get; private set; }
+
+    /// <summary>The trip being made (its stops), or null between trips.</summary>
+    public ErrandTrip? CurrentTrip => Active ? trip : null;
+
+    /// <summary>Where the run is on its trip (the journey's stop), whether it's on the way there, and the vendor's name there.</summary>
+    public ErrandLeg Leg => Active && segment >= 0 && segment < segments.Count ? segments[segment].Leg : ErrandLeg.Bell;
+
+    public bool Going => Active && segment >= 0 && segment < segments.Count && segments[segment].Going;
+
+    public string? Who => Active && segment >= 0 && segment < segments.Count ? segments[segment].Who : null;
+
+    /// <summary>The thing being taken or bought now, or null.</summary>
+    public ErrandItem? CurrentItem => Active && segment >= 0 && segment < segments.Count ? segments[segment].Item : null;
+
+    /// <summary>The segment in hand (it changes as the run moves on; the window caches by it).</summary>
+    public int SegmentIndex => Active ? segment : -1;
+
+    /// <summary>After placing: working out what's still missing.</summary>
+    public bool Replanning => Active && segment >= 0 && segment == segments.Count - 1;
+
+    /// <summary>The first placing run clears out (Ready's Clear out or Swap): how many, and the swap's name.</summary>
+    public int ClearOutFirst => clearOutFirst?.Count ?? 0;
+
+    public string? KeepAsFirst => keepAsFirst;
 
     /// <summary>What the run is doing ("Going to Material Supplier, Mist").</summary>
     public string? Doing => Active && segment >= 0 && segment < segments.Count ? segments[segment].Title : null;
@@ -197,7 +232,7 @@ public sealed class ErrandRunner : IDisposable
     /// <summary>Why the errands can't start now with this plan, or null.</summary>
     public string? CanStart(ErrandPlan plan, HousingContext ctx)
     {
-        if (!Enabled) return "Switch it on in Settings → Experimental.";
+        if (!Enabled) return "Switch it on in Settings → Beta.";
         if (Active) return "Already on errands.";
         if (runner.Active || OtherRunActive?.Invoke() == true) return "Wait until the run is done.";
         if (ErrandGame.Blocked(false) is { } blocked) return blocked;
@@ -246,8 +281,13 @@ public sealed class ErrandRunner : IDisposable
     // ---------------------------------------------------------------------------------------------
     // Starting, pausing, stopping.
 
-    /// <summary>Starts the errands on a plan you've seen, having agreed to its gil.</summary>
-    public void Start(ErrandPlan plan, HousingContext ctx)
+    /// <summary>
+    /// Starts the errands on a plan you've seen, having agreed to its gil. Ready's choice for what's
+    /// here goes to the first placing run only: <paramref name="clearOut"/> (Clear out or Swap) is put
+    /// away first, as far as those pieces are still there when it comes home, and with
+    /// <paramref name="keepAsName"/> (Swap) what's here is kept under that name, as Ready's own start does.
+    /// </summary>
+    public void Start(ErrandPlan plan, HousingContext ctx, IReadOnlyList<PlacedPiece>? clearOut = null, string? keepAsName = null)
     {
         if (CanStart(plan, ctx) is { } why)
         {
@@ -263,6 +303,10 @@ public sealed class ErrandRunner : IDisposable
         agreedGil = plan.TotalGil;
         ceiling = Math.Max(0, config.ErrandsMarketCeiling);
         tripsAtStart = plan.Trips.Count;
+        CountAtStart = plan.Count;
+        clearOutFirst = clearOut is { Count: > 0 } ? clearOut.ToList() : null;
+        keepAsFirst = keepAsName;
+        trip = null;
         cycles = 0;
         Trip = 0;
         VendorSpent = MarketSpent = 0;
@@ -280,7 +324,9 @@ public sealed class ErrandRunner : IDisposable
             log.Info(shop.AutoRetainer.KeepOut() ? "AutoRetainer is asked to keep out of the way while the errands use a bell." : "AutoRetainer didn't answer (not installed?); carrying on.");
         log.Info($"Errands started: {plan.Count} things in {Words(plan.Trips.Count, "trip")}, about {plan.TotalGil:N0} gil agreed "
                  + $"({plan.VendorGil:N0} at vendors, {plan.MarketGil:N0} on the market board, under a ceiling of {ceiling:N0}). Home: {homeKind}, "
-                 + $"{(houseBell ? "a summoning bell in it" : "no summoning bell in it")}.{(config.ErrandsTrustGuesses ? string.Empty : " Clicks not yet seen working wait for Continue.")}");
+                 + $"{(houseBell ? "a summoning bell in it" : "no summoning bell in it")}.{(config.ErrandsTrustGuesses ? string.Empty : " Clicks not yet seen working wait for Continue.")}"
+                 + (keepAsFirst != null ? $" The first placing swaps: what's here is kept as “{keepAsFirst}”, and {ClearOutFirst} pieces not in the design are put away first."
+                     : clearOutFirst != null ? $" The first placing clears out {ClearOutFirst} pieces not in the design first." : string.Empty));
         State = RunState.Running;
         StatusText = "Starting…";
         pendingTrip = plan.Trips[0];
@@ -336,6 +382,8 @@ public sealed class ErrandRunner : IDisposable
         travelling = false;
         CloseWindows();
         shop.AutoRetainer.LetBe();
+        clearOutFirst = null;
+        keepAsFirst = null;
         State = RunState.Stopped;
         StopReason = reason;
         StatusText = reason;
@@ -348,6 +396,8 @@ public sealed class ErrandRunner : IDisposable
     {
         State = RunState.Finished;
         LetsPlace = false;
+        clearOutFirst = null;
+        keepAsFirst = null;
         Nav.Stop();
         walkTarget = null;
         shop.AutoRetainer.LetBe();
@@ -400,7 +450,7 @@ public sealed class ErrandRunner : IDisposable
         // Switched off in Settings while it goes: it stops.
         if (!Enabled)
         {
-            Stop("Switched off in Settings → Experimental.");
+            Stop("Switched off in Settings → Beta.");
             return;
         }
         // The placing run looks after itself (its own stops); the errands only wait for it.
@@ -464,21 +514,22 @@ public sealed class ErrandRunner : IDisposable
         }
     }
 
-    private void BeginTrip(ErrandTrip trip)
+    private void BeginTrip(ErrandTrip next)
     {
+        trip = next;
         Trip++;
         cycles++;
         gotThisTrip = 0;
         segments.Clear();
         segment = -1;
-        log.Info($"Trip {Trip}: {trip.Count} things ({trip.Slots} bag slots), about {trip.Gil:N0} gil, "
-                 + string.Join(", ", trip.Stops.Select(s => s.Kind switch
+        log.Info($"Trip {Trip}: {next.Count} things ({next.Slots} bag slots), about {next.Gil:N0} gil, "
+                 + string.Join(", ", next.Stops.Select(s => s.Kind switch
                  {
                      StopKind.Retainer => $"{s.Retainer?.Name}",
                      StopKind.Vendor => s.Vendor?.Where() ?? "a vendor",
                      _ => $"the market board on {s.World}",
                  })) + ".");
-        foreach (var stop in trip.Stops)
+        foreach (var stop in next.Stops)
         {
             switch (stop.Kind)
             {
@@ -493,14 +544,15 @@ public sealed class ErrandRunner : IDisposable
                     break;
             }
         }
-        Add("Going home", GoHomeSteps, NoCleanup);
-        Add("Going in", EnterSteps, NoCleanup);
-        Add("Placing what's in your bags", PlaceSteps, NoCleanup);
-        Add("Seeing what's still missing", ReplanSteps, NoCleanup);
+        Add("Going home", GoHomeSteps, NoCleanup, ErrandLeg.Home, true);
+        Add("Going in", EnterSteps, NoCleanup, ErrandLeg.Home);
+        Add("Placing what's in your bags", PlaceSteps, NoCleanup, ErrandLeg.Place);
+        Add("Seeing what's still missing", ReplanSteps, NoCleanup, ErrandLeg.Place);
         NextSegment();
     }
 
-    private void Add(string title, Func<List<Step>> steps, Func<List<Step>> cleanup) => segments.Add((title, steps, cleanup));
+    private void Add(string title, Func<List<Step>> steps, Func<List<Step>> cleanup, ErrandLeg leg, bool going = false, string? who = null, ErrandItem? item = null) =>
+        segments.Add(new Segment(title, steps, cleanup, leg, going, who, item));
 
     private static List<Step> NoCleanup() => new();
 
@@ -530,10 +582,10 @@ public sealed class ErrandRunner : IDisposable
             Finish("the trips are done.");
             return;
         }
-        var (title, steps, cleanup) = segments[segment];
-        log.Info($"{title}.");
-        StatusText = title;
-        queue.Begin(steps(), cleanup());
+        var s = segments[segment];
+        log.Info($"{s.Title}.");
+        StatusText = s.Title;
+        queue.Begin(s.Steps(), s.Cleanup());
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -714,10 +766,10 @@ public sealed class ErrandRunner : IDisposable
     private void AddRetainer(ErrandStop stop)
     {
         var r = stop.Retainer!;
-        Add("Going to a summoning bell", BellSteps, WindowCleanup);
-        Add($"Opening {r.Name}'s bags", () => OpenRetainerSteps(r), WindowCleanup);
-        foreach (var item in stop.Items) Add($"Taking {Thing(item)} from {r.Name}", () => WithdrawSteps(r, item), WindowCleanup);
-        Add($"Saying goodbye to {r.Name}", () => CloseRetainerSteps(r), WindowCleanup);
+        Add("Going to a summoning bell", BellSteps, WindowCleanup, ErrandLeg.Bell, true);
+        Add($"Opening {r.Name}'s bags", () => OpenRetainerSteps(r), WindowCleanup, ErrandLeg.Bell, who: r.Name);
+        foreach (var item in stop.Items) Add($"Taking {Thing(item)} from {r.Name}", () => WithdrawSteps(r, item), WindowCleanup, ErrandLeg.Bell, who: r.Name, item: item);
+        Add($"Saying goodbye to {r.Name}", () => CloseRetainerSteps(r), WindowCleanup, ErrandLeg.Bell, who: r.Name);
     }
 
     private List<Step> BellSteps()
@@ -878,9 +930,9 @@ public sealed class ErrandRunner : IDisposable
     private void AddVendor(ErrandStop stop)
     {
         var v = stop.Vendor!;
-        Add($"Going to {v.Where()}", () => VendorTravelSteps(v), WindowCleanup);
-        Add($"Opening {v.NpcName}'s shop", () => OpenShopSteps(v), WindowCleanup);
-        foreach (var item in stop.Items) Add($"Buying {Thing(item)} from {v.NpcName}", () => BuySteps(v, item), WindowCleanup);
+        Add($"Going to {v.Where()}", () => VendorTravelSteps(v), WindowCleanup, ErrandLeg.Vendor, true, v.NpcName);
+        Add($"Opening {v.NpcName}'s shop", () => OpenShopSteps(v), WindowCleanup, ErrandLeg.Vendor, who: v.NpcName);
+        foreach (var item in stop.Items) Add($"Buying {Thing(item)} from {v.NpcName}", () => BuySteps(v, item), WindowCleanup, ErrandLeg.Vendor, who: v.NpcName, item: item);
         Add($"Closing {v.NpcName}'s shop", () => new List<Step>
         {
             Step.Act("Close the shop", () =>
@@ -891,7 +943,7 @@ public sealed class ErrandRunner : IDisposable
                 return StepOutcome.Done;
             }),
             Step.Wait("The shop closes", () => !GameUi.IsOpen(ErrandTable.Shop), TimeSpan.FromSeconds(3), StepStatus.Done),
-        }, WindowCleanup);
+        }, WindowCleanup, ErrandLeg.Vendor, who: v.NpcName);
     }
 
     private List<Step> VendorTravelSteps(VendorOffer v)
@@ -1046,8 +1098,8 @@ public sealed class ErrandRunner : IDisposable
     private void AddMarket(ErrandStop stop)
     {
         var world = stop.World ?? ErrandGame.CurrentWorld();
-        Add($"Going to a market board on {world}", () => BoardSteps(world), WindowCleanup);
-        foreach (var item in stop.Items) Add($"Buying {Thing(item)} on the market board", () => ListingSteps(item), WindowCleanup);
+        Add($"Going to a market board on {world}", () => BoardSteps(world), WindowCleanup, ErrandLeg.Market, true, world);
+        foreach (var item in stop.Items) Add($"Buying {Thing(item)} on the market board", () => ListingSteps(item), WindowCleanup, ErrandLeg.Market, who: world, item: item);
         Add("Closing the market board", () => new List<Step>
         {
             Step.Act("Close the board", () =>
@@ -1056,7 +1108,7 @@ public sealed class ErrandRunner : IDisposable
                 GameUi.Close(ErrandTable.ItemSearch);
                 return StepOutcome.Done;
             }),
-        }, WindowCleanup);
+        }, WindowCleanup, ErrandLeg.Market, who: world);
     }
 
     private List<Step> BoardSteps(string world)
@@ -1405,9 +1457,26 @@ public sealed class ErrandRunner : IDisposable
         {
             if (session.Plan == null) return StepOutcome.Halt("Your home isn't matched against the design.");
             var entries = session.Plan.Entries.Where(e => config.FloorShown(e.Target.Floor)).ToList();
+            // Ready's Clear out or Swap, on the first placing only: the pieces chosen, as far as they're still here.
+            IReadOnlyList<PlacedPiece>? clear = null;
+            if (clearOutFirst != null)
+            {
+                clear = ClearOut.StillHere(clearOutFirst, session.Plan.Extras);
+                if (clear.Count < clearOutFirst.Count)
+                    log.Warn($"  {clearOutFirst.Count - clear.Count} of the {clearOutFirst.Count} pieces to clear out aren't where they were: they're left.");
+                if (clear.Count == 0) clear = null;
+            }
+            var keepAs = keepAsFirst;
+            if (clear != null || keepAs != null)
+                log.Info(keepAs != null ? $"  Swapping: what's here is kept as “{keepAs}”, {clear?.Count ?? 0} pieces put away first." : $"  Clearing out {clear!.Count} pieces first.");
             LetsPlace = true;
-            runner.Start(false, entries);
-            if (runner.Active) return StepOutcome.Done;
+            runner.Start(false, entries, clear, keepAs);
+            if (runner.Active)
+            {
+                clearOutFirst = null;
+                keepAsFirst = null;
+                return StepOutcome.Done;
+            }
             LetsPlace = false;
             var why = runner.StopReason ?? "it didn't say why";
             if (why.StartsWith("Nothing to do", StringComparison.Ordinal))

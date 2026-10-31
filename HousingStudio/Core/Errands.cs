@@ -57,6 +57,19 @@ public sealed record ErrandTrip(int Number, IReadOnlyList<ErrandStop> Stops)
     public long Gil => VendorGil + MarketGil;
 }
 
+/// <summary>
+/// Where the errands are on a trip, as the journey bar shows it: at a summoning bell (retainers), at
+/// vendors, at the market board, going home (and in), or placing what was got.
+/// </summary>
+public enum ErrandLeg
+{
+    Bell,
+    Vendor,
+    Market,
+    Home,
+    Place,
+}
+
 /// <summary>Why something on the shopping list isn't fetched.</summary>
 public enum LeftReason
 {
@@ -158,6 +171,36 @@ public static class ErrandPlanner
         public string? World { get; init; }
         public MarketListing? Listing { get; init; }
         public int Slots => Stacks(Bought, Stack);
+    }
+
+    /// <summary>
+    /// Two plans say the same: the same trips with the same stops, items, counts and gil (the market's
+    /// dearest price for one too), and the same left out. The errands' screen starts only the plan it
+    /// showed, and only while a fresh estimate still says the same.
+    /// </summary>
+    public static bool Same(ErrandPlan a, ErrandPlan b)
+    {
+        if (ReferenceEquals(a, b)) return true;
+        if (a.FreeSlots != b.FreeSlots || a.MarketCeiling != b.MarketCeiling || a.Trips.Count != b.Trips.Count || a.Left.Count != b.Left.Count) return false;
+        for (var t = 0; t < a.Trips.Count; t++)
+        {
+            var (x, y) = (a.Trips[t], b.Trips[t]);
+            if (x.Stops.Count != y.Stops.Count) return false;
+            for (var s = 0; s < x.Stops.Count; s++)
+            {
+                var (p, q) = (x.Stops[s], y.Stops[s]);
+                if (p.Kind != q.Kind || p.Key != q.Key || p.World != q.World || p.Items.Count != q.Items.Count) return false;
+                for (var i = 0; i < p.Items.Count; i++)
+                {
+                    var (m, n) = (p.Items[i], q.Items[i]);
+                    if (m.Need != n.Need || m.Count != n.Count || m.Bought != n.Bought || m.Slots != n.Slots || m.Gil != n.Gil || m.MaxUnitPrice != n.MaxUnitPrice)
+                        return false;
+                }
+            }
+        }
+        for (var i = 0; i < a.Left.Count; i++)
+            if (a.Left[i] != b.Left[i]) return false;
+        return true;
     }
 
     public static int Stacks(int count, int stack) => count <= 0 ? 0 : (count + Math.Max(1, stack) - 1) / Math.Max(1, stack);

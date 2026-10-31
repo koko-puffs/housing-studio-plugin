@@ -35,6 +35,19 @@ public enum Icon
     Minus,
     Plus,
     Backpack,
+    Bell,
+    Store,
+    Scale,
+    Hammer,
+    Flask,
+    Brick,
+    Sofa,
+    Undo,
+    Send,
+    Save,
+    File,
+    Link,
+    AlertTriangle,
 }
 
 /// <summary>
@@ -96,6 +109,20 @@ public static class Icons
             "M4 10a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z",
             "M8 10h8", "M8 18h8", "M8 22v-6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v6", "M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2",
         }, false),
+        // The 0.6 flow mock-up's (docs/mockups/flow.html): the Get stage's sources, Finish's fixtures, the journey.
+        [Icon.Bell] = (new[] { "M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9", "M10.3 21a1.9 1.9 0 0 0 3.4 0" }, false),
+        [Icon.Store] = (new[] { "M3 9 4.5 4h15L21 9", "M3 9h18v2a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0z", "M5 13v7h14v-7", "M10 20v-5h4v5" }, false),
+        [Icon.Scale] = (new[] { "M12 3v18", "M5 21h14", "M3 7h18", "M6 7l-3 7a3 3 0 0 0 6 0z", "M18 7l-3 7a3 3 0 0 0 6 0z" }, false),
+        [Icon.Hammer] = (new[] { "m15 12-8.5 8.5a2.1 2.1 0 0 1-3-3L12 9", "M17.6 15 22 10.6", "M20.9 11.7 12.3 3.1a2 2 0 0 0-2.8 0L7 5.6l7.4 7.4" }, false),
+        [Icon.Flask] = (new[] { "M9 3h6", "M10 3v6L4.5 19a1.5 1.5 0 0 0 1.3 2h12.4a1.5 1.5 0 0 0 1.3-2L14 9V3", "M7 15h10" }, false),
+        [Icon.Brick] = (new[] { "M3 3h18v18H3z", "M3 9h18", "M3 15h18", "M9 3v6", "M15 9v6", "M9 15v6" }, false),
+        [Icon.Sofa] = (new[] { "M20 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v3", "M2 16a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-5a2 2 0 0 0-4 0v1.5H6V11a2 2 0 0 0-4 0z", "M4 18v2", "M20 18v2" }, false),
+        [Icon.Undo] = (new[] { "M9 14 4 9l5-5", "M4 9h10.5a5.5 5.5 0 0 1 0 11H11" }, false),
+        [Icon.Send] = (new[] { "m22 2-7 20-4-9-9-4z", "M22 2 11 13" }, false),
+        [Icon.Save] = (new[] { "M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z", "M17 21v-8H7v8", "M7 3v5h8" }, false),
+        [Icon.File] = (new[] { "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z", "M14 2v6h6" }, false),
+        [Icon.Link] = (new[] { "M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7", "M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7" }, false),
+        [Icon.AlertTriangle] = (new[] { "M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z", "M12 9v4", "M12 17h.01" }, false),
     };
 
     private static readonly Dictionary<Icon, (List<SvgPath.Sub> Subs, bool Filled)> Parsed = new();

@@ -80,6 +80,22 @@ public class ClearOutTests
         var stem = SwapNames.FileStem(SwapNames.KeepAs(SwapNames.Home(Side.Interior, "Large", "Shirogane", 1), "interior-20261030-091500"));
         Assert.StartsWith("Large house", stem);
     }
+
+    [Fact]
+    public void WhatWasChosenIsClearedOutOnlyWhileItsStillThere()
+    {
+        var chosen = new[] { At(1, 1, 0), At(2, 5, 0), At(3, 9, 0) };
+        // Read again on coming home: slot 2's piece is now slot 7 at the same spot; slot 3's was moved away; one more is new.
+        var now = new[] { At(1, 1, 0), At(7, 5, 0), At(3, 20, 0), At(8, 30, 0) };
+        var still = ClearOut.StillHere(chosen, now);
+        Assert.Equal(new[] { 1, 7 }, still.Select(p => p.Key));
+        // Never more than chosen, and each piece once.
+        var twice = ClearOut.StillHere(new[] { At(1, 1, 0), At(1, 1, 0) }, new[] { At(1, 1, 0) });
+        Assert.Single(twice);
+        Assert.Empty(ClearOut.StillHere(chosen, Array.Empty<PlacedPiece>()));
+        // Another item at the spot isn't it.
+        Assert.Empty(ClearOut.StillHere(new[] { At(1, 1, 0) }, new[] { new PlacedPiece(1, 999, new Vector3(1, 0, 0), 0, 0) }));
+    }
 }
 
 public class FixtureJobsTests

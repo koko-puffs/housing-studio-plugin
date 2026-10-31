@@ -208,8 +208,70 @@ public class ErrandWordsTests
         Assert.Equal(100_000, HousingStudio.UI.Model.ErrandWords.StepCeiling(75_000, 1));
     }
 
+    private static readonly Func<uint, string> Names = id => id switch { 100 => "Glade Shelf", 200 => "Riviera Table", 300 => "Oasis Rug", _ => $"Item {id}" };
+
+    private static VendorOffer Merchant(uint item, uint price) =>
+        new(item, price, 7, "Material Supplier", 262151, "Shop", 339, "Mist", 72, null, new System.Numerics.Vector3(1, 2, 3), "mist");
+
+    private static ErrandPlan Plan(int free = 10, long ceiling = 50_000, params Need[] needs)
+    {
+        var shop = ShoppingPlanner.Build(needs, new[] { new RetainerStock(1, "Momo", DateTime.UtcNow, new Dictionary<uint, int> { [100] = 2 }, HoldingOrigin.Seen) },
+            id => id == 200 ? new[] { Merchant(200, 1500) } : Array.Empty<VendorOffer>(),
+            new Dictionary<uint, MarketQuote> { [300] = new(300, "Light", DateTime.UtcNow, new List<MarketListing> { new(5000, 1, "Lich", false) }) },
+            _ => null, "mist");
+        return ErrandPlanner.Build(shop, new ErrandOptions { FreeSlots = free, MarketCeiling = ceiling });
+    }
+
+    private static ErrandPlan Three(int free = 10, long ceiling = 50_000) =>
+        Plan(free, ceiling, new Need(100, 2, NeedKind.Piece), new Need(200, 2, NeedKind.Piece), new Need(300, 1, NeedKind.Piece));
+
     [Fact]
-    public void LeftIsGroupedByWhy()
+    public void ATripIsItsLegsInOrderEndingAtHome()
+    {
+        var plan = Three();
+        var route = HousingStudio.UI.Model.ErrandWords.Route(plan, Names, houseBell: true, homeWorld: "Phoenix");
+        var trip = Assert.Single(route);
+        Assert.Equal("TRIP 1", trip.Label);
+        Assert.Equal("5 of 10 bag slots", trip.Rest);
+        Assert.Equal(new[] { ErrandLeg.Bell, ErrandLeg.Vendor, ErrandLeg.Market, ErrandLeg.Home }, trip.Legs.Select(l => l.Kind));
+        Assert.Equal("Bell in your house", trip.Legs[0].Name);
+        Assert.Equal("Momo · Glade Shelf ×2", trip.Legs[0].What);
+        Assert.Equal("free", trip.Legs[0].Gil);
+        Assert.Equal("Mist · Material Supplier", trip.Legs[1].Name);
+        Assert.Equal("Riviera Table ×2", trip.Legs[1].What);
+        Assert.Equal("3,000", trip.Legs[1].Gil);
+        // Another world's board says which.
+        Assert.Equal("Limsa · Market board · Lich", trip.Legs[2].Name);
+        Assert.Equal("≤ 5,250", trip.Legs[2].Gil);
+        Assert.Equal("Home, and place", trip.Legs[3].Name);
+        Assert.Equal("5 pieces go in", trip.Legs[3].What);
+    }
+
+    [Fact]
+    public void LaterTripsAreWorkedOutAgain()
+    {
+        var plan = Three(free: 2);
+        var route = HousingStudio.UI.Model.ErrandWords.Route(plan, Names, houseBell: false, homeWorld: "Lich");
+        Assert.True(route.Count >= 2);
+        Assert.Equal("2 of 2 bag slots", route[0].Rest);
+        Assert.Equal("worked out again after trip 1", route[1].Rest);
+        Assert.Equal("Limsa · Summoning bell", route[0].Legs[0].Name);
+        // The home world's board doesn't name it.
+        Assert.Contains(route.SelectMany(t => t.Legs), l => l.Name == "Limsa · Market board");
+    }
+
+    [Fact]
+    public void TheTitleAndTheButtonNameTheThingsAndTheGil()
+    {
+        var plan = Three();
+        Assert.Equal(("5 things,", "1 trip"), HousingStudio.UI.Model.ErrandWords.Title(plan));
+        Assert.Equal(("Nothing to fetch", (string?)null), HousingStudio.UI.Model.ErrandWords.Title(ErrandPlan.Empty));
+        Assert.Equal("Set out · up to 8,250 gil", HousingStudio.UI.Model.ErrandWords.SetOut(plan.TotalGil));
+        Assert.Equal("Set out", HousingStudio.UI.Model.ErrandWords.SetOut(0));
+    }
+
+    [Fact]
+    public void LeftIsOneRowPerReason()
     {
         var left = new[]
         {
@@ -217,22 +279,81 @@ public class ErrandWordsTests
             new ErrandLeft(new Need(2, 1, NeedKind.Piece), 1, LeftReason.Craft),
             new ErrandLeft(new Need(1, 1, NeedKind.Piece), 1, LeftReason.OverCeiling),
         };
-        var rows = HousingStudio.UI.Model.ErrandWords.Left(left, id => id == 1 ? "Bookshelf" : "Doormat");
+        var rows = HousingStudio.UI.Model.ErrandWords.LeftRows(left, id => id == 1 ? "Bookshelf" : "Doormat");
         Assert.Equal(2, rows.Count);
+        Assert.Equal("1 to craft", rows[0].Title);
         Assert.Equal("Doormat", rows[0].What);
-        Assert.Equal("3 × Bookshelf", rows[1].What);
+        Assert.Equal(new[] { (2u, 1) }, rows[0].Items);
+        Assert.Equal("3 past the market ceiling", rows[1].Title);
+        Assert.Equal("Bookshelf ×3", rows[1].What);
+        Assert.StartsWith("Past your market ceiling", rows[1].Why);
     }
 
     [Fact]
-    public void TheConfirmationNamesTheGil()
+    public void LimitsAndReadysChoiceInOneLine()
     {
-        var shop = ShoppingPlanner.Build(new[] { new Need(200, 2, NeedKind.Piece) }, Array.Empty<RetainerStock>(),
-            id => new[] { new VendorOffer(200, 1500, 1, "NPC", 1, "Shop", 339, "Mist", 72, null, new System.Numerics.Vector3(1, 2, 3), "mist") },
-            new Dictionary<uint, MarketQuote>(), _ => null, "mist");
-        var plan = ErrandPlanner.Build(shop, new ErrandOptions { FreeSlots = 10, MarketCeiling = 50_000 });
-        var words = HousingStudio.UI.Model.ErrandWords.Confirm(plan);
-        Assert.Contains("3,000 gil at vendors", words);
-        Assert.Contains("1 trip", words);
+        Assert.Equal("Market up to 100,000 · home world only · 2 slots spare", HousingStudio.UI.Model.ErrandWords.Limits(100_000, false, 2));
+        Assert.Equal("Nothing from the market · other worlds too · 1 slot spare", HousingStudio.UI.Model.ErrandWords.Limits(0, true, 1));
+        Assert.Equal("Then clears out 14 before placing", HousingStudio.UI.Model.ErrandWords.Then(HousingStudio.UI.Model.ReadyMode.ClearOut, 14, null));
+        Assert.Equal("Then swaps, keeping what's here as “Winter Lodge”", HousingStudio.UI.Model.ErrandWords.Then(HousingStudio.UI.Model.ReadyMode.Swap, 14, "Winter Lodge"));
+        Assert.Null(HousingStudio.UI.Model.ErrandWords.Then(HousingStudio.UI.Model.ReadyMode.Keep, 14, null));
+        Assert.Null(HousingStudio.UI.Model.ErrandWords.Then(HousingStudio.UI.Model.ReadyMode.ClearOut, 0, null));
+    }
+
+    [Fact]
+    public void TheJourneyHasTheTripsStopsThenHomeAndPlace()
+    {
+        var plan = Three();
+        var stops = HousingStudio.UI.Model.ErrandWords.Journey(plan.Trips[0]);
+        Assert.Equal(new[] { ErrandLeg.Bell, ErrandLeg.Vendor, ErrandLeg.Market, ErrandLeg.Home, ErrandLeg.Place }, stops);
+        Assert.Equal(new[] { ErrandLeg.Home, ErrandLeg.Place }, HousingStudio.UI.Model.ErrandWords.Journey(null));
+        var onlyVendor = Plan(10, 50_000, new Need(200, 1, NeedKind.Piece));
+        var two = HousingStudio.UI.Model.ErrandWords.Journey(onlyVendor.Trips[0]);
+        Assert.Equal(new[] { ErrandLeg.Vendor, ErrandLeg.Home, ErrandLeg.Place }, two);
+        Assert.Equal(0, HousingStudio.UI.Model.ErrandWords.JourneyAt(two, ErrandLeg.Vendor));
+        Assert.Equal(0, HousingStudio.UI.Model.ErrandWords.JourneyAt(two, ErrandLeg.Bell));
+        Assert.Equal(1, HousingStudio.UI.Model.ErrandWords.JourneyAt(two, ErrandLeg.Market));
+        Assert.Equal(2, HousingStudio.UI.Model.ErrandWords.JourneyAt(two, ErrandLeg.Place));
+    }
+
+    [Fact]
+    public void WhereItIsAndWhatItsDoingInWords()
+    {
+        Assert.Equal(("At the", "market board"), HousingStudio.UI.Model.ErrandWords.Where(ErrandLeg.Market, false, "Lich"));
+        Assert.Equal(("On the way to", "Material Supplier"), HousingStudio.UI.Model.ErrandWords.Where(ErrandLeg.Vendor, true, "Material Supplier"));
+        Assert.Equal(("On the way", "home"), HousingStudio.UI.Model.ErrandWords.Where(ErrandLeg.Home, true, null));
+        Assert.Equal(("Seeing what's", "still missing"), HousingStudio.UI.Model.ErrandWords.Where(ErrandLeg.Place, false, null, replanning: true));
+        var item = Three().Trips[0].Stops.Single(s => s.Kind == StopKind.Vendor).Items[0];
+        Assert.Equal("Buying Riviera Table ×2", HousingStudio.UI.Model.ErrandWords.Doing(ErrandLeg.Vendor, item, "Riviera Table", "Material Supplier"));
+        Assert.Equal("Taking Riviera Table ×2 from Momo", HousingStudio.UI.Model.ErrandWords.Doing(ErrandLeg.Bell, item, "Riviera Table", "Momo"));
+        Assert.Null(HousingStudio.UI.Model.ErrandWords.Doing(ErrandLeg.Home, null, string.Empty, null));
+        Assert.Equal("1,500 gil each", HousingStudio.UI.Model.ErrandWords.DoingNote(ErrandLeg.Vendor, item, false));
+        Assert.Equal("1,500 gil each · the game asked, and the price matched", HousingStudio.UI.Model.ErrandWords.DoingNote(ErrandLeg.Vendor, item, true));
+        Assert.Equal(("4,000", "of 61,400"), HousingStudio.UI.Model.ErrandWords.Of(4000, 61_400, true));
+        Assert.Equal(("6", "of 12"), HousingStudio.UI.Model.ErrandWords.Of(6, 12, false));
+    }
+
+    [Fact]
+    public void TheSummaryInOneLine()
+    {
+        Assert.Equal("12 got on 2 trips for 58,920 gil", HousingStudio.UI.Model.ErrandWords.Summary(12, 2, 58_920));
+        Assert.Equal("Nothing got, 0 gil spent", HousingStudio.UI.Model.ErrandWords.Summary(0, 1, 0));
+        var got = HousingStudio.UI.Model.ErrandWords.GotList(new Dictionary<uint, int> { [200] = 2, [100] = 1, [300] = 0 }, Names);
+        Assert.Equal(new[] { (100u, "Glade Shelf"), (200u, "Riviera Table ×2") }, got);
+    }
+
+    [Fact]
+    public void ThePlanShownIsTheOneStartedOnlyWhileItStillSaysTheSame()
+    {
+        var a = Three();
+        var b = Three();
+        Assert.NotSame(a, b);
+        Assert.True(ErrandPlanner.Same(a, b));
+        // Fewer free slots, a lower ceiling: another plan, so nothing starts.
+        Assert.False(ErrandPlanner.Same(a, Three(free: 2)));
+        Assert.False(ErrandPlanner.Same(a, Three(ceiling: 1000)));
+        Assert.False(ErrandPlanner.Same(a, ErrandPlan.Empty));
+        Assert.True(ErrandPlanner.Same(ErrandPlan.Empty, ErrandPlan.Empty));
     }
 }
 

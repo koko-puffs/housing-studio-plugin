@@ -74,13 +74,6 @@ public sealed partial class MainWindow : Window
         IsOpen = true;
     }
 
-    /// <summary>Opens Settings (Dalamud's cog, /hstudio settings); during a run, the run.</summary>
-    public void ShowSettings()
-    {
-        sub = runner.Active || Plugin.FixtureRun.Active ? Sub.None : Sub.Settings;
-        IsOpen = true;
-    }
-
     public override void PreDraw() => Theme.PushFrame();
 
     public override void PostDraw()
@@ -121,16 +114,17 @@ public sealed partial class MainWindow : Window
         vm.Observe();
         using (fonts.Push(Face.Sans, 14))
         {
-            // (Setting the fixtures: its Continue and Stop are in Ready.)
-            if (runner.Active || Plugin.FixtureRun.Active) sub = Sub.None;
-            if (ErrandsShown())
+            // (Setting the fixtures: its Continue and Stop are in Ready's Finish stage and on Done.)
+            if (runner.Active || Plugin.FixtureRun.Active || Plugin.Errands.Active) sub = Sub.None;
+            if (sub == Sub.Settings && !Plugin.Errands.Active && !Plugin.Errands.ResultWaiting)
+            {
+                // Settings over the errands' estimate too (its limits are in Getting); back goes back to it.
+                DrawSettings();
+            }
+            else if (ErrandsShown())
             {
                 // Errands (experimental): their estimate, run (its placing too) and summary.
                 DrawErrands();
-            }
-            else if (sub == Sub.Settings)
-            {
-                DrawSettings();
             }
             else if (sub == Sub.Shopping && vm.View is MainView.Ready or MainView.Done)
             {
@@ -208,13 +202,15 @@ public sealed partial class MainWindow : Window
     /// <summary>Do the floor switches or "Near me" leave pieces out?</summary>
     private bool Narrowed => config.NearMe || !config.ShowBasement || !config.ShowGround || !config.ShowUpper;
 
+    /// <param name="clearOut">
+    /// The pieces put away first (Ready's Clear out or Swap), or null. Always given by the caller: only
+    /// a start the player confirmed for clearing out (Ready's button, its Preview, Done's) passes them.
+    /// </param>
     /// <param name="onStarted">Runs once the run has started (the Done view goes then, not when it can't start).</param>
     /// <param name="keepAs">A swap: the name its backup is kept under.</param>
-    private void StartRun(bool dryRun, List<PlanEntry>? entries = null, Action? onStarted = null, string? keepAs = null)
+    private void StartRun(bool dryRun, List<PlanEntry>? entries, IReadOnlyList<PlacedPiece>? clearOut, Action? onStarted = null, string? keepAs = null)
     {
         entries ??= Filtered().ToList();
-        // Clear out, when it's on for this design (Ready): the pieces not in it go to the storeroom first.
-        var clearOut = ChosenClearOut();
         vm.Starting(entries);
         OnFramework(() =>
         {

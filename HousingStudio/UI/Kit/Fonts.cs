@@ -32,7 +32,7 @@ public enum Face
 /// <summary>
 /// The faces at the sizes the mockups use, loaded through Dalamud's font atlas (so they follow
 /// Dalamud's global scale and rebuild with it): Geist 15/14/13/12 (400), 15/14/13 (500), 15/14
-/// (600); Geist Mono 13/12/11; Cormorant Garamond 56/32/28/26/22 (500) and 32 italic (400). All
+/// (600); Geist Mono 13/12/11/10 (10: the Beta tag); Cormorant Garamond 56/32/28/26/22 (500) and 32 italic (400). All
 /// under the SIL Open Font License 1.1, unmodified, with their licences (Resources/Fonts).
 ///
 /// Sizes are CSS sizes (the em). ImGui sizes a font by its line (ascent to descent), so each face
@@ -58,7 +58,7 @@ public sealed class Fonts : IDisposable
         (Face.Sans, 15), (Face.Sans, 14), (Face.Sans, 13), (Face.Sans, 12),
         (Face.SansMedium, 15), (Face.SansMedium, 14), (Face.SansMedium, 13),
         (Face.SansSemibold, 15), (Face.SansSemibold, 14),
-        (Face.Mono, 13), (Face.Mono, 12), (Face.Mono, 11),
+        (Face.Mono, 13), (Face.Mono, 12), (Face.Mono, 11), (Face.Mono, 10),
         (Face.Serif, 56), (Face.Serif, 32), (Face.Serif, 28), (Face.Serif, 26), (Face.Serif, 22),
         (Face.SerifItalic, 32),
     };

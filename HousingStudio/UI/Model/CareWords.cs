@@ -37,6 +37,40 @@ public static class CareWords
                + (c.Others > 0 ? "Put some pieces away first, or leave some out (Near me, floors)." : "Leave some out (Near me, floors) to choose which.");
     }
 
+    /// <summary>
+    /// Ready's item limit chip's detail: when it won't fit, <see cref="Limit"/>; else "447 of the 450
+    /// pieces a house (medium) holds inside, once Start is done." and what counts.
+    /// </summary>
+    /// <param name="clearing">Clear out (or a swap) puts the pieces not in the design away first.</param>
+    public static string LimitDetail(LimitCheck c, Side side, string? houseSize, bool clearing)
+    {
+        if (Limit(c, side, houseSize) is { } over) return over;
+        var home = side == Side.Garden ? "your garden" : $"a {Words.HomeInSentence(houseSize)}";
+        var first = $"{c.After} of the {c.Limit} pieces {home} holds {Where(side)}, once Start is done.";
+        if (c.Others > 0)
+            return first + $" The {Words.Count(c.Others, "piece")} here that {(c.Others == 1 ? "isn't" : "aren't")} in the design count too"
+                   + (clearing ? "." : ", unless Clear out puts them away first.");
+        return clearing ? first + " The pieces Clear out puts away don't count." : first;
+    }
+
+    /// <summary>
+    /// Start's This house card, the line under its name: "Medium house · 312 of 450 pieces placed
+    /// inside"; just the home until what's placed is read; a garden's count alone.
+    /// </summary>
+    public static string HouseLine(Side side, string? houseSize, int? placed, int? limit)
+    {
+        if (side == Side.Garden) return placed is { } g ? Words.Capital(HowFull(g, limit, side)) : "Your garden";
+        var home = SwapNames.Home(side, houseSize, null, null);
+        return placed is { } p ? $"{home} · {HowFull(p, limit, side)}" : home;
+    }
+
+    /// <summary>Start's chip for a check since the last run: "3 changed", "Nothing changed".</summary>
+    public static string Changed(DriftReport r)
+    {
+        var n = r.Moved.Count + r.Added.Count + r.Gone.Count + r.Redyed.Count;
+        return n == 0 ? "Nothing changed" : $"{n} changed";
+    }
+
     /// <summary>"2 moved, 1 added, 3 taken away and 1 in another dye"; "Nothing has changed" when nothing has.</summary>
     public static string Drift(DriftReport r)
     {
@@ -83,6 +117,13 @@ public static class CareWords
     {
         var (next, of) = p.NextPiece;
         return $"Carry on from piece {next} of {of}";
+    }
+
+    /// <summary>Ready's banner: "A run was cut off at piece 38 of 120."</summary>
+    public static string CutOffShort(RunProgress p)
+    {
+        var (next, of) = p.NextPiece;
+        return $"A run was cut off at piece {next} of {of}.";
     }
 
     /// <summary>"A run of this design was cut off at piece 38 of 120 (today 21.14)."</summary>

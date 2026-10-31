@@ -298,7 +298,7 @@ dyeing through Furnishing Color's list) would confirm them: its "menu entries" l
 
 ## Sending diagnostics
 
-Settings → Something not working? → **Start recording**; do the thing that went wrong by hand (and, with the
+Settings → Help → Record what I do → **Start**; do the thing that went wrong by hand (and, with the
 Storeroom tab open, press **Write down the windows' values**); **Stop recording**; **Copy recording +
 log**.
 
