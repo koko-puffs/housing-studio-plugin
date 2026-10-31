@@ -10,14 +10,15 @@ its exact spot, then dyes everything to match.
 
 > **Status: 0.7.8. Placing works in the game; the newer features haven't all been tried in it yet.**
 > 0.7.8: a home saved from inside keeps its **lighting level**, so the site can light its 3D view of
-> the house as the game does: `properties.light` in the file, a whole number 1–5 (5 the brightest),
-> beside `build` and `plot`, in **Save as a build**, **Send to my builds**, and the backups and
-> snapshots a run saves. It's the game's own `HousingManager.GetBrightness()` (5 minus its inverted
-> level, 0–5 with higher darker), read on the framework thread inside a house, apartment or chambers;
-> the game's darkest step, 0 (the lights out), is written as 1, and anything outside 0–5 isn't
-> written. A garden's save, and an older file, have none. This house says it too ("Medium house ·
-> 312 of 450 pieces placed inside · lighting 3 of 5"). The plugin only reads the setting. Unverified
-> in game: that the level read is the one Adjust Lighting shows.
+> the house as the game does: `properties.light` in the file, a whole number 0–5 (5 the brightest,
+> 0 the lights out; the site lights a room at level × 20%), beside `build` and `plot`, in **Save as
+> a build**, **Send to my builds**, and the backups and snapshots a run saves. It's the game's own
+> `HousingManager.GetBrightness()` (5 minus its inverted level, 0–5 with higher darker), read on the
+> framework thread inside a house, apartment or chambers, and written as it is; anything outside
+> 0–5, or a level that can't be read, isn't written. A garden's save, and an older file, have none.
+> This house says it too ("Medium house · 312 of 450 pieces placed inside · lighting 3 of 5", or
+> "lighting off" at 0). The plugin only reads the setting. Unverified in game: that the level read
+> is the one Adjust Lighting shows.
 > 0.7.7: **Take a shot** reads the camera again ("Couldn't read the camera" in 0.7.0 to 0.7.6). The
 > game keeps the camera's view as an affine transform whose fourth column isn't filled in, so as
 > it stood it couldn't be inverted; that column is now set before it's read, the camera's own place
@@ -393,7 +394,7 @@ One window, no tabs: what it shows follows what you're doing.
   an all-in-one house, window, door, decorations, placard and fence, with their dyes; seen in the
   ward, so walk past your house once before saving from inside), every piece with its dye, the
   wallpaper on partitions and the paintings in frames, the plot, and inside, the lighting level
-  (`properties.light`, 1–5, as the game's Adjust Lighting has it; a garden's has none). A garden needs Outdoor
+  (`properties.light`, 0–5, 0 the lights out, as the game's Adjust Lighting has it; a garden's has none). A garden needs Outdoor
   Furnishings opened once, as the game loads its list only then. The name you type gets `.build`.
   Beside it, **Send to my builds** sends the same home straight to your builds on the site (see
   [Sending a house to the site](#sending-a-house-to-the-site)). Linked, the card has a line about

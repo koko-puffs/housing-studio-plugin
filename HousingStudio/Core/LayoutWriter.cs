@@ -23,7 +23,7 @@ public sealed record SavedFixture(string Level, string Type, uint ItemId, string
 
 /// <summary>Everything about the home apart from its furniture.</summary>
 /// <param name="Style">The District line: a district's name, or "Minimalist" (II), as the site reads it.</param>
-/// <param name="Light">Inside: the lighting level, 1–5 (<see cref="Lighting"/>); null for a garden, or when it can't be read.</param>
+/// <param name="Light">Inside: the lighting level, 0–5 (<see cref="Lighting"/>); null for a garden, or when it can't be read.</param>
 public sealed record SavedHome(string? HouseSize, string? Style, IReadOnlyList<SavedFixture> Interior, IReadOnlyList<SavedFixture> Exterior, int? Plot, int? Light = null);
 
 /// <summary>

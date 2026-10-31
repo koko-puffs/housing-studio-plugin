@@ -6,7 +6,7 @@ using Xunit;
 
 namespace HousingStudio.Tests;
 
-/// <summary>The home's lighting level: read from the game, kept in a layout's properties.light (1–5), shown on This house.</summary>
+/// <summary>The home's lighting level: read from the game, kept in a layout's properties.light (0–5), shown on This house.</summary>
 public class LightingTests
 {
     private static SavedHome Inside(int? light) => new("Medium", "Mist", [], [], 12, light);
@@ -17,8 +17,8 @@ public class LightingTests
     [InlineData(3, 3)]
     [InlineData(2, 2)]
     [InlineData(1, 1)]
-    [InlineData(0, 1)] // the game's darkest step (lights out) is the darkest a layout says
-    public void TheGamesLevelIsKeptOneToFive(int game, int level) => Assert.Equal<int?>(level, Lighting.FromGame(game));
+    [InlineData(0, 0)] // the game's darkest step (lights out), as it is
+    public void TheGamesLevelIsKeptZeroToFive(int game, int level) => Assert.Equal<int?>(level, Lighting.FromGame(game));
 
     [Theory]
     [InlineData(6)]
@@ -41,10 +41,22 @@ public class LightingTests
         Assert.Equal<int?>(3, LayoutReader.Parse(json).Light);
     }
 
+    [Fact]
+    public void LightsOutIsWrittenAsZero()
+    {
+        var json = LayoutWriter.Write(Inside(0), [], [], "My house");
+        using var doc = JsonDocument.Parse(json);
+        var light = doc.RootElement.GetProperty("properties").GetProperty("light");
+        Assert.Equal(JsonValueKind.Number, light.ValueKind);
+        Assert.Equal(0, light.GetInt32());
+        Assert.Equal<int?>(0, LayoutReader.Parse(json).Light);
+    }
+
     [Theory]
     [InlineData(null)]
-    [InlineData(0)]
+    [InlineData(-1)]
     [InlineData(6)]
+    [InlineData(255)]
     public void NoLevelOrABadOneIsLeftOut(int? light)
     {
         var json = LayoutWriter.Write(Inside(light), [], [], "My house");
@@ -72,7 +84,10 @@ public class LightingTests
     [InlineData("""{"houseSize":"Small","interiorFurniture":[],"properties":{"light":4}}""", 4)]
     [InlineData("""{"houseSize":"Small","interiorFurniture":[],"properties":{"light":"2"}}""", 2)]
     [InlineData("""{"houseSize":"Small","interiorFurniture":[],"properties":{"light":2.5}}""", null)]
-    [InlineData("""{"houseSize":"Small","interiorFurniture":[],"properties":{"light":0}}""", null)]
+    [InlineData("""{"houseSize":"Small","interiorFurniture":[],"properties":{"light":0}}""", 0)]
+    [InlineData("""{"houseSize":"Small","interiorFurniture":[],"properties":{"light":5}}""", 5)]
+    [InlineData("""{"houseSize":"Small","interiorFurniture":[],"properties":{"light":6}}""", null)]
+    [InlineData("""{"houseSize":"Small","interiorFurniture":[],"properties":{"light":-1}}""", null)]
     [InlineData("""{"houseSize":"Small","interiorFurniture":[],"properties":{"light":9}}""", null)]
     [InlineData("""{"houseSize":"Small","interiorFurniture":[],"properties":{"light":null}}""", null)]
     [InlineData("""{"houseSize":"Small","interiorFurniture":[],"properties":{"light":true}}""", null)]
@@ -83,6 +98,7 @@ public class LightingTests
     {
         Assert.Equal("Medium house · 312 of 450 pieces placed inside · lighting 3 of 5", CareWords.HouseLine(Side.Interior, "Medium", 312, 450, 3));
         Assert.Equal("Small house · lighting 5 of 5", CareWords.HouseLine(Side.Interior, "Small", null, 300, 5));
+        Assert.Equal("Apartment · 12 pieces placed inside · lighting off", CareWords.HouseLine(Side.Interior, "Apartment", 12, null, 0));
         // Not read: as before.
         Assert.Equal("Medium house · 312 of 450 pieces placed inside", CareWords.HouseLine(Side.Interior, "Medium", 312, 450, null));
         // A garden has none.

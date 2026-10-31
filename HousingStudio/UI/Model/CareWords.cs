@@ -56,7 +56,7 @@ public static class CareWords
     /// <summary>
     /// Start's This house card, the line under its name: "Medium house · 312 of 450 pieces placed
     /// inside · lighting 3 of 5"; just the home until what's placed is read; a garden's count alone.
-    /// The lighting level (1–5) only inside, and only when it was read.
+    /// The lighting level (0–5, 0 "lighting off") only inside, and only when it was read.
     /// </summary>
     public static string HouseLine(Side side, string? houseSize, int? placed, int? limit, int? light = null)
     {

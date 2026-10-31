@@ -84,7 +84,7 @@ public sealed unsafe class FixtureReader
 
     /// <summary>
     /// Inside a home (a house, an apartment or private chambers): its lighting level as the game's
-    /// Adjust Lighting has it, 1–5 (<see cref="Lighting.FromGame"/>), or null when it can't be read
+    /// Adjust Lighting has it, 0–5 (<see cref="Lighting.FromGame"/>), or null when it can't be read
     /// (not inside, between areas, or the game's function not found). Only read, never set.
     /// Framework thread only.
     /// </summary>

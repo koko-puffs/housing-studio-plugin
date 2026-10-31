@@ -63,7 +63,7 @@ public sealed class Care
 
     /// <summary>
     /// Pieces placed where you are and on which side, while Start asks (<see cref="WantCount"/>);
-    /// inside, the lighting level too (1–5, or null when it can't be read).
+    /// inside, the lighting level too (0–5, or null when it can't be read).
     /// </summary>
     public (string Home, Side Side, int Placed, int? Light)? Count { get; private set; }
 

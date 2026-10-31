@@ -166,8 +166,8 @@ w1, e1, r1 the districts, h1 "Minimalist", h2 "Minimalist II". From 0.7.8, insid
 level: `HousingManager.GetBrightness()` (`5 - GetInvertedBrightness()`; ClientStructs' data.yml has
 the inverted one as "0-5, higher is darker", and Brio, Ktisis and others light a house at
 `1 - SavedInvertedBrightness * 0.2`, six steps down to 0), only with `IndoorTerritory` set and not
-between areas, written as `properties.light` 1–5 (`Core/Lighting.FromGame`: 0 kept as 1, anything
-over 5, a wrapped byte, left out). Unverified in game: all of it, the
+between areas, written as `properties.light` 0–5 as it is (`Core/Lighting.FromGame`: anything
+over 5, a wrapped byte, left out; the site lights a room at level × 20%). Unverified in game: all of it, the
 +0xCC offset and the outside's table most of all.
 
 **0.3.5: putting things back.** A restore's run moves the backup's pieces back, places what's
