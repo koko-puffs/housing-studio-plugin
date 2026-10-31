@@ -342,6 +342,25 @@ public class ShoppingTextTests
     }
 
     [Fact]
+    public void APiecesDyesAreSaidOnceWhenItComesFromTwoPlaces()
+    {
+        var plan = new Plan();
+        for (var i = 0; i < 3; i++)
+            plan.Entries.Add(new PlanEntry { Target = new Target(i, 100, Vector3.Zero, 0, 3, Floor.Ground, false), State = PieceState.Missing });
+        var momo = new RetainerStock(1, "Momo", null, new Dictionary<uint, int> { [100] = 1 }, HoldingOrigin.AllaganTools);
+        var need = new Need(100, 3, NeedKind.Piece);
+        var shop = new ShoppingPlan(new List<ShoppingLine>
+        {
+            new(need, SourceKind.Retainer, 1) { Retainer = momo },
+            new(need, SourceKind.Unknown, 2),
+        });
+        var text = ShoppingList.WithSources(plan, shop, _ => "Oak Table", _ => "Snow White", _ => null);
+        Assert.Contains("1 × Oak Table (Snow White ×3): on Momo", text);
+        Assert.Contains("2 × Oak Table", text);
+        Assert.Equal(1, text.Split("Snow White ×3").Length - 1);
+    }
+
+    [Fact]
     public void TotalsSayWhatsEstimated()
     {
         var shop = new ShoppingPlan(new List<ShoppingLine>

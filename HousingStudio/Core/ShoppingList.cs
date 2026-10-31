@@ -75,10 +75,12 @@ public static class ShoppingList
             sb.AppendLine("Nothing to get: you have every piece and the dyes for them.");
             return sb.ToString().TrimEnd();
         }
+        // A piece's dyes are said once, on its first line (they're for all its copies, wherever they come from).
+        var described = new HashSet<uint>();
         string Name(ShoppingLine l)
         {
             var name = itemName(l.ItemId);
-            if (l.Need.Kind == NeedKind.Piece)
+            if (l.Need.Kind == NeedKind.Piece && described.Add(l.ItemId))
             {
                 var dyes = DyesOf(plan, l.ItemId, dyeName);
                 if (dyes.Length > 0) name += $" ({dyes})";

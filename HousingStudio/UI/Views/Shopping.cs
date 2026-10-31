@@ -76,22 +76,12 @@ public sealed partial class MainWindow
             Txt.Note("You have every piece, and the dyes for them.");
             Kit.EndPanel();
         }
-        var first = true;
-        foreach (var (source, title) in ShopGroups)
+        var groups = ShopGroupsOf(shop);
+        for (var g = 0; g < groups.Count; g++)
         {
-            var lines = shop.Of(source).OrderBy(l => data.AnyItemName(l.ItemId), StringComparer.OrdinalIgnoreCase).ToList();
-            if (lines.Count == 0) continue;
-            if (!first) Kit.Gap(18);
-            first = false;
-            var count = lines.Sum(l => l.Count);
-            var gil = lines.Sum(l => l.Gil);
-            var head = source switch
-            {
-                SourceKind.Vendor => $"{title} · {ShoppingList.Gil(gil)}",
-                SourceKind.Market when gil > 0 => $"{title} · about {ShoppingList.Gil(gil)}",
-                _ => title,
-            };
-            Kit.EyebrowRow($"{head} · {count}");
+            var (source, head, lines) = groups[g];
+            if (g > 0) Kit.Gap(18);
+            Kit.EyebrowRow(head);
             Kit.Gap(10);
             Kit.BeginPanel($"##shop-{source}", 0, 0, 0);
             for (var i = 0; i < lines.Count; i++) ShopRow(i, lines[i]);
@@ -101,6 +91,30 @@ public sealed partial class MainWindow
         Frame.EndBody();
 
         DrawShoppingFooter(shop, known);
+    }
+
+    private (ShoppingPlan? For, List<(SourceKind Source, string Head, List<ShoppingLine> Lines)> Groups) shopGroups = (null, new());
+
+    /// <summary>The groups to draw, sorted by name, with their headings: worked out again only when the plan changes.</summary>
+    private List<(SourceKind Source, string Head, List<ShoppingLine> Lines)> ShopGroupsOf(ShoppingPlan shop)
+    {
+        if (ReferenceEquals(shopGroups.For, shop)) return shopGroups.Groups;
+        var groups = new List<(SourceKind, string, List<ShoppingLine>)>();
+        foreach (var (source, title) in ShopGroups)
+        {
+            var lines = shop.Of(source).OrderBy(l => data.AnyItemName(l.ItemId), StringComparer.OrdinalIgnoreCase).ToList();
+            if (lines.Count == 0) continue;
+            var gil = lines.Sum(l => l.Gil);
+            var head = source switch
+            {
+                SourceKind.Vendor => $"{title} · {ShoppingList.Gil(gil)}",
+                SourceKind.Market when gil > 0 => $"{title} · about {ShoppingList.Gil(gil)}",
+                _ => title,
+            };
+            groups.Add((source, $"{head} · {lines.Sum(l => l.Count)}", lines));
+        }
+        shopGroups = (shop, groups);
+        return groups;
     }
 
     /// <summary>A row: the item's icon (a dye's swatch), its name and count, where it comes from, the gil, and for a vendor a flag on the map.</summary>
@@ -249,10 +263,14 @@ public sealed partial class MainWindow
     }
 
     /// <summary>Pieces' note for a missing piece that's on a retainer: "On Momo · seen today 05.24", or null.</summary>
+    private (ShoppingPlan? For, Dictionary<uint, List<ShoppingLine>> ByItem) onRetainers = (null, new());
+
     private string? RetainerNote(uint itemId, int count, ShoppingPlan shop)
     {
-        var on = shop.Lines.Where(l => l.Source == SourceKind.Retainer && l.ItemId == itemId && l.Need.Kind == NeedKind.Piece).ToList();
-        if (on.Count == 0) return null;
+        if (!ReferenceEquals(onRetainers.For, shop))
+            onRetainers = (shop, shop.Lines.Where(l => l.Source == SourceKind.Retainer && l.Need.Kind == NeedKind.Piece)
+                .GroupBy(l => l.ItemId).ToDictionary(g => g.Key, g => g.ToList()));
+        if (!onRetainers.ByItem.TryGetValue(itemId, out var on)) return null;
         var held = on.Sum(l => l.Count);
         var r = on[0].Retainer!;
         var seen = r.SeenAt is { } t ? $" (seen {When.Relative(t.ToLocalTime(), DateTime.Now, Clock)})" : string.Empty;

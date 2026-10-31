@@ -130,10 +130,26 @@ public sealed class VendorData
         var topics = Services.Data.GetExcelSheet<TopicSelect>();
         var handlers = Services.Data.GetExcelSheet<PreHandler>();
         var talks = Services.Data.GetExcelSheet<CustomTalk>();
+        // Many NPCs share a menu or a handler: what each leads to is worked out once.
+        var reached = new Dictionary<uint, uint[]>();
         void ShopsOf(uint dataId, HashSet<uint> into, int depth)
         {
             if (dataId == 0 || depth > 3) return;
-            switch (Residential.KindOf(dataId))
+            var kind = Residential.KindOf(dataId);
+            if (kind == NpcDataKind.Other) return;
+            if (kind != NpcDataKind.GilShop && reached.TryGetValue(dataId, out var known))
+            {
+                into.UnionWith(known);
+                return;
+            }
+            var found = new HashSet<uint>();
+            Walk(dataId, kind, found, depth);
+            if (kind != NpcDataKind.GilShop) reached[dataId] = found.ToArray();
+            into.UnionWith(found);
+        }
+        void Walk(uint dataId, NpcDataKind kind, HashSet<uint> into, int depth)
+        {
+            switch (kind)
             {
                 case NpcDataKind.GilShop:
                     if (shopItems.ContainsKey(dataId)) into.Add(dataId);
@@ -154,16 +170,13 @@ public sealed class VendorData
             }
         }
         var npcShops = new Dictionary<uint, HashSet<uint>>();
+        var scratch = new HashSet<uint>();
         foreach (var npc in Services.Data.GetExcelSheet<ENpcBase>())
         {
-            HashSet<uint>? shops = null;
+            scratch.Clear();
             foreach (var d in npc.ENpcData)
-            {
-                if (d.RowId == 0) continue;
-                shops ??= new HashSet<uint>();
-                ShopsOf(d.RowId, shops, 0);
-            }
-            if (shops is { Count: > 0 }) npcShops[npc.RowId] = shops;
+                ShopsOf(d.RowId, scratch, 0);
+            if (scratch.Count > 0) npcShops[npc.RowId] = new HashSet<uint>(scratch);
         }
 
         // Where they stand: their Level rows, and the residential wards' layouts.
@@ -180,12 +193,14 @@ public sealed class VendorData
             AddSpot(npc, new Spot(level.Territory.RowId, level.Map.RowId, new System.Numerics.Vector3(level.X, level.Y, level.Z)));
         }
         var territories = Services.Data.GetExcelSheet<TerritoryType>();
+        var layoutsRead = new HashSet<string>();
         foreach (var t in territories)
         {
             if (Residential.DistrictOf(t.Name.ExtractText()) == null) continue;
             var bg = t.Bg.ExtractText();
             var cut = bg.IndexOf("/level/", StringComparison.Ordinal);
-            if (cut < 0) continue;
+            // Several rows can share a ward's layout: each is read once.
+            if (cut < 0 || !layoutsRead.Add(bg[..cut])) continue;
             foreach (var file in new[] { "planevent.lgb", "planlive.lgb", "bg.lgb" })
             {
                 LgbFile? lgb = null;

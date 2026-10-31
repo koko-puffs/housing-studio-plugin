@@ -57,9 +57,15 @@ public sealed class Shopping : IDisposable
     public static string? DataCentre()
     {
         if (!Services.PlayerState.IsLoaded) return null;
+        // Read again only when the world changes (this is asked every frame the list is shown).
+        var world = Services.PlayerState.CurrentWorld.RowId;
+        if (world == dataCentreOf.World) return dataCentreOf.Name;
         var dc = Services.PlayerState.CurrentWorld.ValueNullable?.DataCenter.ValueNullable?.Name.ExtractText();
-        return string.IsNullOrEmpty(dc) ? null : dc;
+        dataCentreOf = (world, string.IsNullOrEmpty(dc) ? null : dc);
+        return dataCentreOf.Name;
     }
+
+    private static (uint World, string? Name) dataCentreOf = (uint.MaxValue, null);
 
     private (Plan? Plan, object? Dyes, bool Vendors, int Market, int Record, int Allagan, bool Prices, string? Scope, string? District, long Minute) key;
     private (ShoppingPlan Shop, IReadOnlyList<Need> Needs, IReadOnlyList<uint> Priced, string? Scope) last = (ShoppingPlan.Empty, Array.Empty<Need>(), Array.Empty<uint>(), null);
@@ -74,6 +80,24 @@ public sealed class Shopping : IDisposable
     public ShoppingPlan Plan(Plan? plan, IReadOnlyList<(byte Stain, string Name, int Count)> dyesToBuy, string? district)
     {
         if (plan == null) return ShoppingPlan.Empty;
+        // It's built while the window draws: a failure here mustn't stop the window (or a run), so the
+        // last plan stands and it's logged once.
+        try
+        {
+            return Build(plan, dyesToBuy, district);
+        }
+        catch (Exception ex)
+        {
+            if (!planFailed) Services.Log.Warning(ex, "Couldn't work out the shopping list");
+            planFailed = true;
+            return last.Shop;
+        }
+    }
+
+    private bool planFailed;
+
+    private ShoppingPlan Build(Plan plan, IReadOnlyList<(byte Stain, string Name, int Count)> dyesToBuy, string? district)
+    {
         var scope = config.LookUpMarketPrices ? DataCentre() : null;
         var k = (plan, (object?)dyesToBuy, Vendors.Ready, Market.Version, Record.Version, Allagan.Version, config.LookUpMarketPrices, scope, district,
             DateTime.UtcNow.Ticks / TimeSpan.TicksPerMinute);

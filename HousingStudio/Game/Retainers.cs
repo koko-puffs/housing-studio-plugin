@@ -179,6 +179,7 @@ public sealed class AllaganTools
     private readonly ICallGateSubscriber<bool, HashSet<ulong>> ownedByActive;
     private readonly ICallGateSubscriber<ulong, HashSet<ulong[]>> characterItems;
     private DateTime nextRefresh;
+    private DateTime lastAsked;
     private bool loggedFailure;
 
     public AllaganTools()
@@ -196,11 +197,12 @@ public sealed class AllaganTools
 
     public int Version { get; private set; }
 
-    /// <summary>Asks Allagan Tools again (once a minute, or now when <paramref name="soon"/>).</summary>
+    /// <summary>Asks Allagan Tools again (once a minute, or when <paramref name="soon"/> within 5 seconds: a run changes the match every piece).</summary>
     public void Refresh(bool soon = false)
     {
         var now = DateTime.UtcNow;
-        if (!soon && now < nextRefresh) return;
+        if (now < (soon ? lastAsked + TimeSpan.FromSeconds(5) : nextRefresh)) return;
+        lastAsked = now;
         nextRefresh = now + RefreshEvery;
         List<RetainerStock> stocks;
         try
