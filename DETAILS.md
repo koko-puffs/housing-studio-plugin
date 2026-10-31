@@ -8,7 +8,16 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.7.7. Placing works in the game; the newer features haven't all been tried in it yet.**
+> **Status: 0.7.8. Placing works in the game; the newer features haven't all been tried in it yet.**
+> 0.7.8: a home saved from inside keeps its **lighting level**, so the site can light its 3D view of
+> the house as the game does: `properties.light` in the file, a whole number 1–5 (5 the brightest),
+> beside `build` and `plot`, in **Save as a build**, **Send to my builds**, and the backups and
+> snapshots a run saves. It's the game's own `HousingManager.GetBrightness()` (5 minus its inverted
+> level, 0–5 with higher darker), read on the framework thread inside a house, apartment or chambers;
+> the game's darkest step, 0 (the lights out), is written as 1, and anything outside 0–5 isn't
+> written. A garden's save, and an older file, have none. This house says it too ("Medium house ·
+> 312 of 450 pieces placed inside · lighting 3 of 5"). The plugin only reads the setting. Unverified
+> in game: that the level read is the one Adjust Lighting shows.
 > 0.7.7: **Take a shot** reads the camera again ("Couldn't read the camera" in 0.7.0 to 0.7.6). The
 > game keeps the camera's view as an affine transform whose fourth column isn't filled in, so as
 > it stood it couldn't be inverted; that column is now set before it's read, the camera's own place
@@ -383,7 +392,8 @@ One window, no tabs: what it shows follows what you're doing.
   every floor's walls, flooring and light, the house's window and door, its outside (roof, walls or
   an all-in-one house, window, door, decorations, placard and fence, with their dyes; seen in the
   ward, so walk past your house once before saving from inside), every piece with its dye, the
-  wallpaper on partitions and the paintings in frames, and the plot. A garden needs Outdoor
+  wallpaper on partitions and the paintings in frames, the plot, and inside, the lighting level
+  (`properties.light`, 1–5, as the game's Adjust Lighting has it; a garden's has none). A garden needs Outdoor
   Furnishings opened once, as the game loads its list only then. The name you type gets `.build`.
   Beside it, **Send to my builds** sends the same home straight to your builds on the site (see
   [Sending a house to the site](#sending-a-house-to-the-site)). Linked, the card has a line about
@@ -711,7 +721,8 @@ one saved there.
   activity log or the diagnostics.
 - **Sending.** The button needs a link and a home you may decorate. It reads what's placed on the
   framework thread, as saving does (`Backups.Layout`: the same JSON a `.build` holds), names it
-  ("Mist house, 31 Oct 2026"; rename it on the site), works out the site's code for the home
+  ("Mist house, 31 Oct 2026"; rename it on the site; inside, with its lighting level, as a saved
+  file has it), works out the site's code for the home
   (`SiteLink.HouseCode`: `s1i2` is a medium house in Mist), then posts it from a worker thread to
   `{SupabaseUrl}/rest/v1/rpc/hs_plugin_save_build` with the site's publishable key as `apikey` and
   the token in the body, waiting 20 seconds at most (`Core/SiteLink.cs`). Under the buttons it says
@@ -894,7 +905,7 @@ It builds on Linux and macOS too (for checking); it only runs in the game on Win
 ```
 HousingStudio/
   Core/        game-free, unit-tested: reading .build/.json, axes and turns, plots, floors,
-               dyes, matching, the shopping list, pacing, backups, sending to the site
+               dyes, the lighting level (Lighting), matching, the shopping list, pacing, backups, sending to the site
                (SiteLink) and its other calls and their answers (SiteLink.Calls: the inbox,
                homes, visitors, shots), the site's address of a home (SiteHome, HomeAddress),
                a shot's camera pose and size (ShotPose: CameraMath, ShotSize); and for the automation the
@@ -907,7 +918,7 @@ HousingStudio/
                UiRecorder (diagnostics recording).
   Game/        GameData (Lumina sheets), HousingContext (where you are), HousingEditor (the
                editor's state, pick up / set down), HousingActions (item menus, the dye window,
-               aiming the held piece), FurnitureReader, FixtureReader (the home's fixtures, inside and out, for saving it), InventoryReader, PlaceAnywhere;
+               aiming the held piece), FurnitureReader, FixtureReader (the home's fixtures, inside and out, and its lighting level, for saving it), InventoryReader, PlaceAnywhere;
                VendorData (who sells what, where), MarketPrices (Universalis), Retainers
                (the retainer record, Allagan Tools' IPC), AutoRetainer (retainers' names over IPC);
                HomeReader (the home you're in as the site's address, and the camera for a shot).

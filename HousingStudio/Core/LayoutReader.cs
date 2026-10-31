@@ -60,11 +60,13 @@ public static class LayoutReader
 
             string? buildName = null;
             int? plot = null;
+            int? light = null;
             if (root.TryGetProperty("properties", out var props) && props.ValueKind == JsonValueKind.Object)
             {
                 if (props.TryGetProperty("build", out var b) && b.ValueKind == JsonValueKind.String) buildName = b.GetString();
                 if (props.TryGetProperty("plot", out var p) && TryNumber(p, out var pn) && pn is >= 1 and <= 60 && pn == Math.Floor(pn))
                     plot = (int)pn;
+                if (props.TryGetProperty("light", out var l) && TryNumber(l, out var ln)) light = Lighting.FromFile(ln);
             }
 
             // A garden far from the plot's origin is in the ward's own coordinates (the site's
@@ -84,6 +86,7 @@ public static class LayoutReader
                 District = Districts.FromName(districtName),
                 BuildName = string.IsNullOrWhiteSpace(buildName) ? null : buildName.Trim(),
                 Plot = plot,
+                Light = light,
                 InteriorScale = interiorScale,
                 ExteriorScale = exteriorScale,
                 Interior = interior,

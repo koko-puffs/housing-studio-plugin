@@ -61,8 +61,11 @@ public sealed class Care
     /// <summary>The last Check for changes, or null.</summary>
     public DriftCheck? LastCheck { get; private set; }
 
-    /// <summary>Pieces placed where you are and on which side, while Start asks (<see cref="WantCount"/>).</summary>
-    public (string Home, Side Side, int Placed)? Count { get; private set; }
+    /// <summary>
+    /// Pieces placed where you are and on which side, while Start asks (<see cref="WantCount"/>);
+    /// inside, the lighting level too (1–5, or null when it can't be read).
+    /// </summary>
+    public (string Home, Side Side, int Placed, int? Light)? Count { get; private set; }
 
     // ---------------------------------------------------------------------------------------------
     // Every frame.
@@ -127,7 +130,7 @@ public sealed class Care
         {
             countAt = DateTime.UtcNow + CountEvery;
             Count = CurrentHome != null && ctx.HasPermission && !ctx.Busy && session.ReadPlacedNow(out var pieces, out _, out _)
-                ? (CurrentHome, ctx.Side!.Value, pieces.Count)
+                ? (CurrentHome, ctx.Side!.Value, pieces.Count, ctx.Side == Side.Interior ? FixtureReader.LightOfInterior() : null)
                 : null;
         }
     }

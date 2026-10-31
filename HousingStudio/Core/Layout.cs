@@ -57,6 +57,9 @@ public sealed class Layout
     /// <summary>The plot a build's garden was laid out on (properties.plot, 1–60), or null.</summary>
     public int? Plot { get; init; }
 
+    /// <summary>The interior's lighting level when it was saved (properties.light, 1–5, 5 the brightest), or null.</summary>
+    public int? Light { get; init; }
+
     public float InteriorScale { get; init; } = 1;
     public float ExteriorScale { get; init; } = 1;
 

@@ -134,7 +134,8 @@ public static class Backups
             var home = new SavedHome(size, Districts.StyleOfInterior(ctx.TerritoryName) ?? StyleOf(ctx.District),
                 Try(() => fixtures.ReadInterior(size), [], "the fixtures"),
                 size == "Apartment" ? [] : Try(() => fixtures.ExteriorOfHome(ctx), [], "the outside"),
-                FixtureReader.PlotOfInterior());
+                FixtureReader.PlotOfInterior(),
+                FixtureReader.LightOfInterior());
             var inside = pieces.Select(p => Saved(p, p.Position, p.Yaw)).ToList();
             return Json(() => LayoutWriter.Write(home, inside, [], title), out json, out why);
         }

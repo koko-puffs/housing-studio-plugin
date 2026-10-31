@@ -55,13 +55,15 @@ public static class CareWords
 
     /// <summary>
     /// Start's This house card, the line under its name: "Medium house · 312 of 450 pieces placed
-    /// inside"; just the home until what's placed is read; a garden's count alone.
+    /// inside · lighting 3 of 5"; just the home until what's placed is read; a garden's count alone.
+    /// The lighting level (1–5) only inside, and only when it was read.
     /// </summary>
-    public static string HouseLine(Side side, string? houseSize, int? placed, int? limit)
+    public static string HouseLine(Side side, string? houseSize, int? placed, int? limit, int? light = null)
     {
         if (side == Side.Garden) return placed is { } g ? Words.Capital(HowFull(g, limit, side)) : "Your garden";
         var home = SwapNames.Home(side, houseSize, null, null);
-        return placed is { } p ? $"{home} · {HowFull(p, limit, side)}" : home;
+        var line = placed is { } p ? $"{home} · {HowFull(p, limit, side)}" : home;
+        return Lighting.Valid(light) is { } l ? $"{line} · {Lighting.Words(l)}" : line;
     }
 
     /// <summary>Start's chip for a check since the last run: "3 changed", "Nothing changed".</summary>

@@ -83,6 +83,35 @@ public sealed unsafe class FixtureReader
     }
 
     /// <summary>
+    /// Inside a home (a house, an apartment or private chambers): its lighting level as the game's
+    /// Adjust Lighting has it, 1–5 (<see cref="Lighting.FromGame"/>), or null when it can't be read
+    /// (not inside, between areas, or the game's function not found). Only read, never set.
+    /// Framework thread only.
+    /// </summary>
+    public static int? LightOfInterior()
+    {
+        try
+        {
+            if (Services.Condition[Dalamud.Game.ClientState.Conditions.ConditionFlag.BetweenAreas]
+                || Services.Condition[Dalamud.Game.ClientState.Conditions.ConditionFlag.BetweenAreas51])
+                return null;
+            var hm = HousingManager.Instance();
+            if (hm == null || hm->IndoorTerritory == null) return null;
+            return Lighting.FromGame(hm->GetBrightness());
+        }
+        catch (Exception ex)
+        {
+            // An extra: a home is saved without it rather than not at all. Said once (This house
+            // asks every 2 s).
+            if (!lightFailed) Services.Log.Warning(ex, "Couldn't read the home's lighting");
+            lightFailed = true;
+            return null;
+        }
+    }
+
+    private static bool lightFailed;
+
+    /// <summary>
     /// The outside of a plot (1-60) in the ward you're in, or null when it can't be read (not in a
     /// ward, or no house on it). A themed house (all its parts one item) is written as its walls.
     /// </summary>

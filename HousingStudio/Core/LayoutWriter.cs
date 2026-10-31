@@ -23,7 +23,8 @@ public sealed record SavedFixture(string Level, string Type, uint ItemId, string
 
 /// <summary>Everything about the home apart from its furniture.</summary>
 /// <param name="Style">The District line: a district's name, or "Minimalist" (II), as the site reads it.</param>
-public sealed record SavedHome(string? HouseSize, string? Style, IReadOnlyList<SavedFixture> Interior, IReadOnlyList<SavedFixture> Exterior, int? Plot);
+/// <param name="Light">Inside: the lighting level, 1–5 (<see cref="Lighting"/>); null for a garden, or when it can't be read.</param>
+public sealed record SavedHome(string? HouseSize, string? Style, IReadOnlyList<SavedFixture> Interior, IReadOnlyList<SavedFixture> Exterior, int? Plot, int? Light = null);
 
 /// <summary>
 /// Writes what's placed as a layout, the same JSON Housing Studio's site writes for a build
@@ -74,6 +75,7 @@ public static class LayoutWriter
         var props = new JsonObject();
         if (!string.IsNullOrWhiteSpace(buildName)) props["build"] = buildName;
         if (home.Plot is >= 1 and <= 60) props["plot"] = home.Plot;
+        if (Lighting.Valid(home.Light) is { } light) props["light"] = light;
         root["properties"] = props;
         return root.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
     }

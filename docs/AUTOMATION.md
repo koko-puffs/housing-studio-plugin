@@ -162,7 +162,12 @@ frame's painting, an angler's canvas's fish print) is the ushort at +0xCC of its
 `SharedGroupLayoutInstance.StainInfo` (MakePlace's `MaterialSlot1`), a VaseFlower number (rows
 2001-2999 wallpapers, 1001-1999 paintings, 3001-6999 the four sizes of fish print), written as
 `properties.material` {name, itemId}. The style comes from the interior's territory name: s1, f1,
-w1, e1, r1 the districts, h1 "Minimalist", h2 "Minimalist II". Unverified in game: all of it, the
+w1, e1, r1 the districts, h1 "Minimalist", h2 "Minimalist II". From 0.7.8, inside, the lighting
+level: `HousingManager.GetBrightness()` (`5 - GetInvertedBrightness()`; ClientStructs' data.yml has
+the inverted one as "0-5, higher is darker", and Brio, Ktisis and others light a house at
+`1 - SavedInvertedBrightness * 0.2`, six steps down to 0), only with `IndoorTerritory` set and not
+between areas, written as `properties.light` 1–5 (`Core/Lighting.FromGame`: 0 kept as 1, anything
+over 5, a wrapped byte, left out). Unverified in game: all of it, the
 +0xCC offset and the outside's table most of all.
 
 **0.3.5: putting things back.** A restore's run moves the backup's pieces back, places what's

@@ -137,13 +137,13 @@ public sealed partial class MainWindow
     /// <summary>The home and the run count the changes were opened for: another home, or a run since, closes them.</summary>
     private (string? Home, int Run) changesFor;
 
-    private (Side Side, string? Size, int? Placed, int? Limit, string Line) houseLine = (Side.Interior, null, null, null, string.Empty);
+    private (Side Side, string? Size, int? Placed, int? Limit, int? Light, string Line) houseLine = (Side.Interior, null, null, null, null, string.Empty);
 
     private (DriftCheck? Check, string Label) changedChip = (null, string.Empty);
 
     /// <summary>
     /// In a home you may decorate: the card for it. Its name, the home and how full it is ("Medium
-    /// house · 312 of 450 pieces placed inside", read every 2 s while Start shows) with a meter; a chip
+    /// house · 312 of 450 pieces placed inside · lighting 3 of 5", read every 2 s while Start shows) with a meter; a chip
     /// for what changed since your last run here (with a snapshot), which checks and opens the changes
     /// under the card; the home on Housing Studio (verified, Verify as …, or Post it); Save as a
     /// build, Send to my builds, and Take a shot when it's verified as one of your designs.
@@ -153,11 +153,13 @@ public sealed partial class MainWindow
         var ctx = session.Context;
         if (ctx.Side is not { } side || !ctx.HasPermission) return;
         care?.WantCount();
-        int? placed = care?.Count is { } count && count.Home == care.CurrentHome && count.Side == side ? count.Placed : null;
+        int? placed = null, light = null;
+        if (care?.Count is { } count && count.Home == care.CurrentHome && count.Side == side)
+            (placed, light) = (count.Placed, count.Light);
         var limit = ItemLimits.Of(side, ctx.HouseSize);
         var hl = houseLine;
-        if (hl.Line.Length == 0 || hl.Side != side || hl.Size != ctx.HouseSize || hl.Placed != placed || hl.Limit != limit)
-            hl = houseLine = (side, ctx.HouseSize, placed, limit, CareWords.HouseLine(side, ctx.HouseSize, placed, limit));
+        if (hl.Line.Length == 0 || hl.Side != side || hl.Size != ctx.HouseSize || hl.Placed != placed || hl.Limit != limit || hl.Light != light)
+            hl = houseLine = (side, ctx.HouseSize, placed, limit, light, CareWords.HouseLine(side, ctx.HouseSize, placed, limit, light));
 
         // Since your last run: a chip when there's a snapshot of this home.
         var home = care?.CurrentHome;
