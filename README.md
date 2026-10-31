@@ -11,6 +11,10 @@ everything to match. It saves a backup first, so **Put them back** can undo a ru
 It also works the other way: **Save this house as a build** saves the home you're in (furniture,
 dyes, fixtures, the outside and wallpapers) as a file you can upload to the site.
 
+Linked to your account on the site, it opens builds and designs you **send to the game**, can
+**verify** your home as your design and send **shots** of it to its page, and shows when a home
+you visit is a design on Housing Studio (like, save or stamp it from there).
+
 Ready can also **clear out** what isn't in the design first, or **swap** designs and swap back
 later. The **shopping list** says where each missing piece comes from (your retainers, a vendor,
 the market board, or crafting). Settings → **Beta** holds the newer features not yet

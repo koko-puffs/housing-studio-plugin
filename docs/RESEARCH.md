@@ -193,3 +193,39 @@ is in [AUTOMATION.md](AUTOMATION.md); the sources:
 - **No new dependencies**: ECommons would have given the same helpers, but it's a large shared library
   that also hooks the game on its own; the few helpers needed (firing a callback, reading a menu) are
   written here in `Automation/GameUi.cs`.
+
+## 7. The site link (0.7): a home's address, and the camera
+
+Checked against FFXIVClientStructs (main, October 2026) and Dalamud 15.0.3.9's sources; none of it
+yet seen in the game.
+
+- **A home's address.** `IndoorTerritory.HouseId` packs the plot byte (`HouseUnit`: 0x80 the
+  apartment flag; below it the plot index, or an apartment's division), the ward index (6 bits) and
+  the room (10 bits), the territory and the world. `OutdoorTerritory` holds 60 plots (`_plots` is
+  60 long) and the plugin's plot table numbers them 1–60 from the plot index + 1, so the index counts
+  both divisions: 0–29 the main ward, 30–59 the subdivision (31–60 on the site). An apartment's
+  division is 0 for the main ward's building, 1 for the subdivision's (`GetCurrentPlot` returns the
+  plot byte: −128, 0x80, for the main division, −127 for the subdivision). The room is 0 for a
+  house itself (its private chambers share its ward and plot, so 0 must be the house) and 0x3FF
+  (`IsWorkshop`) for the company workshop; so a chamber's and an apartment's numbers are taken as
+  they're shown, from 1 ("Private Chambers 3", "Apartment No. 41"). Not yet seen: whether the
+  number shown is the room field itself (if it's one less, every chamber and apartment would be
+  one off, and verifying would say the address isn't the design's). The world is the one you're on
+  (`IPlayerState.CurrentWorld`), as 0.4.2 found the house id doesn't always carry it. The district
+  is the house id's territory's first two letters (s1 Mist, f1 the Lavender Beds, w1 the Goblet, e1
+  Shirogane, r1 Empyreum), then `GetOriginalHouseTerritoryTypeId`'s (a Minimalist interior's own
+  name, "h1i2", says no district).
+- **The camera.** `Graphics.Scene.CameraManager.Instance()->Cameras[CameraIndex]` is the scene
+  camera drawing the frame (Group Pose's while it's on; `Game.Control.CameraManager`'s active camera
+  is the game's own). Its `ViewMatrix` is row-vector, world to view (ClientStructs' own
+  `WorldToScreen` multiplies `ViewMatrix * RenderCamera->ProjectionMatrix`), so the camera is its
+  inverse. `Render.Camera.FoV` is in radians (the game's default zoom keeps it near 0.78, 45°), but
+  whether it's vertical isn't stated: the vertical field of view is taken from the projection
+  instead, 2·atan(1 / M22), true for any perspective projection however its depth is mapped. Each
+  shot logs both (and the projection's aspect beside `AspectRatio`) to /xllog for checking.
+- **The picture.** `ITextureProvider.CreateFromImGuiViewportAsync` with `TakeBeforeImGuiRender`
+  copies the back buffer on the next framework tick, before ImGui renders (no Dalamud windows in it;
+  the game's own HUD is, unless hidden). `CreateFromExistingTextureAsync` resizes (drawn into a new
+  texture), `ITextureReadbackProvider.SaveToStreamAsync` writes it with WIC (JPEG's container is
+  found by its MIME type, else `GUID_ContainerFormatJpeg`; `ImageQuality` is a float, 0–1). Both
+  dispose the texture they're given unless `leaveWrapOpen` is set.
