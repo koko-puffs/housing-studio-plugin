@@ -74,13 +74,6 @@ public sealed partial class MainWindow : Window
         IsOpen = true;
     }
 
-    /// <summary>Opens Settings (Dalamud's cog, /hstudio settings); during a run, the run.</summary>
-    public void ShowSettings()
-    {
-        sub = runner.Active || Plugin.FixtureRun.Active ? Sub.None : Sub.Settings;
-        IsOpen = true;
-    }
-
     public override void PreDraw() => Theme.PushFrame();
 
     public override void PostDraw()
@@ -119,6 +112,7 @@ public sealed partial class MainWindow : Window
     private void DrawBody()
     {
         vm.Observe();
+        NoteErrandsRun();
         FixturesAfterPlacing();
         using (fonts.Push(Face.Sans, 14))
         {

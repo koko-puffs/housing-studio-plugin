@@ -98,7 +98,7 @@ public sealed unsafe class FixtureRunner
 
     public void Continue() => queue.Continue();
 
-    /// <summary>Both switches on: Settings → Experimental and its "Set the fixtures for me".</summary>
+    /// <summary>Both switches on: Settings → Beta: Experimental features and "Set the fixtures for me".</summary>
     public bool Enabled => config.Experimental && config.SetFixturesForYou;
 
     /// <summary>The design's fixtures for the side you're on, against what's set and what's in your bags. Framework thread.</summary>
@@ -120,7 +120,7 @@ public sealed unsafe class FixtureRunner
     /// <summary>Why "Set them for me" can't start now, or null.</summary>
     public string? CanStart()
     {
-        if (!Enabled) return "Switch it on in Settings → Experimental.";
+        if (!Enabled) return "Switch it on in Settings → Beta.";
         if (Active) return "Already setting them.";
         if (OtherRunActive?.Invoke() == true) return "Wait until the run is done.";
         var ctx = session.Context;

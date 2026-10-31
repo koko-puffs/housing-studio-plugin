@@ -11,8 +11,8 @@ using static HousingStudio.UI.Theme;
 namespace HousingStudio.UI;
 
 /// <summary>
-/// Linking to Housing Studio (Settings): a token from the site, pasted once, kept masked, Unlink.
-/// Then Start's Send to my builds, beside Save this house as a build: the same layout the save
+/// Linking to Housing Studio (Settings → Getting): a token from the site, pasted once, kept masked,
+/// Unlink. Then Start's Send to my builds, beside Save as a build on This house: the same layout the save
 /// writes, sent to your builds on the site (Core/SiteLink.cs) off the framework thread, and how
 /// it went under the buttons. The token is never logged, nor put in the activity log.
 /// </summary>
@@ -30,55 +30,54 @@ public sealed partial class MainWindow
 
     private bool Sending => sendState is { Result: null };
 
-    /// <summary>Settings: Link to Housing Studio (paste a token, Link) or, linked, the token masked and Unlink.</summary>
-    private void DrawSiteLink()
+    private (string? Token, string Note) linkedNote = (null, string.Empty);
+
+    /// <summary>
+    /// Settings → Getting, one row: "Housing Studio account · Linked · hsp_••••3f2a" with Unlink, or,
+    /// not linked, the token field (masked) with Link and Get a token under its words.
+    /// </summary>
+    private void DrawAccountRow(int index)
     {
-        Kit.EyebrowRow("Housing Studio");
-        Kit.Gap(10);
-        Kit.BeginPanel("##site-link", 0, 0, 0);
+        const string name = "Housing Studio account";
         if (Linked)
         {
+            if (linkedNote.Token != config.SiteToken) linkedNote = (config.SiteToken, $"Linked · {SiteLink.Masked(config.SiteToken)}");
             const string unlink = "Unlink";
-            SetRow(0, "Linked to Housing Studio",
-                $"Token {SiteLink.Masked(config.SiteToken)}. Send to my builds, on Start, puts the house you're in straight into your builds on the site.",
-                Kit.ButtonWidth(unlink, BtnSize.Sm), S(34), p =>
-                {
-                    if (Kit.Button("##site-unlink", p, unlink, Btn.Glass, BtnSize.Sm, null, 0, false,
-                            "Forget the token here. Revoke it on the site too if you won't use it again."))
-                    {
-                        config.SiteToken = string.Empty;
-                        config.Save();
-                        sendState = null;
-                        Notify("Unlinked from Housing Studio");
-                    }
-                });
-        }
-        else
-        {
-            var width = Kit.Width - S(40);
-            const string link = "Link";
-            const string get = "Get a token";
-            var linkW = Kit.ButtonWidth(link, BtnSize.Md, null, Btn.Primary);
-            var getW = Kit.ButtonWidth(get, BtnSize.Md, null, Btn.Quiet);
-            var note = "Send houses straight to your builds on the site. Make a token there (Settings → Housing Studio → Send houses from the game) and paste it here.";
-            if (tokenProblem != null) note += " " + tokenProblem;
-            SetRow(0, "Link to Housing Studio", note, width, S(40), p =>
+            SetRow(index, name, linkedNote.Note, Kit.ButtonWidth(unlink, BtnSize.Tiny, null, Btn.Quiet), Kit.ButtonHeight(BtnSize.Tiny), p =>
             {
-                var fieldW = MathF.Max(S(120), width - linkW - getW - S(16));
-                var text = tokenDraft;
-                if (Kit.Field("##site-token", p, fieldW, ref text, "hsp_…", null, 128, ImGuiInputTextFlags.Password))
+                if (Kit.Button("##site-unlink", p, unlink, Btn.Quiet, BtnSize.Tiny, null, 0, false,
+                        "Forget the token here. Revoke it on the site too if you won't use it again."))
                 {
-                    tokenDraft = text;
-                    tokenProblem = null;
+                    config.SiteToken = string.Empty;
+                    config.Save();
+                    sendState = null;
+                    Notify("Unlinked from Housing Studio");
                 }
-                var x = p.X + fieldW + S(8);
-                if (Kit.Button("##site-link-btn", new Vector2(x, p.Y), link, Btn.Primary, BtnSize.Md, null, 0, tokenDraft.Trim().Length == 0))
-                    LinkToken();
-                if (Kit.Button("##site-get", new Vector2(x + linkW + S(8), p.Y), get, Btn.Quiet))
-                    Dalamud.Utility.Util.OpenLink(SiteLink.TokensUrl);
-            }, below: true);
+            }, tip: "Send to my builds, on Start, puts the house you're in straight into your builds on the site.", icon: Icon.Link);
+            return;
         }
-        Kit.EndPanel();
+        var width = Kit.Width - S(28);
+        const string link = "Link";
+        const string get = "Get a token";
+        var linkW = Kit.ButtonWidth(link, BtnSize.Md, null, Btn.Primary);
+        var getW = Kit.ButtonWidth(get, BtnSize.Md, null, Btn.Quiet);
+        SetRow(index, name, tokenProblem ?? "Not linked: paste a token from the site", width, S(40), p =>
+        {
+            var fieldW = MathF.Max(S(120), width - linkW - getW - S(16));
+            var text = tokenDraft;
+            if (Kit.Field("##site-token", p, fieldW, ref text, "hsp_…", null, 128, ImGuiInputTextFlags.Password))
+            {
+                tokenDraft = text;
+                tokenProblem = null;
+            }
+            var x = p.X + fieldW + S(8);
+            if (Kit.Button("##site-link-btn", new Vector2(x, p.Y), link, Btn.Primary, BtnSize.Md, null, 0, tokenDraft.Trim().Length == 0))
+                LinkToken();
+            if (Kit.Button("##site-get", new Vector2(x + linkW + S(8), p.Y), get, Btn.Quiet))
+                Dalamud.Utility.Util.OpenLink(SiteLink.TokensUrl);
+        }, below: true,
+            tip: "Send houses straight to your builds on the site. Make a token there (Settings → Housing Studio → Send houses from the game) and paste it here.",
+            icon: Icon.Link);
     }
 
     private void LinkToken()
@@ -212,9 +211,9 @@ public sealed partial class MainWindow
             },
             _ => new[] { Run.Note($"Couldn't send it. {s.Result.Why}", Palette.Danger) },
         };
-        var h = Txt.Flow(at, w, runs, 19.5f, out var link, center: true);
+        var h = Txt.Flow(at, w, runs, 19.5f, out var link);
         if (link == "open" && s.Result?.BuildId is { } id) Dalamud.Utility.Util.OpenLink(SiteLink.BuildUrl(id));
-        if (link == "settings") sub = Sub.Settings;
+        if (link == "settings") OpenSettings(SettingsTab.Getting);
         Kit.Reserve(at, w, h);
     }
 }

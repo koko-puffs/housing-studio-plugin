@@ -4,6 +4,7 @@ using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using HousingStudio.Core;
 using HousingStudio.Game;
+using HousingStudio.Session;
 using HousingStudio.UI.Model;
 using static HousingStudio.UI.Theme;
 
@@ -29,28 +30,27 @@ public sealed partial class MainWindow
 
     private void DrawStart()
     {
-        // Header: the title and the pill on the left, Settings on the right.
+        // Header: the pill for where you are above the title, Settings on the right.
         Frame.BeginHeader(24);
         var at = Kit.At;
-        var right = Kit.Right;
-        var titleH = Title(at, "Housing", "Studio", Kit.Width - S(56));
+        var w = Kit.Width;
         var (where, tone) = WherePill();
-        // Below the Settings button (40 tall), the pill has the whole width.
-        var pillY = titleH + S(10);
-        Kit.StatusPill(at + new Vector2(0, pillY), where, tone, maxWidth: pillY >= S(40) + S(4) ? Kit.Width : Kit.Width - S(56));
-        SettingsButton(new Vector2(right - S(40), at.Y));
-        Kit.Reserve(at, Kit.Width, titleH + S(10) + S(28));
+        Kit.StatusPill(at, where, tone, maxWidth: w - S(56));
+        var titleY = at.Y + S(28) + S(8);
+        var titleH = Title(new Vector2(at.X, titleY), "Housing", "Studio", w - S(56));
+        SettingsButton(new Vector2(at.X + w - S(40), at.Y));
+        Kit.Reserve(at, w, titleY + titleH - at.Y);
         Frame.EndHeader();
 
-        Frame.BeginBody("##start", null, 24, 24);
+        Frame.BeginBody("##start", null, 20, 22);
+        CareNotice();
         DrawDropZone();
-        DrawSaveHome();
-        DrawHomeCare();
         if (session.LoadError != null && session.Layout == null)
         {
             Kit.Gap(12);
             AlertNote(session.LoadError, Palette.Danger);
         }
+        DrawThisHouse();
         DrawRecent();
         Frame.BeginBottom("start-bottom");
         DrawBrowse();
@@ -58,44 +58,6 @@ public sealed partial class MainWindow
         Frame.EndBody();
         // The whole body takes a dropped file too.
         DropTarget();
-    }
-
-    /// <summary>
-    /// In a home you can decorate: "Save this house as a build" (or garden), what's placed there as a
-    /// .build you can load here, open in MakePlace or upload to Housing Studio. No design or editor needed.
-    /// </summary>
-    private void DrawSaveHome()
-    {
-        var ctx = session.Context;
-        if (ctx.Side == null || !ctx.HasPermission) return;
-        Kit.Gap(12);
-        var at = Kit.At;
-        var w = Kit.Width;
-        var home = ctx.Side == Side.Garden ? "garden" : ctx.HouseSize switch
-        {
-            "Small" => "cottage",
-            "Medium" => "house",
-            "Large" => "mansion",
-            "Apartment" => "apartment",
-            _ => "home",
-        };
-        var label = $"Save this {home} as a build";
-        var bw = Kit.ButtonWidth(label, BtnSize.Md, Icon.House, Btn.Glass);
-        // Send to my builds beside it (SiteLink.cs), under it when the window's too narrow for both.
-        const string send = "Send to my builds";
-        var sw = Kit.ButtonWidth(send, BtnSize.Md, Icon.Upload, Btn.Glass);
-        var side = bw + S(10) + sw <= w;
-        var x = side ? at.X + (w - bw - S(10) - sw) / 2 : at.X + (w - bw) / 2;
-        if (Kit.Button("##save-home", new Vector2(x, at.Y), label, Btn.Glass, BtnSize.Md, Icon.House, 0, false,
-                "What's placed here, as a .build you can load again, open in MakePlace, or upload to Housing Studio"))
-            SaveDialog();
-        var sendAt = side ? new Vector2(x + bw + S(10), at.Y) : new Vector2(at.X + (w - sw) / 2, at.Y + S(40) + S(8));
-        var cant = CantSend();
-        if (Kit.Button("##send-home", sendAt, send, Btn.Glass, BtnSize.Md, Icon.Upload, 0, cant != null,
-                cant ?? "What's placed here, straight into your builds on Housing Studio"))
-            SendHome();
-        Kit.Reserve(at, w, side ? S(40) : S(40) * 2 + S(8));
-        DrawSendState();
     }
 
     /// <summary>A note with an icon before it (info in dim, alert in danger), as the mockups' notes with an "i".</summary>
@@ -109,45 +71,175 @@ public sealed partial class MainWindow
         Kit.Reserve(at, w, h);
     }
 
-    /// <summary>The drop zone: a dashed edge, the round brass-wash upload icon, "Load a design", and Choose a file.</summary>
+    private const string DropNote = "Drop a .build or MakePlace file here";
+    private static readonly Run[] DropNoteRuns = { new(DropNote, Face.Sans, 13, Palette.Dim) };
+
+    /// <summary>
+    /// The drop zone as one row (the dashed edge, 18px inside): the round brass upload well, "Load a
+    /// design" and its note, and Choose a file on the right (under the words when narrow). Pressing
+    /// anywhere on it chooses a file too; a file dragged over it lights it in brass.
+    /// </summary>
     private void DrawDropZone()
     {
         var at = Kit.At;
         var w = Kit.Width;
-        var partH = S(22 * 1.15f);
-        var noteH = S(19.5f);
-        var h = S(40) + S(56) + S(14) + partH + S(6) + noteH + S(14) + S(40) + S(40);
+        var pad = S(18);
+        var well = S(44);
+        const string label = "Choose a file";
+        var bw = Kit.ButtonWidth(label, BtnSize.Tiny);
+        var bh = Kit.ButtonHeight(BtnSize.Tiny);
+        var textX = at.X + pad + well + S(14);
+        var besideW = at.X + w - pad - bw - S(14) - textX;
+        var stacked = besideW < S(170);
+        var textW = stacked ? at.X + w - pad - textX : besideW;
         var dragging = DraggingLayout;
+        var title = dragging ? "Let go to load it" : "Load a design";
+        var titleH = Txt.Natural(Face.SansMedium, 14);
+        var noteH = Txt.Flow(Vector2.Zero, textW, DropNoteRuns, 19.5f, out _, draw: false);
+        var wordsH = titleH + S(2) + noteH;
+        var contentH = stacked ? MathF.Max(well, wordsH + S(10) + bh) : MathF.Max(well, MathF.Max(wordsH, bh));
+        var h = pad * 2 + contentH;
         var dl = Kit.Dl;
 
         // The button goes in first, so it (not the zone under it) answers the mouse there.
-        var label = "Choose a file";
-        var bw = Kit.ButtonWidth(label, BtnSize.Md, null, Btn.Primary);
-        var buttonAt = new Vector2(at.X + (w - bw) / 2, at.Y + h - S(40) - S(40));
-        var overButton = ImGui.IsMouseHoveringRect(buttonAt, buttonAt + new Vector2(bw, S(40)));
+        var top = at.Y + pad;
+        var wordsTop = stacked ? top : top + (contentH - wordsH) / 2;
+        var buttonAt = stacked ? new Vector2(textX, wordsTop + wordsH + S(10)) : new Vector2(at.X + w - pad - bw, top + (contentH - bh) / 2);
+        var overButton = ImGui.IsMouseHoveringRect(buttonAt, buttonAt + new Vector2(bw, bh));
         var zoneHovered = !Kit.Blocked && ImGui.IsWindowHovered() && ImGui.IsMouseHoveringRect(at, at + new Vector2(w, h)) && !overButton;
 
         var r = S(Palette.RadiusXl);
         if (dragging) dl.AddRectFilled(at, at + new Vector2(w, h), Palette.U32(Palette.BrassWash), r);
-        Kit.Dashed(at, at + new Vector2(w, h), r, dragging || zoneHovered ? Palette.Brass : Palette.LineDashed, S(1.5f));
+        Kit.Dashed(at, at + new Vector2(w, h), r, dragging || zoneHovered ? Palette.Brass : Palette.LineDashed, S(1));
 
-        var y = at.Y + S(40);
-        Kit.Round(new Vector2(at.X + (w - S(56)) / 2, y), S(56), Icon.Upload, S(24), Palette.BrassWash, Palette.Brass, 1.6f);
-        y += S(56) + S(14);
-        var part = dragging ? "Let go to load it" : "Load a design";
-        var pw = Txt.Measure(part, Face.Serif, 22).X;
-        Txt.Line(dl, new Vector2(at.X + (w - pw) / 2, y), part, Face.Serif, 22, Palette.Ivory, 22 * 1.15f);
-        y += partH + S(6);
-        const string note = "Drop a .build or MakePlace .json file here";
-        var nw = Txt.Measure(note, Face.Sans, 13).X;
-        Txt.Line(dl, new Vector2(at.X + (w - nw) / 2, y), note, Face.Sans, 13, Palette.Ash, 19.5f);
+        var wellAt = new Vector2(at.X + pad, stacked ? top : top + (contentH - well) / 2);
+        var c = wellAt + new Vector2(well / 2);
+        dl.AddCircleFilled(c, well / 2, Palette.U32(Palette.BrassWash), 48);
+        dl.AddCircle(c, well / 2 - 0.5f, Palette.U32(Palette.BrassEdge), 48, 1f);
+        Icons.Draw(dl, Icon.Upload, c - new Vector2(S(9)), S(18), Palette.Brass);
+        Txt.Line(dl, new Vector2(textX, wordsTop), Txt.Fit(title, Face.SansMedium, 14, textW), Face.SansMedium, 14, dragging ? Palette.BrassSoft : Palette.Ivory);
+        Txt.Flow(new Vector2(textX, wordsTop + titleH + S(2)), textW, DropNoteRuns, 19.5f, out _);
 
-        if (Kit.Button("##choose", buttonAt, label, Btn.Primary)) OpenDialog();
+        if (Kit.Button("##choose", buttonAt, label, Btn.Glass, BtnSize.Tiny)) OpenDialog();
         var (clicked, _, _) = Kit.Hit("##dropzone", at, new Vector2(w, h));
-        if (clicked) OpenDialog();
+        if (clicked && !overButton) OpenDialog();
         DropTarget();
         Kit.Reserve(at, w, h);
     }
+
+    // ---------------------------------------------------------------------------------------------
+    // This house: how full it is, what changed since your last run, Save and Send.
+
+    /// <summary>The changes since your last run show under the card (its chip pressed).</summary>
+    private bool changesOpen;
+
+    private (Side Side, string? Size, int? Placed, int? Limit, string Line) houseLine = (Side.Interior, null, null, null, string.Empty);
+
+    private (DriftCheck? Check, string Label) changedChip = (null, string.Empty);
+
+    /// <summary>
+    /// In a home you may decorate: the card for it. Its name, the home and how full it is ("Medium
+    /// house · 312 of 450 pieces placed inside", read every 2 s while Start shows) with a meter; a chip
+    /// for what changed since your last run here (with a snapshot), which checks and opens the changes
+    /// under the card; Save as a build and Send to my builds.
+    /// </summary>
+    private void DrawThisHouse()
+    {
+        var ctx = session.Context;
+        if (ctx.Side is not { } side || !ctx.HasPermission) return;
+        care?.WantCount();
+        int? placed = care?.Count is { } count && count.Home == care.CurrentHome && count.Side == side ? count.Placed : null;
+        var limit = ItemLimits.Of(side, ctx.HouseSize);
+        var hl = houseLine;
+        if (hl.Line.Length == 0 || hl.Side != side || hl.Size != ctx.HouseSize || hl.Placed != placed || hl.Limit != limit)
+            hl = houseLine = (side, ctx.HouseSize, placed, limit, CareWords.HouseLine(side, ctx.HouseSize, placed, limit));
+
+        // Since your last run: a chip when there's a snapshot of this home.
+        var home = care?.CurrentHome;
+        var kept = care != null && !runner.Active ? care.SnapshotAt(home) : null;
+        var check = kept != null && care?.LastCheck is { } last && last.Home == home ? last : null;
+        if (kept == null) changesOpen = false;
+        string? chip = null;
+        if (kept != null)
+        {
+            if (check == null) chip = "Check for changes";
+            else
+            {
+                if (!ReferenceEquals(changedChip.Check, check)) changedChip = (check, CareWords.Changed(check.Report));
+                chip = changedChip.Label;
+            }
+        }
+        var chipTone = check is { Report.Unchanged: true } ? ChipTone.Normal : ChipTone.Brass;
+        var chipIcon = check is { Report.Unchanged: true } ? Icon.Check : Icon.Refresh;
+
+        Kit.Gap(14);
+        Kit.BeginPanel("##this-house", 14, 16, 14);
+        var at = Kit.At;
+        var w = Kit.Width;
+        var dl = Kit.Dl;
+        var textX = at.X + S(34) + S(12);
+        var chipW = chip != null ? Kit.CheckChipWidth(chip, chipIcon) : 0;
+        var title = side == Side.Garden ? "This garden" : "This house";
+        var titleH = Txt.Natural(Face.Serif, 22);
+        var lineW = Txt.Measure(hl.Line, Face.Sans, 13).X;
+        var chipBeside = chip == null || textX + MathF.Max(Txt.Measure(title, Face.Serif, 22).X, lineW) + S(12) + chipW <= at.X + w;
+        var textW = (chip != null && chipBeside ? at.X + w - chipW - S(12) : at.X + w) - textX;
+        HouseLineRun[0] = new Run(hl.Line, Face.Sans, 13, Palette.Dim);
+        var lineH = Txt.Flow(Vector2.Zero, textW, HouseLineRun, 19.5f, out _, draw: false);
+        var wordsH = titleH + lineH;
+        var topH = MathF.Max(S(34), wordsH);
+        Kit.IconThumb(new Vector2(at.X, at.Y + (topH - S(34)) / 2), Icon.House);
+        var wordsTop = at.Y + (topH - wordsH) / 2;
+        Txt.Draw(dl, new Vector2(textX, wordsTop), title, Face.Serif, 22, Palette.Ivory);
+        Txt.Flow(new Vector2(textX, wordsTop + titleH), textW, HouseLineRun, 19.5f, out _);
+        var y = at.Y + topH;
+        if (chip != null)
+        {
+            var chipAt = chipBeside ? new Vector2(at.X + w - chipW, at.Y + (topH - S(30)) / 2) : new Vector2(textX, y + S(10));
+            if (!chipBeside) y += S(10) + S(30);
+            if (Kit.CheckChip("##changed", chipAt, chip, chipTone, chipIcon, null, changesOpen, ChangesTip(kept!.Value)) && !driftChecking)
+            {
+                if (changesOpen) changesOpen = false;
+                else
+                {
+                    changesOpen = true;
+                    CheckForChanges();
+                }
+            }
+        }
+        Kit.Reserve(at, w, y - at.Y);
+
+        if (placed is { } p && limit is > 0)
+        {
+            Kit.Gap(12);
+            var m = Kit.At;
+            Kit.Meter(m, w, (float)p / limit.Value);
+            Kit.Reserve(m, w, S(6));
+        }
+
+        Kit.Gap(12);
+        var row = new Kit.Wrap(8);
+        var bh = Kit.ButtonHeight(BtnSize.Tiny);
+        const string save = "Save as a build";
+        if (Kit.Button("##save-home", row.Next(Kit.ButtonWidth(save, BtnSize.Tiny, Icon.Save), bh), save, Btn.Glass, BtnSize.Tiny, Icon.Save, 0, false,
+                "What's placed here, as a .build you can load again, open in MakePlace, or upload to Housing Studio"))
+            SaveDialog();
+        const string send = "Send to my builds";
+        var cant = CantSend();
+        if (Kit.Button("##send-home", row.Next(Kit.ButtonWidth(send, BtnSize.Tiny, Icon.Send), bh), send, Btn.Glass, BtnSize.Tiny, Icon.Send, 0, cant != null,
+                cant ?? "What's placed here, straight into your builds on Housing Studio"))
+            SendHome();
+        row.End();
+        DrawSendState();
+        Kit.EndPanel();
+
+        if (changesOpen && kept != null) DrawChanges(check);
+    }
+
+    private static readonly Run[] HouseLineRun = new Run[1];
+
+    // ---------------------------------------------------------------------------------------------
+    // Recent and Browse.
 
     private string? recentMenuFor;
 
@@ -157,8 +249,8 @@ public sealed partial class MainWindow
         var rows = vm.Recent();
         if (rows.Count == 0) return;
         Kit.Gap(18);
-        Kit.EyebrowRow("Recent");
-        Kit.Gap(8);
+        Kit.Section("Recent");
+        Kit.Gap(10);
         Kit.BeginPanel("##recent", 6, 6, 6);
         var dl = Kit.Dl;
         for (var i = 0; i < rows.Count; i++)
@@ -211,24 +303,15 @@ public sealed partial class MainWindow
         Kit.EndPanel();
     }
 
-    /// <summary>"Looking for a design?" with Browse designs, at the foot of the body.</summary>
+    private static readonly Run[] BrowseRuns =
+    {
+        new("Looking for a design? ", Face.Sans, 13, Palette.Dim),
+        new("Browse designs", Face.Sans, 13, Palette.Ivory, Link: "browse"),
+    };
+
+    /// <summary>"Looking for a design? Browse designs", centred at the foot of the body (opens Housing Studio's Browse page).</summary>
     private void DrawBrowse()
     {
-        Kit.BeginPanel("##browse", 18, 20, 18);
-        var at = Kit.At;
-        var w = Kit.Width;
-        const string label = "Browse designs";
-        var bw = Kit.ButtonWidth(label);
-        var textW = w - bw - S(14);
-        var titleH = Txt.Natural(Face.SansMedium, 14);
-        var note = new[] { Run.Note("Homes on Housing Studio come with a build file you can load here.") };
-        var noteH = Txt.Flow(at, textW, note, 19.5f, out _, draw: false);
-        var h = MathF.Max(S(40), titleH + S(4) + noteH);
-        var top = at.Y + (h - (titleH + S(4) + noteH)) / 2;
-        Txt.Line(Kit.Dl, new Vector2(at.X, top), "Looking for a design?", Face.SansMedium, 14, Palette.Ivory);
-        Txt.Flow(new Vector2(at.X, top + titleH + S(4)), textW, note, 19.5f, out _);
-        if (Kit.Button("##browse-btn", new Vector2(at.X + w - bw, at.Y + (h - S(40)) / 2), label)) Dalamud.Utility.Util.OpenLink(BrowseUrl);
-        Kit.Reserve(at, w, h);
-        Kit.EndPanel();
+        if (Txt.Para(BrowseRuns, 19.5f, center: true) == "browse") Dalamud.Utility.Util.OpenLink(BrowseUrl);
     }
 }

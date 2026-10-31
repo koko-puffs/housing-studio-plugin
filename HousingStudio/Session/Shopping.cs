@@ -145,7 +145,7 @@ public sealed class Shopping : IDisposable
     {
         if (!Vendors.Ready) return "Reading the game's vendors…";
         if (!config.LookUpMarketPrices) return last.Shop.Count(SourceKind.Unknown) + last.Shop.Count(SourceKind.Craft) > 0
-            ? "Market prices are off (Settings → More options)."
+            ? "Market prices are off (Settings → Getting)."
             : null;
         if (last.Priced.Count == 0) return null;
         if (last.Scope == null) return "Market prices come once you're logged in.";

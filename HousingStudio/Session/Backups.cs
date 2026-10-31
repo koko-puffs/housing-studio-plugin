@@ -75,9 +75,6 @@ public static class Backups
         }
     }
 
-    private static readonly System.Text.RegularExpressions.Regex BackupName =
-        new(@"^(interior|garden)-\d{8}-\d{6}(-\d+)?\.build$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
-
     /// <summary>Deletes the plugin's own backups past the newest <see cref="Kept"/> (best effort).</summary>
     private static void Prune(ActivityLog log)
     {
@@ -86,7 +83,7 @@ public static class Backups
             // Only names a backup gets ("interior-20261030-091500.build", "-2" for a second in the same
             // second): a garden saved there as "garden-2026-10-30" is yours, and stays.
             var old = new DirectoryInfo(Folder).GetFiles("*.build")
-                .Where(f => BackupName.IsMatch(f.Name))
+                .Where(f => SwapNames.IsBackupName(f.Name))
                 .OrderByDescending(f => f.LastWriteTimeUtc)
                 .Skip(Kept)
                 .ToList();
