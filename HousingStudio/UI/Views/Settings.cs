@@ -89,6 +89,9 @@ public sealed partial class MainWindow
         Kit.EndPanel();
 
         Kit.Gap(18);
+        DrawSiteLink();
+
+        Kit.Gap(18);
         Kit.BeginPanel("##more", 0, 0, 0);
         var count = MoreCount.ToString();
         Disclosure("##more-row", ref moreOpen, "More options", "Place anywhere, pace variation, when to stop, chat messages",

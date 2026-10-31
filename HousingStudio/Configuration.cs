@@ -87,6 +87,12 @@ public sealed class Configuration : IPluginConfiguration
     public bool LookUpMarketPrices { get; set; } = true;
 
     /// <summary>
+    /// Settings → Link to Housing Studio: the token made on the site that lets Send to my builds put
+    /// a house in your builds there (Core/SiteLink.cs); empty when not linked. Never logged.
+    /// </summary>
+    public string SiteToken { get; set; } = string.Empty;
+
+    /// <summary>
     /// Settings → Experimental: features not yet tried in the game (or that act further on your
     /// behalf). Off by default; each has its own switch under it, which only counts while this is on.
     /// </summary>

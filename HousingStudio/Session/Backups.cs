@@ -107,7 +107,20 @@ public static class Backups
 
     public static bool SaveTo(string path, LayoutSession session, GameData data, string title, out string why)
     {
+        if (!Layout(session, data, title, out var json, out _, out why)) return false;
+        return Write(path, () => json, out why);
+    }
+
+    /// <summary>
+    /// What's placed where you are (inside, or your garden) as a .build's JSON, read as it is now,
+    /// and the site's code for the home (<see cref="SiteLink.HouseCode"/>). False, with why, when it
+    /// can't be read. Saving writes it to a file; Send to my builds sends it to the site.
+    /// </summary>
+    public static bool Layout(LayoutSession session, GameData data, string title, out string json, out string house, out string why)
+    {
+        json = string.Empty;
         var ctx = session.Context;
+        house = SiteLink.HouseCode(ctx.HouseSize, Districts.StyleOfInterior(ctx.TerritoryName) ?? StyleOf(ctx.District));
         if (!session.ReadPlacedNow(out var pieces, out var readPlot, out why)) return false;
         string? Hex(byte stain) => stain == 0 ? null : data.DyeRgb(stain) is { } rgb ? Dyes.HexOfRgb(rgb) : null;
         SavedPiece Saved(LivePiece p, System.Numerics.Vector3 at, float yaw)
@@ -126,7 +139,7 @@ public static class Backups
                 size == "Apartment" ? [] : Try(() => fixtures.ExteriorOfHome(ctx), [], "the outside"),
                 FixtureReader.PlotOfInterior());
             var inside = pieces.Select(p => Saved(p, p.Position, p.Yaw)).ToList();
-            return Write(path, () => LayoutWriter.Write(home, inside, [], title), out why);
+            return Json(() => LayoutWriter.Write(home, inside, [], title), out json, out why);
         }
 
         if ((readPlot ?? session.Plot) is not { } plot)
@@ -140,7 +153,23 @@ public static class Backups
             return Saved(p, local, yaw);
         }).ToList();
         var outside = new SavedHome(ctx.HouseSize, StyleOf(ctx.District), [], Try(() => fixtures.ExteriorOfHome(ctx), [], "the outside"), plot.Number);
-        return Write(path, () => LayoutWriter.Write(outside, [], garden, title), out why);
+        return Json(() => LayoutWriter.Write(outside, [], garden, title), out json, out why);
+    }
+
+    private static bool Json(Func<string> write, out string json, out string why)
+    {
+        why = string.Empty;
+        try
+        {
+            json = write();
+            return true;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or NotSupportedException)
+        {
+            json = string.Empty;
+            why = $"Couldn't write it down: {ex.Message}";
+            return false;
+        }
     }
 
     /// <summary>The home's fixtures and wallpapers are extras: when one can't be read, the furniture is still saved.</summary>
