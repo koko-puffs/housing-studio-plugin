@@ -148,7 +148,7 @@ public sealed partial class MainWindow
         Kit.StatCells(tally, 32);
     }
 
-    private (object? Problems, int Count, object? Missing, List<Issue> Issues) issuesCache = (null, -1, null, new List<Issue>());
+    private (object? Problems, int Count, object? Missing, DateTime Run, List<Issue> Issues) issuesCache = (null, -1, null, DateTime.MinValue, new List<Issue>());
 
     /// <summary>
     /// The problems as rows: each piece with its reason and Show where; the dyes you're short of in
@@ -156,9 +156,10 @@ public sealed partial class MainWindow
     /// </summary>
     private List<Issue> Issues(IReadOnlyList<RunProblem> problems)
     {
-        // Made again only when the problems or the pieces you don't have change, not every frame.
+        // Made again only when the run, its problems or the pieces you don't have change, not every frame.
         var c = issuesCache;
-        if (ReferenceEquals(c.Problems, problems) && c.Count == problems.Count && ReferenceEquals(c.Missing, vm.RunMissing)) return c.Issues;
+        if (ReferenceEquals(c.Problems, problems) && c.Count == problems.Count && ReferenceEquals(c.Missing, vm.RunMissing) && c.Run == vm.RunStartedAt)
+            return c.Issues;
         var issues = new List<Issue>();
         foreach (var p in problems.Where(p => p.Kind != ProblemKind.DyeMissing))
         {
@@ -186,7 +187,7 @@ public sealed partial class MainWindow
             issues.Add(new Issue(Icon.Package, vm.RunMissing.Count == 1 ? "1 piece you don't have" : $"{vm.RunMissing.Count} pieces you don't have",
                 Words.Some(names), "Shopping list", () => OpenShopping(Sub.None)));
         }
-        issuesCache = (problems, problems.Count, vm.RunMissing, issues);
+        issuesCache = (problems, problems.Count, vm.RunMissing, vm.RunStartedAt, issues);
         return issues;
     }
 
