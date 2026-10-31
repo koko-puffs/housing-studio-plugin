@@ -446,6 +446,7 @@ public sealed unsafe class FixtureRunner
         var apply = side == Side.Interior ? FixtureTable.InteriorApply : FixtureTable.ExteriorApply;
         var steps = new List<Step>();
         if (apply != null)
+        {
             steps.Add(Step.Act($"Apply: {apply.Describe()}", () =>
             {
                 watchWindow = false;
