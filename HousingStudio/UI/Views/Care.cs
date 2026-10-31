@@ -166,6 +166,7 @@ public sealed partial class MainWindow
     // Check for changes since the last run, and Put them back where they were.
 
     private bool driftChecking;
+    private (DateTime? Kept, DateTime Day, Run[] Runs) driftNote = (null, DateTime.MinValue, Array.Empty<Run>());
     private (DriftCheck? Check, List<string> Lines) driftLines = (null, new List<string>());
 
     private void DrawDrift()
@@ -187,10 +188,15 @@ public sealed partial class MainWindow
         var x = at.X + S(16) + S(14);
         var tw = at.X + w - bw - S(14) - x;
         var titleH = Txt.Natural(Face.SansMedium, 14);
-        var noteText = kept is { } k
-            ? $"A snapshot of what was placed was kept after your last run here ({When.Relative(k, DateTime.Now, Clock)})."
-            : "The snapshot of your last run here is gone.";
-        var note = new[] { Run.Note(noteText) };
+        // The note is made again only when the snapshot (or the day) changes, not every frame.
+        if (driftNote.Kept != kept || driftNote.Day != DateTime.Today)
+            driftNote = (kept, DateTime.Today, new[]
+            {
+                Run.Note(kept is { } k
+                    ? $"A snapshot of what was placed was kept after your last run here ({When.Relative(k, DateTime.Now, Clock)})."
+                    : "The snapshot of your last run here is gone."),
+            });
+        var note = driftNote.Runs;
         var noteH = Txt.Flow(Vector2.Zero, tw, note, 19.5f, out _, draw: false);
         var wordsH = titleH + S(2) + noteH;
         var h = MathF.Max(S(34), wordsH);
