@@ -79,18 +79,18 @@ public class ClashTests
         {
             T(0, 1, 0, 0, 0),          // on the ground floor
             T(1, 2, 0, -7.5f, 0),      // below the basement's floor
-            T(2, 3, 0, -0.3f, 0),      // above the basement's ceiling (in the ground floor's floor)
-            T(3, 4, 0, 6.8f, 0),       // above the ground floor's ceiling
+            T(2, 3, 0, -0.3f, 0),      // between the basement's ceiling and the ground floor (the stairs): not told
+            T(3, 4, 0, 6.8f, 0),       // the same between the ground and upper floors
             T(4, 5, 0, 13.6f, 0),      // above the upper floor's ceiling
             T(5, 6, 0, 13.4f, 0),      // just under it
         };
         var clashes = Clashes.Find(targets, Side.Interior, "Medium", "mist");
         Assert.Equal(new[] { 2 }, Keys(clashes, ClashKind.UnderFloor));
-        Assert.Equal(new[] { 3, 4, 5 }, Keys(clashes, ClashKind.AboveCeiling));
+        Assert.Equal(new[] { 5 }, Keys(clashes, ClashKind.AboveCeiling));
 
         // Shirogane's ceilings are lower: 13.4 is above its upper floor's (13.2).
         var shirogane = Clashes.Find(targets, Side.Interior, "Medium", "shirogane");
-        Assert.Contains(6, Keys(shirogane, ClashKind.AboveCeiling));
+        Assert.Equal(new[] { 5, 6 }, Keys(shirogane, ClashKind.AboveCeiling));
     }
 
     [Fact]
@@ -122,7 +122,7 @@ public class ClashTests
     [Fact]
     public void Wording()
     {
-        Assert.Equal("is below the floor", CareWords.Reason(ClashKind.UnderFloor, 1));
+        Assert.Equal("is below the lowest floor", CareWords.Reason(ClashKind.UnderFloor, 1));
         Assert.Equal("Place anywhere is off, so the game will likely refuse 3 pieces:", CareWords.ClashLead(3, false, false));
         Assert.Contains("placed anyway", CareWords.ClashLead(1, true, false));
         Assert.Equal("Oak Table ×2 and Bed", CareWords.Names(new uint[] { 1, 2, 1 }, i => i == 1 ? "Oak Table" : "Bed"));

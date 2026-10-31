@@ -113,9 +113,10 @@ its exact spot, then dyes everything to match.
   leave pieces out, and the count follows them.
 - **Pieces the game may refuse** (`Core/Clashes.cs`): what can be told without the game's own check
   and without the pieces' sizes (the plugin has none): copies of one item at the same spot (within
-  0.02 yalms), spots below their floor or above its ceiling (the basement at -7 up to -0.5, -0.6 in a
-  mansion; the ground floor 0 to 6.5; the upper floor 7 to 13.5; Shirogane's ceilings 0.3 lower;
-  from the site's `interiors.json`, read from the game's models; 0.05 of slack), spots outside the
+  0.02 yalms), spots below the home's lowest floor or above its top floor's ceiling (the basement's
+  floor at -7, an apartment's at 0; the ceilings at 6.5 for a cottage or an apartment, 13.5 with an
+  upper floor, Shirogane's 0.3 lower; from the site's `interiors.json`, read from the game's models;
+  0.05 of slack; between two floors isn't told, as the stairs run there), spots outside the
   house's walls (the box its model fills, by size), and an indoor furnishing in the garden or an
   outdoor one inside (the game's HousingFurniture and HousingYardObject sheets). Ready says so in a
   line (in danger with Place anywhere off; a quiet note with it on, as the game takes them then;

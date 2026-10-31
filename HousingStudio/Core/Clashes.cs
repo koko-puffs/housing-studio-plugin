@@ -10,10 +10,10 @@ public enum ClashKind
     /// <summary>Two or more of the same item at the same spot (the game takes the second for overlapping).</summary>
     Stacked,
 
-    /// <summary>Placed below the floor it's on.</summary>
+    /// <summary>Placed below the home's lowest floor.</summary>
     UnderFloor,
 
-    /// <summary>Placed above the ceiling of the floor it's on (in the floor above, or out of the house).</summary>
+    /// <summary>Placed above the ceiling of the home's top floor (out of the house).</summary>
     AboveCeiling,
 
     /// <summary>Outside the house's walls altogether.</summary>
@@ -30,7 +30,7 @@ public sealed record Clash(ClashKind Kind, uint ItemId, IReadOnlyList<Target> Pi
 /// <summary>
 /// What can be told about a design before a run, without the game's own placement check and without
 /// the pieces' sizes (which the plugin doesn't have): copies of an item stacked at one spot, pieces
-/// whose spot is below their floor or above its ceiling, outside the house, and furnishings for the
+/// whose spot is below the lowest floor or above the top floor's ceiling, outside the house, and furnishings for the
 /// other side. With Place anywhere off the game refuses most of these; with it on, it takes them.
 /// Pure, so it's tested.
 /// </summary>
@@ -114,6 +114,13 @@ public static class Clashes
 
         if (side != Side.Interior || houseSize == null) return found;
         var walls = Walls(houseSize);
+        // Below the lowest floor, or above the top floor's ceiling. Between two floors (above one's
+        // ceiling, under the next one's surface) isn't told: the stairs run through there, and where
+        // they are isn't known.
+        var floors = new[] { Floor.Basement, Floor.Ground, Floor.Upper }.Select(f => Room(f, houseSize, district)).Where(r => r != null).Select(r => r!.Value).ToList();
+        if (floors.Count == 0) return found;
+        var bottom = floors.Min(r => r.Floor);
+        var top = floors.Max(r => r.Ceiling);
         var under = new List<Target>();
         var above = new List<Target>();
         var outside = new List<Target>();
@@ -125,15 +132,8 @@ public static class Clashes
                 outside.Add(t);
                 continue;
             }
-            // The floor the spot is on, as the run and the Pieces list count it.
-            if (Room(Floors.Of(p.Y, houseSize), houseSize, district) is not { } room)
-            {
-                // A basement spot in an apartment: below its one floor.
-                if (p.Y < -Slack) under.Add(t);
-                continue;
-            }
-            if (p.Y < room.Floor - Slack) under.Add(t);
-            else if (p.Y > room.Ceiling + Slack) above.Add(t);
+            if (p.Y < bottom - Slack) under.Add(t);
+            else if (p.Y > top + Slack) above.Add(t);
         }
         foreach (var (kind, list) in new[] { (ClashKind.UnderFloor, under), (ClashKind.AboveCeiling, above), (ClashKind.OutsideWalls, outside) })
             foreach (var g in list.GroupBy(t => t.ItemId))
