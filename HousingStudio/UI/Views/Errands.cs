@@ -213,7 +213,7 @@ public sealed partial class MainWindow
         g.EyebrowUpper = g.Eyebrow.ToUpperInvariant();
         (g.TitlePlain, g.TitleItalic) = ErrandWords.Title(plan);
         g.Button = ErrandWords.SetOut(plan.TotalGil);
-        g.Route = ErrandWords.Route(plan, data.AnyItemName, ErrandRunner.BellNearby(), ErrandGame.HomeWorld());
+        g.Route = ErrandWords.Route(plan, data.AnyItemName, ErrandRunner.BellNearby(), ErrandGame.HomeWorld(), ErrandWords.City(config.ErrandsHub));
         g.RouteIds = g.Route.Select((_, i) => $"##errand-trip{i}").ToArray();
         g.Left = ErrandWords.LeftRows(plan.Left, data.AnyItemName);
         g.Have = p == null ? string.Empty

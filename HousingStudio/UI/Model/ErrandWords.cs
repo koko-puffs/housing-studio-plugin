@@ -63,15 +63,16 @@ public static class ErrandWords
     /// "Mist · Material Supplier", "Limsa · Market board", with the world when it isn't yours), what's
     /// got there, and the gil ("free", "8,400", "≤ 53,000").
     /// </summary>
-    /// <param name="houseBell">A summoning bell in the home you're in (else Limsa's are used).</param>
-    public static List<RouteLeg> Legs(ErrandTrip trip, Func<uint, string> name, bool houseBell, string homeWorld)
+    /// <param name="houseBell">A summoning bell in the home you're in (else the market city's are used).</param>
+    /// <param name="city">The market city's short name ("Limsa", "Ul'dah").</param>
+    public static List<RouteLeg> Legs(ErrandTrip trip, Func<uint, string> name, bool houseBell, string homeWorld, string city = "Limsa")
     {
         var legs = new List<RouteLeg>();
         var retainers = trip.Stops.Where(s => s.Kind == StopKind.Retainer).ToList();
         if (retainers.Count > 0)
         {
             var what = string.Join("; ", retainers.Select(r => $"{r.Retainer?.Name ?? "A retainer"} · {Items(r.Items, name)}"));
-            legs.Add(new RouteLeg(ErrandLeg.Bell, houseBell ? "Bell in your house" : "Limsa · Summoning bell", what, "free"));
+            legs.Add(new RouteLeg(ErrandLeg.Bell, houseBell ? "Bell in your house" : $"{city} · Summoning bell", what, "free"));
         }
         foreach (var stop in trip.Stops)
         {
@@ -84,7 +85,7 @@ public static class ErrandWords
                     break;
                 case StopKind.Market:
                     var world = !string.IsNullOrEmpty(stop.World) && stop.World != homeWorld ? $" · {stop.World}" : string.Empty;
-                    legs.Add(new RouteLeg(ErrandLeg.Market, "Limsa · Market board" + world, Items(stop.Items, name), "≤ " + Number(stop.Gil)));
+                    legs.Add(new RouteLeg(ErrandLeg.Market, $"{city} · Market board" + world, Items(stop.Items, name), "≤ " + Number(stop.Gil)));
                     break;
             }
         }
@@ -97,8 +98,11 @@ public static class ErrandWords
         trip.Number <= 1 ? $"{trip.Slots} of {Words.Count(freeSlots, "bag slot")}" : $"worked out again after trip {trip.Number - 1}";
 
     /// <summary>The trips as the Get screen lists them.</summary>
-    public static List<RouteTrip> Route(ErrandPlan plan, Func<uint, string> name, bool houseBell, string homeWorld) =>
-        plan.Trips.Select(t => new RouteTrip($"TRIP {t.Number}", TripRest(t, plan.FreeSlots), Legs(t, name, houseBell, homeWorld))).ToList();
+    public static List<RouteTrip> Route(ErrandPlan plan, Func<uint, string> name, bool houseBell, string homeWorld, string city = "Limsa") =>
+        plan.Trips.Select(t => new RouteTrip($"TRIP {t.Number}", TripRest(t, plan.FreeSlots), Legs(t, name, houseBell, homeWorld, city))).ToList();
+
+    /// <summary>The market city's short name for the route ("Limsa", "Ul'dah"), by Settings → Getting → Market city.</summary>
+    public static string City(int choice) => choice == 1 ? "Ul'dah" : "Limsa";
 
     /// <summary>What's left out, one row per reason: ("1 to craft", "Oasis Lamp"), ("2 past the market ceiling", …).</summary>
     public static List<LeftRow> LeftRows(IReadOnlyList<ErrandLeft> left, Func<uint, string> name) =>

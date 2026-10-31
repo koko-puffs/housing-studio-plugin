@@ -256,8 +256,9 @@ public sealed partial class ErrandRunner : IDisposable
         if (gil < plan.TotalGil && !rehearse) return $"You have {gil:N0} gil; the errands need about {plan.TotalGil:N0}.";
         if (plan.Needs(StopKind.Market) || (plan.Needs(StopKind.Retainer) && !BellNearby()))
         {
-            var hub = ErrandGame.AetheryteOf(ErrandGame.HubTerritory);
-            if (hub == 0 || !ErrandGame.Attuned(hub)) return "The market board and the summoning bells are reached through Limsa Lominsa's aetheryte, which you haven't attuned to.";
+            var (hubTerritory, hubName) = ErrandGame.Hub(config.ErrandsHub);
+            var hub = ErrandGame.AetheryteOf(hubTerritory);
+            if (hub == 0 || !ErrandGame.Attuned(hub)) return $"The market board and the summoning bells are reached through {hubName}'s aetheryte, which you haven't attuned to (Settings → Getting → Market city).";
         }
         return null;
     }
@@ -616,20 +617,58 @@ public sealed partial class ErrandRunner : IDisposable
     // ---------------------------------------------------------------------------------------------
     // Getting about: teleports, worlds, walking.
 
+    /// <summary>
+    /// To a market city (Settings → Getting → Market city): nothing when you're in Limsa or Ul'dah with
+    /// one of <paramref name="near"/> (boards, bells) in sight, or in either for a world visit (null);
+    /// else a teleport to the one chosen. (0.7.6: a world visit from Limsa landed in Ul'dah, and the
+    /// teleport back to Limsa was refused.)
+    /// </summary>
+    private List<Step> HubSteps(IReadOnlyCollection<string>? near) => new()
+    {
+        Step.Act("To a market city", () =>
+        {
+            if (ErrandGame.InAHub && (near == null || (ErrandGame.Me is { } me && ErrandGame.Nearest(near, me, 150, UsableKinds) != null))) return StepOutcome.Done;
+            var (territory, name) = ErrandGame.Hub(config.ErrandsHub);
+            queue.InsertNext(TeleportSteps(territory, name));
+            return StepOutcome.Done;
+        }),
+    };
+
     private List<Step> TeleportSteps(uint territory, string where)
     {
         var aetheryte = ErrandGame.AetheryteOf(territory);
+        var firstTry = DateTime.MinValue;
+        var lastTry = DateTime.MinValue;
         return new List<Step>
         {
-            Step.Act($"Teleport to {where} (Lifestream, aetheryte {aetheryte})", () =>
+            new Step
             {
-                if (ErrandGame.Territory == territory) return StepOutcome.Done;
-                if (aetheryte == 0) return StepOutcome.Halt($"No aetheryte for {where} is known.");
-                travelling = true;
-                if (!Travel.Teleport(aetheryte)) return StepOutcome.Halt($"Lifestream wouldn't teleport to {where} (is it installed and up to date?).");
-                if (Rehearsal) Rehearsals.Report.Teleported();
-                return StepOutcome.Done;
-            }),
+                Label = $"Teleport to {where} (Lifestream, aetheryte {aetheryte})",
+                IsAction = true,
+                Run = () =>
+                {
+                    if (ErrandGame.Territory == territory) return StepOutcome.Done;
+                    if (aetheryte == 0) return StepOutcome.Halt($"No aetheryte for {where} is known.");
+                    var now = DateTime.UtcNow;
+                    if (firstTry == DateTime.MinValue) firstTry = now;
+                    // Lifestream says no while it (or you) is still busy: just after a world visit, a shop
+                    // closing (0.7.6's log: refused at once, twice). Asked again every 2 s for 20 s.
+                    if (ErrandGame.Settled && !Travel.Busy && now - lastTry > TimeSpan.FromSeconds(2))
+                    {
+                        lastTry = now;
+                        travelling = true;
+                        if (Travel.Teleport(aetheryte))
+                        {
+                            if (Rehearsal) Rehearsals.Report.Teleported();
+                            return StepOutcome.Done;
+                        }
+                        travelling = false;
+                    }
+                    return now - firstTry > TimeSpan.FromSeconds(20)
+                        ? StepOutcome.Halt($"Lifestream wouldn't teleport to {where} (asked for 20 s; is it installed and up to date?).")
+                        : StepOutcome.Waiting;
+                },
+            },
             new Step
             {
                 Label = $"Arrive in {where}",
@@ -678,6 +717,7 @@ public sealed partial class ErrandRunner : IDisposable
         var mounting = false;
         var sprintTried = DateTime.MinValue;
         var gotDown = false;
+        var downAt = DateTime.MinValue;
         return new List<Step>
         {
             WaitFor("vnavmesh has this zone's map", () => Nav.Ready, TimeSpan.FromSeconds(90),
@@ -751,17 +791,27 @@ public sealed partial class ErrandRunner : IDisposable
                 Timeout = WalkWait,
                 TimeoutMessage = $"Didn't get to {what} within {WalkWait.TotalMinutes:0} minutes.",
             },
-            // Off the mount before talking to someone or using something.
+            // Off the mount before talking to someone or using something, and landed: the game refuses
+            // to use anything while the dismount's jump lasts ("Unable to execute command while jumping",
+            // 0.7.6: the shop then took 10 s to give up on).
             new Step
             {
                 Label = "Get down from the mount",
-                Timeout = TimeSpan.FromSeconds(4),
+                Timeout = TimeSpan.FromSeconds(5),
                 OnTimeout = StepStatus.Done,
                 Run = () =>
                 {
-                    if (!Movement.Mounted) return StepOutcome.Done;
-                    if (!gotDown) gotDown = Movement.GetDown(log.Info);
-                    return StepOutcome.Waiting;
+                    if (Movement.Mounted)
+                    {
+                        if (!gotDown && Movement.GetDown(log.Info))
+                        {
+                            gotDown = true;
+                            downAt = DateTime.UtcNow;
+                        }
+                        return StepOutcome.Waiting;
+                    }
+                    if (!gotDown) return StepOutcome.Done;
+                    return Movement.Landed && DateTime.UtcNow - downAt > TimeSpan.FromMilliseconds(900) ? StepOutcome.Done : StepOutcome.Waiting;
                 },
             },
         };
@@ -851,7 +901,7 @@ public sealed partial class ErrandRunner : IDisposable
     {
         var steps = new List<Step>();
         var near = ErrandGame.Me is { } me && ErrandGame.Nearest(Bells(), me, houseBell ? 60 : 120, UsableKinds) != null;
-        if (!near) steps.AddRange(TeleportSteps(ErrandGame.HubTerritory, "Limsa Lominsa Lower Decks"));
+        if (!near) steps.AddRange(HubSteps(Bells()));
         steps.AddRange(WalkSteps("a summoning bell", () => ErrandGame.Me is { } p ? ErrandGame.Nearest(Bells(), p, 150, UsableKinds)?.Position : null));
         return steps;
     }
@@ -1059,11 +1109,14 @@ public sealed partial class ErrandRunner : IDisposable
     private List<Step> OpenShopSteps(VendorOffer v)
     {
         var menus = 0;
+        var used = DateTime.MinValue;
+        var again = 0;
         Step Opens() => new()
         {
             Label = $"{v.NpcName}'s shop opens",
             Run = () =>
             {
+                if (used == DateTime.MinValue) used = DateTime.UtcNow;
                 if (GameUi.IsOpen(ErrandTable.Shop)) return StepOutcome.Done;
                 if (ErrandGame.MenuEntries() != null)
                 {
@@ -1075,6 +1128,14 @@ public sealed partial class ErrandRunner : IDisposable
                 {
                     queue.InsertNext(new[] { ClickThrough(v.NpcName, () => !GameUi.IsOpen(ErrandTable.Talk)), Opens() });
                     return StepOutcome.Done;
+                }
+                // Nothing opened (the game refused, say, mid-jump): talk to them again, twice at most.
+                if (DateTime.UtcNow - used > TimeSpan.FromSeconds(2.5) && again < 2 && ErrandGame.Settled && ErrandGame.NpcOrNamed(v.NpcId, v.NpcName, Reach + 3) is { } npc)
+                {
+                    again++;
+                    used = DateTime.UtcNow;
+                    log.Info($"  {v.NpcName} didn't answer: talking to them again.");
+                    ErrandGame.Interact(npc);
                 }
                 return StepOutcome.Waiting;
             },
@@ -1155,8 +1216,11 @@ public sealed partial class ErrandRunner : IDisposable
                         // riviera table for 2,000 gil?"; the item's name in it may be a plural or "lump of …").
                         if (!MarketRule.QuestionMatches(question, v.Price, n, (long)v.Price * n))
                         {
+                            // Another price than planned (0.7.6: "Purchase 1 stage panel for 4,000 gil?" with
+                            // 1,000 planned): no, and this item is left; the rest of the shop goes on.
                             GameUi.Close(UiTable.YesNo);
-                            return StepOutcome.Halt($"The shop asked \"{question}\", which isn't {n} × {Name(item.ItemId)} for {(long)v.Price * n:N0} gil: nothing was bought.");
+                            log.Warn($"  The shop asked \"{question}\", not {n} × {Name(item.ItemId)} for {(long)v.Price * n:N0} gil as planned ({v.NpcName}, NPC {v.NpcId}, shop {v.ShopId}): said no, and {Name(item.ItemId)} is left for you.");
+                            return Finished();
                         }
                         queue.InsertNext(new[] { Yes(question), Bought() });
                         return StepOutcome.Done;
@@ -1210,11 +1274,12 @@ public sealed partial class ErrandRunner : IDisposable
         var steps = new List<Step>();
         if (ErrandGame.CurrentWorld() != world)
         {
-            // A world visit leaves from a city's aetheryte: Limsa's first, then again on the world.
-            steps.AddRange(TeleportSteps(ErrandGame.HubTerritory, "Limsa Lominsa Lower Decks"));
+            // A world visit leaves from a city's aetheryte: the market city's first (unless you're in
+            // one already), then the board where the visit lands, if it's a market city.
+            steps.AddRange(HubSteps(null));
             steps.AddRange(WorldSteps(world));
         }
-        steps.AddRange(TeleportSteps(ErrandGame.HubTerritory, "Limsa Lominsa Lower Decks"));
+        steps.AddRange(HubSteps(Boards()));
         steps.AddRange(WalkSteps("a market board", () => ErrandGame.Me is { } p ? ErrandGame.Nearest(Boards(), p, 150, UsableKinds)?.Position : null));
         steps.Add(Use("the market board", () => ErrandGame.Me is { } me ? ErrandGame.Nearest(Boards(), me, Reach + 2, UsableKinds) : null));
         steps.Add(Step.Wait("The board's search opens", () => GameUi.IsOpen(ErrandTable.ItemSearch) || GameUi.IsOpen(ErrandTable.ItemSearchResult), WindowWait));
@@ -1363,9 +1428,12 @@ public sealed partial class ErrandRunner : IDisposable
                         log.Info($"  {name} is result {index + 1} of the search ({string.Join(" | ", seen)}).");
                         return StepOutcome.Done;
                     }
-                    if (DateTime.UtcNow - searchedAt.Value < TimeSpan.FromSeconds(3)) return StepOutcome.Waiting;
-                    log.Info($"  {name} wasn't found among the search's results{(seen.Count == 0 ? string.Empty : $" ({string.Join(" | ", seen)})")}: you open it.");
-                    queue.InsertNext(new[] { YouOpen("In the board's results, find") });
+                    if (DateTime.UtcNow - searchedAt.Value < TimeSpan.FromSeconds(1.5)) return StepOutcome.Waiting;
+                    // The results' names aren't in the window's values (0.7.6's log): searched by its full
+                    // name, the item is the first result (as you opened it, [i:5, i:0]); whose listings
+                    // open is checked next, and another item's are closed and left to you.
+                    index = 0;
+                    log.Info($"  {name}'s place in the results can't be read{(seen.Count == 0 ? string.Empty : $" ({string.Join(" | ", seen)})")}: the first result is opened, and checked.");
                     return StepOutcome.Done;
                 },
             },
@@ -1483,7 +1551,7 @@ public sealed partial class ErrandRunner : IDisposable
         }
         else
         {
-            steps.AddRange(WalkSteps("your door", () => door));
+            steps.AddRange(WalkSteps("your door", () => door is { } d ? ErrandGame.InFrontOf(d) : null));
             steps.Add(new Step
             {
                 Label = "Use your door",
@@ -1564,9 +1632,9 @@ public sealed partial class ErrandRunner : IDisposable
                     if (navAsked == DateTime.MinValue) navAsked = DateTime.UtcNow;
                     if (!Nav.Ready)
                         return DateTime.UtcNow - navAsked > TimeSpan.FromSeconds(20) ? HandOver("vnavmesh has no map of the hall.") : StepOutcome.Waiting;
-                    if (!Nav.MoveTo(door.Value)) return HandOver("vnavmesh wouldn't walk to the door.");
+                    if (!Nav.MoveTo(ErrandGame.InFrontOf(door.Value))) return HandOver("vnavmesh wouldn't walk to the door.");
                     Movement.TrySprint(log.Info);
-                    walkTarget = door;
+                    walkTarget = ErrandGame.InFrontOf(door.Value);
                     walking = DateTime.UtcNow;
                     return StepOutcome.Done;
                 },
@@ -1587,6 +1655,8 @@ public sealed partial class ErrandRunner : IDisposable
                     }
                     if (Nav.Busy || DateTime.UtcNow - walking < TimeSpan.FromSeconds(2)) return StepOutcome.Waiting;
                     walkTarget = null;
+                    // Stopped a little short: the door may still be in reach (the game says, when it's used).
+                    if (ErrandGame.DistanceTo(door.Value) <= 8) return StepOutcome.Done;
                     return HandOver($"vnavmesh stopped {ErrandGame.DistanceTo(door.Value):0} yalms from the door.");
                 },
             },
@@ -1598,7 +1668,7 @@ public sealed partial class ErrandRunner : IDisposable
                 {
                     walkTarget = null;
                     if (Up()) return StepOutcome.Done;
-                    if (ErrandGame.Me is not { } p || ErrandGame.NearestContaining(ErrandTable.ChamberDoorWords, p, Reach + 2, UsableKinds) is not { } o)
+                    if (ErrandGame.Me is not { } p || ErrandGame.NearestContaining(ErrandTable.ChamberDoorWords, p, 8, UsableKinds) is not { } o)
                         return HandOver("The door isn't within reach.");
                     return ErrandGame.Interact(o) ? StepOutcome.Done : HandOver("Couldn't use the door.");
                 },

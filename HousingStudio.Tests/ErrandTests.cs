@@ -261,6 +261,18 @@ public class ErrandWordsTests
     }
 
     [Fact]
+    public void TheRouteNamesTheMarketCityChosen()
+    {
+        var plan = Three(free: 2);
+        var city = HousingStudio.UI.Model.ErrandWords.City(1);
+        Assert.Equal("Ul'dah", city);
+        Assert.Equal("Limsa", HousingStudio.UI.Model.ErrandWords.City(0));
+        var route = HousingStudio.UI.Model.ErrandWords.Route(plan, Names, houseBell: false, homeWorld: "Lich", city: city);
+        Assert.Equal("Ul'dah · Summoning bell", route[0].Legs[0].Name);
+        Assert.Contains(route.SelectMany(t => t.Legs), l => l.Name == "Ul'dah · Market board");
+    }
+
+    [Fact]
     public void TheTitleAndTheButtonNameTheThingsAndTheGil()
     {
         var plan = Three();

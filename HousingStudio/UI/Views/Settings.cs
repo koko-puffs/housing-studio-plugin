@@ -384,6 +384,8 @@ public sealed partial class MainWindow
     // ---------------------------------------------------------------------------------------------
     // Getting: market prices, the errands' limits, the Housing Studio account.
 
+    private static readonly string[] HubLabels = { "Limsa Lominsa", "Ul'dah" };
+
     private void DrawGettingTab()
     {
         Kit.BeginPanel("##set-getting", 0, 0, 0);
@@ -409,6 +411,17 @@ public sealed partial class MainWindow
             config.ErrandsOtherWorlds = !config.ErrandsOtherWorlds;
             config.Save();
         }
+        // The city for the market board, the summoning bells and world visits.
+        var hubNow = config.ErrandsHub == 1 ? 1 : 0;
+        SetRow(i++, "Market city", "For the market board, the bells and world visits", Kit.SegmentedWidth(HubLabels), S(40), p =>
+        {
+            var picked = Kit.Segmented("##settings-errand-hub", p, HubLabels, hubNow, 0, Kit.Width - S(40));
+            if (picked != hubNow)
+            {
+                config.ErrandsHub = picked;
+                config.Save();
+            }
+        }, below: true);
         if (SwitchRow(i++, "##errand-ride", "Ride and sprint", "Mount up where the zone allows, else sprint", config.ErrandsRide,
                 "For walks of 35 yalms or more, the mount roulette where the zone lets you ride (not a city's streets or inside); Sprint otherwise, again whenever it's ready. Off: walks." + errands))
         {

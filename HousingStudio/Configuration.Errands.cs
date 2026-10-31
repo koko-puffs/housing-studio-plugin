@@ -30,6 +30,9 @@ public sealed partial class Configuration
     /// </summary>
     public bool ErrandsTrustGuesses { get; set; }
 
+    /// <summary>The city for the market board, summoning bells and world visits: 0 Limsa Lominsa, 1 Ul'dah.</summary>
+    public int ErrandsHub { get; set; }
+
     /// <summary>The errands ride (the mount roulette) where the zone lets you, for walks long enough; Sprint otherwise.</summary>
     public bool ErrandsRide { get; set; } = true;
 

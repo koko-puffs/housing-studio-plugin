@@ -8,7 +8,19 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.7.8. Placing works in the game; the newer features haven't all been tried in it yet.**
+> **Status: 0.7.9. Placing works in the game; the newer features haven't all been tried in it yet.**
+> 0.7.9, the errands, from a full rehearsal from private chambers: **Market city** (Settings → Getting):
+> Limsa Lominsa or Ul'dah (Steps of Nald, by the Sapphire Avenue Exchange) for the market board, the
+> summoning bells and world visits; already in either with a board (or bell) in sight, no teleport (a
+> world visit that lands in Ul'dah uses Ul'dah's board). **Teleports** wait until you and Lifestream are
+> free and ask again every 2 s for 20 s (Lifestream refused at once just after a shop or a world visit).
+> **Off the mount**, it waits until you've landed (the game won't use anything mid-jump) and talks to a
+> vendor again if nothing opened. **A vendor's price** other than planned ("Purchase 1 stage panel for
+> 4,000 gil?" with 1,000 planned) is said no to and that item left, not the whole run stopped; the log
+> names the NPC and shop. **The market board's search**: the results' names can't be read from the
+> window, so the first result is opened (searched by the full name, it's the item) and its listings
+> checked to be that item's. **Doors**: walked to a spot 2 yalms in front, on your side (a door stands in
+> its wall, and vnavmesh went round odd ways); the chambers' door is tried from up to 8 yalms.
 > 0.7.8: a home saved from inside keeps its **lighting level**, so the site can light its 3D view of
 > the house as the game does: `properties.light` in the file, a whole number 0–5 (5 the brightest,
 > 0 the lights out; the site lights a room at level × 20%), beside `build` and `plot`, in **Save as

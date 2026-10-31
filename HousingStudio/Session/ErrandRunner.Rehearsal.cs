@@ -94,12 +94,13 @@ public sealed partial class ErrandRunner
     }
 
     /// <summary>Reads the game's yes/no, checks it names the price planned, and says Cancel (closes it): never yes.</summary>
-    private void CheckAndCancel(string where, string? question, uint unit, int quantity, long cost)
+    private void CheckAndCancel(string where, string? question, uint unit, int quantity, long cost, bool board = false)
     {
+        var then = board ? "say no and stop" : "say no, and leave it";
         var matched = MarketRule.QuestionMatches(question, unit, quantity, cost);
         Rehearsals.Report.Question(matched);
-        log.Info($"  The game asks: \"{question}\": {(matched ? "it names the price planned" : $"it doesn't name {quantity} for {cost:N0} gil (a real run would say no and stop)")} → Cancel (a rehearsal never says yes).");
-        if (!matched) Rehearsals.Report.Issue(where, $"The game asked \"{question}\", which doesn't name {quantity} for {cost:N0} gil: a real run would say no and stop.", RehearsalTrouble.NoMatch);
+        log.Info($"  The game asks: \"{question}\": {(matched ? "it names the price planned" : $"it doesn't name {quantity} for {cost:N0} gil (a real run would {then})")} → Cancel (a rehearsal never says yes).");
+        if (!matched) Rehearsals.Report.Issue(where, $"The game asked \"{question}\", which doesn't name {quantity} for {cost:N0} gil: a real run would {then}.", RehearsalTrouble.NoMatch);
         GameUi.Close(UiTable.YesNo);
     }
 
@@ -252,7 +253,7 @@ public sealed partial class ErrandRunner
             IsAction = true,
             Run = () =>
             {
-                CheckAndCancel(where, GameUi.YesNoText(), unit, quantity, cost);
+                CheckAndCancel(where, GameUi.YesNoText(), unit, quantity, cost, board: true);
                 var gil = Math.Max(cost, item.Gil);
                 Rehearsals.Report.Would(RehearsalAct.Buy, item.Count, gil);
                 MarketSpent += gil;

@@ -40,6 +40,17 @@ public static unsafe class ErrandGame
     /// <summary>Limsa Lominsa Lower Decks: its aetheryte stands above Hawkers' Alley, where the market boards and summoning bells are.</summary>
     public const uint HubTerritory = 129;
 
+    /// <summary>Ul'dah - Steps of Nald: its aetheryte stands by the Sapphire Avenue Exchange's market boards and summoning bells.</summary>
+    public const uint UldahTerritory = 130;
+
+    /// <summary>The city the errands use for the market, the bells and world visits (Settings → Getting → Market city): its territory and name.</summary>
+    public static (uint Territory, string Name) Hub(int choice) => choice == 1
+        ? (UldahTerritory, "Ul'dah - Steps of Nald")
+        : (HubTerritory, "Limsa Lominsa Lower Decks");
+
+    /// <summary>In one of the cities the errands use for the market (whichever is chosen).</summary>
+    public static bool InAHub => Territory is HubTerritory or UldahTerritory;
+
     /// <summary>Free slots in your four bags.</summary>
     public static int FreeSlots()
     {
@@ -114,6 +125,17 @@ public static unsafe class ErrandGame
     public static Vector3? Me => Services.Objects.LocalPlayer?.Position;
 
     public static float DistanceTo(Vector3 p) => Me is { } me ? Vector3.Distance(me, p) : float.MaxValue;
+
+    /// <summary>
+    /// A spot <paramref name="before"/> yalms in front of a door, on your side of it: a door stands in
+    /// its wall, and walking to the door itself sent vnavmesh round odd ways (0.7.6).
+    /// </summary>
+    public static Vector3 InFrontOf(Vector3 door, float before = 2f)
+    {
+        if (Me is not { } me) return door;
+        var flat = new Vector3(me.X - door.X, 0, me.Z - door.Z);
+        return flat.LengthSquared() < 0.01f ? door : door + Vector3.Normalize(flat) * before;
+    }
 
     /// <summary>Whether something in the game rules out carrying on, and what (null when nothing does).</summary>
     public static string? Blocked(bool travelling)

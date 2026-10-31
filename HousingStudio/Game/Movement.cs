@@ -27,6 +27,10 @@ public static unsafe class Movement
     /// <summary>On a mount now.</summary>
     public static bool Mounted => Services.Condition[ConditionFlag.Mounted];
 
+    /// <summary>On your feet: not mounted, not getting on or off, not mid-jump (the game uses nothing then).</summary>
+    public static bool Landed => !Mounted && !Services.Condition[ConditionFlag.Jumping] && !Services.Condition[ConditionFlag.Jumping61]
+                                 && !Services.Condition[ConditionFlag.Mounting] && !Services.Condition[ConditionFlag.Mounting71];
+
     /// <summary>The zone you're in lets you ride (not a city's streets, not inside a house), and you're not fighting.</summary>
     public static bool CanRideHere
     {
