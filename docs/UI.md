@@ -28,6 +28,7 @@ Paths are under `HousingStudio/UI/`.
 | Where-you-are pill (green / danger / neutral) | `WherePill` → `Kit.StatusPill` |
 | Settings icon button | `MainWindow.SettingsButton` |
 | Dashed drop zone, round upload icon, "Load a design", note, Choose a file | `DrawDropZone` (`Kit.Dashed`, `Kit.Round`, `Kit.Button`); drag & drop via `DropTarget` (the zone and the whole body) |
+| Save this house as a build, Send to my builds (side by side, stacked when narrow), and how the send went | `DrawSaveHome` → `SaveDialog`; `SendHome`, `CantSend` and `DrawSendState` in `Views/SiteLink.cs` (`Core/SiteLink` sends) |
 | Recent eyebrow and rows (badge, name, "N pieces · House (medium) · today 05.24", MAKEPLACE / BUILD / BACKUP, chevron) | `DrawRecent`, rows from `ViewModel.Recent` (files read in the background); right-click → "Take it off this list" |
 | "Looking for a design?" + Browse designs | `DrawBrowse` → `Util.OpenLink(https://www.kokos-tools.com/housing-studio/browse)` |
 
@@ -86,6 +87,7 @@ Paths are under `HousingStudio/UI/`.
 | --- | --- |
 | Start does: Place pieces for me, Dye, Backup, Pace | `DrawSettings` → `SwitchRow`, `SetRow` + `Kit.Segmented`. Place pieces for me sets both `StoreroomAutomatic` and `BagsAutomatic`. Pace: Steady, Quick (the default) or Daring, the `Pacing.Profiles` (`Model/PaceSetting`), with a line under it saying what the one chosen does. |
 | In the world: Show where pieces go | `ShowMarkers` |
+| Housing Studio: Link to Housing Studio (token field, masked; Link, Get a token) or Linked (masked token, Unlink) | `DrawSiteLink` in `Views/SiteLink.cs`; `Configuration.SiteToken` |
 | More options (12) | `DrawMoreOptions`: place anywhere, pace variation (±5% steps), when to stop, chat, Near me reach, storeroom / bags separately, floors to place, marker labels, placed markers, marker range, save what's placed as a build, good to know |
 | Something not working? | `DrawTrouble`: step by step, move the preview before Place (old method), the recorder, the "Place" words, windows and clicks used |
 | "Housing Studio 0.3.0" + What's new | the bottom block of `DrawSettings` |

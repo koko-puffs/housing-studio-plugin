@@ -123,7 +123,9 @@ One window, no tabs: what it shows follows what you're doing.
   an all-in-one house, window, door, decorations, placard and fence, with their dyes; seen in the
   ward, so walk past your house once before saving from inside), every piece with its dye, the
   wallpaper on partitions and the paintings in frames, and the plot. A garden needs Outdoor
-  Furnishings opened once, as the game loads its list only then. The name you type gets `.build`; **Recent** (your files and the backups runs saved; right-click a file
+  Furnishings opened once, as the game loads its list only then. The name you type gets `.build`.
+  Beside it, **Send to my builds** sends the same home straight to your builds on the site (see
+  [Sending a house to the site](#sending-a-house-to-the-site)); **Recent** (your files and the backups runs saved; right-click a file
   to take it off the list) and **Browse designs** (opens Housing Studio's Browse page).
 - **Ready** (a design loaded): whether it fits your home, **What Start does** (how many pieces it
   moves, places from your storeroom and bags, and dyes, with the dyes you're missing under
@@ -143,7 +145,8 @@ One window, no tabs: what it shows follows what you're doing.
   **Near me**; each with its state and a **Show where** button that lights its spot in your home (and
   points at it when it's off screen). **Copy shopping list** and **Copy checklist** at the foot.
 - **Settings** (from the header, or Dalamud's settings button): what Start does (place for me, dye,
-  backup, [pace](#pace): Steady, Quick or Daring), markers in the world,
+  backup, [pace](#pace): Steady, Quick or Daring), markers in the world, **Link to Housing
+  Studio** (the token that lets Send to my builds work; masked once linked, with **Unlink**),
   **More options** (place anywhere, pace variation, when to stop, chat, how far Near me reaches,
   storeroom and bags separately, floors to place, marker options, save what's placed as a build) and
   **Something not working?** (step by step, the old preview method, the recorder, the "Place" menu
@@ -151,6 +154,32 @@ One window, no tabs: what it shows follows what you're doing.
 
 While a run goes, Pieces and Settings are hidden, so nothing that steers the run changes under it.
 [docs/UI.md](docs/UI.md) maps each part of the design to the code that draws it.
+
+## Sending a house to the site
+
+**Send to my builds** (Start, beside Save this house as a build) puts the home you're in straight
+into your builds on Housing Studio, with no file in between: the site's Build opens it as it opens
+one saved there.
+
+- **Linking.** On the site, Settings → Housing Studio → _Send houses from the game_ makes a token
+  (`hsp_` and 43 letters; shown there once, as the site keeps only its hash). Paste it in the
+  plugin's Settings → **Link to Housing Studio** and press **Link** (it's checked for its shape
+  first). It's kept in the plugin's config (`SiteToken`), shown masked (`hsp_••••••••3xQz`), and
+  **Unlink** forgets it. Revoking it on the site stops it at once. It's never written to the log, the
+  activity log or the diagnostics.
+- **Sending.** The button needs a link and a home you may decorate. It reads what's placed on the
+  framework thread, as saving does (`Backups.Layout`: the same JSON a `.build` holds), names it
+  ("Mist house, 31 Oct 2026"; rename it on the site), works out the site's code for the home
+  (`SiteLink.HouseCode`: `s1i2` is a medium house in Mist), then posts it from a worker thread to
+  `{SupabaseUrl}/rest/v1/rpc/hs_plugin_save_build` with the site's publishable key as `apikey` and
+  the token in the body, waiting 20 seconds at most (`Core/SiteLink.cs`). Under the buttons it says
+  _Sending…_, then _Sent: Mist house, 31 Oct 2026 is in your builds. Open it_ (opens the build on the
+  site), or why it couldn't: the site's own words (20 sends an hour a token, 50 builds a person,
+  Build switched off, too big), a token the site doesn't know (with a way to Settings), or no
+  connection / no answer in time (look in your builds before sending again: it may have arrived).
+- The site keeps every rule its own saving keeps; see the site's `hs_plugin_tokens` notes. A build
+  sent this way has no preview on its card until it's saved once on the site (the site makes the
+  preview from the furniture's sizes).
 
 ## Pace
 
@@ -228,7 +257,8 @@ It builds on Linux and macOS too (for checking); it only runs in the game on Win
 ```
 HousingStudio/
   Core/        game-free, unit-tested: reading .build/.json, axes and turns, plots, floors,
-               dyes, matching, the shopping list, pacing, backups; and for the automation the
+               dyes, matching, the shopping list, pacing, backups, sending to the site
+               (SiteLink); and for the automation the
                step queue (StepQueue), the run's order and dye planning (RunSequence),
                callbacks as data (UiCall) and menu/list helpers (Menus).
   Automation/  UiTable (every window and click, with sources), GameUi (reading and clicking
@@ -237,7 +267,8 @@ HousingStudio/
                editor's state, pick up / set down), HousingActions (item menus, the dye window,
                aiming the held piece), FurnitureReader, FixtureReader (the home's fixtures, inside and out, for saving it), InventoryReader, PlaceAnywhere.
   Session/     LayoutSession (the design matched to the game), PlacementRunner (the run: each
-               piece's steps), Backups, ActivityLog.
+               piece's steps), Backups (saving what's placed, and its JSON for sending),
+               ActivityLog.
   UI/          the window: Kit/ (the design system's tokens, fonts, icons and controls drawn with
                ImGui's draw lists), Model/ (game-free, unit-tested: words, the Pieces list, pace,
                fixture ticks, SVG icon paths), Views/ (Start, Ready, Running, Done, Pieces,

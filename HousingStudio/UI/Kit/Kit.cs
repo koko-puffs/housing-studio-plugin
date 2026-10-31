@@ -503,7 +503,9 @@ public static class Kit
     /// A field you type in: 40 tall, radius 10, the strong edge (brass while you type in it), the well
     /// inside, an icon before the words, the hint in dim. Returns true when the text changed.
     /// </summary>
-    public static bool Field(string id, Vector2 pos, float width, ref string text, string hint, Icon? icon = null, int maxLength = 128)
+    /// <param name="flags">ImGui's own, as Password for a secret.</param>
+    public static bool Field(string id, Vector2 pos, float width, ref string text, string hint, Icon? icon = null, int maxLength = 128,
+        ImGuiInputTextFlags flags = ImGuiInputTextFlags.None)
     {
         var dl = Dl;
         var h = S(40);
@@ -528,7 +530,7 @@ public static class Kit
             ImGui.SetCursorScreenPos(new Vector2(x, pos.Y));
             ImGui.SetNextItemWidth(MathF.Max(S(20), max.X - S(14) - x));
             if (Blocked) ImGui.BeginDisabled();
-            changed = ImGui.InputTextWithHint(id, hint, ref text, maxLength);
+            changed = ImGui.InputTextWithHint(id, hint, ref text, maxLength, flags);
             if (Blocked) ImGui.EndDisabled();
             active = ImGui.IsItemActive();
             var hovered = ImGui.IsItemHovered() && !Blocked;

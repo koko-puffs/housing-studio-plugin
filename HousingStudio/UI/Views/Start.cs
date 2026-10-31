@@ -80,10 +80,21 @@ public sealed partial class MainWindow
         };
         var label = $"Save this {home} as a build";
         var bw = Kit.ButtonWidth(label, BtnSize.Md, Icon.House, Btn.Glass);
-        if (Kit.Button("##save-home", new Vector2(at.X + (w - bw) / 2, at.Y), label, Btn.Glass, BtnSize.Md, Icon.House, 0, false,
+        // Send to my builds beside it (SiteLink.cs), under it when the window's too narrow for both.
+        const string send = "Send to my builds";
+        var sw = Kit.ButtonWidth(send, BtnSize.Md, Icon.Upload, Btn.Glass);
+        var side = bw + S(10) + sw <= w;
+        var x = side ? at.X + (w - bw - S(10) - sw) / 2 : at.X + (w - bw) / 2;
+        if (Kit.Button("##save-home", new Vector2(x, at.Y), label, Btn.Glass, BtnSize.Md, Icon.House, 0, false,
                 "What's placed here, as a .build you can load again, open in MakePlace, or upload to Housing Studio"))
             SaveDialog();
-        Kit.Reserve(at, w, S(40));
+        var sendAt = side ? new Vector2(x + bw + S(10), at.Y) : new Vector2(at.X + (w - sw) / 2, at.Y + S(40) + S(8));
+        var cant = CantSend();
+        if (Kit.Button("##send-home", sendAt, send, Btn.Glass, BtnSize.Md, Icon.Upload, 0, cant != null,
+                cant ?? "What's placed here, straight into your builds on Housing Studio"))
+            SendHome();
+        Kit.Reserve(at, w, side ? S(40) : S(40) * 2 + S(8));
+        DrawSendState();
     }
 
     /// <summary>A note with an icon before it (info in dim, alert in danger), as the mockups' notes with an "i".</summary>
