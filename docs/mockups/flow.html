@@ -1,0 +1,780 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Housing Studio Flow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;1,400&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink: #0e0c0b;
+  --walnut: #17130f;
+  --glass: #171411;
+  --glass-2: #1c1814;
+  --well: rgba(255,255,255,.03);
+  --photo: #2a2119;
+  --ivory: #efe6d6;
+  --text: #c9bfae;
+  --ash: #a89e8e;
+  --dim: #8f8576;
+  --brass: #c9a96e;
+  --brass-hover: #d8bb85;
+  --brass-soft: #e9d3a6;
+  --on-brass: #1a140c;
+  --brass-wash: rgba(201,169,110,.12);
+  --brass-picked: rgba(201,169,110,.18);
+  --brass-edge: rgba(201,169,110,.6);
+  --danger: #e59a8a;
+  --danger-wash: rgba(229,154,138,.08);
+  --success: #9fd18f;
+  --success-wash: rgba(110,160,110,.16);
+  --line-faint: rgba(239,230,214,.06);
+  --line: rgba(239,230,214,.12);
+  --line-strong: rgba(239,230,214,.2);
+  --line-hover: rgba(239,230,214,.34);
+  --track: rgba(239,230,214,.08);
+  --page: #0a0908;
+  --sans: "Geist", system-ui, sans-serif;
+  --mono: "Geist Mono", ui-monospace, monospace;
+  --serif: "Cormorant Garamond", Georgia, serif;
+}
+/* The plugin is dark only; the page follows it in both schemes. */
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --page: #0a0908; } }
+:root[data-theme="dark"] { --page: #0a0908; }
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+body {
+  background: radial-gradient(1200px 600px at 20% -10%, rgba(201,169,110,.07), transparent 60%), var(--page);
+  color: var(--text);
+  font: 14px/1.5 var(--sans);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+.page { max-width: 1520px; margin: 0 auto; padding: 48px 16px 80px; }
+
+/* ---------- intro ---------- */
+.intro { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 40px; align-items: end; margin-bottom: 44px; }
+.kicker { font: 500 11px/1 var(--mono); letter-spacing: .18em; text-transform: uppercase; color: var(--dim); }
+h1 { font: 500 56px/1 var(--serif); color: var(--ivory); margin: 14px 0 14px; letter-spacing: -.01em; }
+h1 em, .title em { font-style: italic; font-weight: 400; color: var(--brass); }
+.lede { color: var(--ash); max-width: 56ch; margin: 0; }
+.rules { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.rule { border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; background: rgba(23,20,17,.6); }
+.rule b { display: block; color: var(--ivory); font-weight: 500; margin-bottom: 2px; }
+.rule span { color: var(--dim); font-size: 13px; }
+
+.flowbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 28px; color: var(--dim); font: 12px var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+.flowbar .stop { border: 1px solid var(--line-strong); border-radius: 999px; padding: 6px 12px; color: var(--ash); }
+.flowbar .stop.core { border-color: var(--brass-edge); color: var(--brass-soft); background: var(--brass-wash); }
+.flowbar .arrow { opacity: .5; }
+
+/* ---------- screens grid ---------- */
+.screens { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr)); gap: 36px 28px; }
+.screen h2 { font: 500 26px/1.1 var(--serif); color: var(--ivory); margin: 0 0 4px; }
+.screen .sub { color: var(--dim); font-size: 13px; margin: 0 0 14px; }
+.notes { margin: 14px 2px 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.notes li { position: relative; padding-left: 18px; color: var(--ash); font-size: 13px; }
+.notes li::before { content: ""; position: absolute; left: 2px; top: .62em; width: 6px; height: 6px; border-radius: 2px; background: var(--brass); opacity: .8; }
+.notes li b { color: var(--text); font-weight: 500; }
+
+/* ---------- the window ---------- */
+.win { border-radius: 10px; border: 1px solid var(--line-strong); background: var(--ink); overflow: hidden; box-shadow: 0 30px 80px rgba(0,0,0,.55), 0 0 0 1px rgba(0,0,0,.4); display: flex; flex-direction: column; min-height: 640px; }
+.tbar { height: 30px; background: var(--walnut); display: flex; align-items: center; gap: 8px; padding: 0 10px; color: var(--ivory); font-size: 12px; border-bottom: 1px solid var(--line-faint); }
+.tbar .t { flex: 1; opacity: .9; }
+.tbar .g { color: var(--dim); font-size: 11px; letter-spacing: .2em; }
+.body { padding: 20px 20px 18px; flex: 1; display: flex; flex-direction: column; gap: 14px; }
+.foot { background: var(--walnut); border-top: 1px solid var(--line-faint); padding: 14px 20px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.foot .hint { color: var(--dim); font-size: 12px; margin-left: auto; text-align: right; }
+
+/* header */
+.head { display: flex; gap: 12px; align-items: flex-start; }
+.head .grow { flex: 1; min-width: 0; }
+.eyebrow { font: 500 11px/1 var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--dim); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.title { font: 500 32px/1.05 var(--serif); color: var(--ivory); margin: 8px 0 0; overflow-wrap: anywhere; }
+.title.big { font-size: 40px; }
+.iconbtns { display: flex; gap: 6px; }
+.ib { width: 34px; height: 34px; border-radius: 999px; border: 1px solid var(--line-strong); display: grid; place-items: center; color: var(--ash); background: rgba(30,26,22,.55); }
+.ib svg { width: 16px; height: 16px; }
+
+/* pills, chips */
+.pill { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 999px; font-size: 12px; border: 1px solid var(--line-strong); color: var(--ash); white-space: nowrap; }
+.pill.ok { color: var(--success); border-color: rgba(159,209,143,.35); background: var(--success-wash); }
+.pill.live { color: var(--brass-soft); border-color: var(--brass-edge); background: var(--brass-wash); }
+.pill.warn { color: var(--danger); border-color: rgba(229,154,138,.35); background: var(--danger-wash); }
+.pill .dot { width: 6px; height: 6px; border-radius: 999px; background: currentColor; }
+.beta { font: 500 9.5px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--brass); border: 1px solid var(--brass-edge); border-radius: 999px; padding: 3px 6px 2px; vertical-align: 1px; }
+
+/* buttons */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 18px; border-radius: 999px; border: 1px solid var(--line-strong); background: rgba(30,26,22,.55); color: var(--ivory); font: 500 14px var(--sans); cursor: pointer; white-space: nowrap; }
+.btn:hover { border-color: var(--line-hover); }
+.btn svg { width: 16px; height: 16px; }
+.btn.primary { background: var(--brass); border-color: var(--brass); color: var(--on-brass); }
+.btn.primary:hover { background: var(--brass-hover); }
+.btn.sm { height: 30px; padding: 0 12px; font-size: 13px; }
+.btn.quiet { background: transparent; border-color: transparent; color: var(--ash); padding: 0 8px; }
+.btn.quiet:hover { color: var(--ivory); }
+.btn.danger { color: var(--danger); border-color: rgba(229,154,138,.4); background: transparent; }
+.btn.lg { height: 46px; padding: 0 22px; font-size: 15px; }
+
+/* panels */
+.panel { border: 1px solid var(--line); border-radius: 16px; background: var(--glass); box-shadow: inset 0 1px 0 rgba(255,255,255,.05); }
+.panel.pad { padding: 14px 16px; }
+.banner { border: 1px solid var(--brass-edge); background: var(--brass-wash); border-radius: 14px; padding: 10px 10px 10px 14px; display: flex; align-items: center; gap: 10px; }
+.banner .txt { flex: 1; min-width: 0; color: var(--text); font-size: 13px; }
+.banner .txt b { color: var(--ivory); font-weight: 500; }
+.banner svg { width: 16px; height: 16px; color: var(--brass); flex: none; }
+
+/* checks strip */
+.checks { display: flex; gap: 8px; flex-wrap: wrap; }
+.check { display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--glass); font-size: 12.5px; color: var(--ash); cursor: pointer; }
+.check:hover { border-color: var(--line-hover); color: var(--ivory); }
+.check svg { width: 14px; height: 14px; }
+.check.warn { color: var(--danger); border-color: rgba(229,154,138,.3); }
+.check.brass { color: var(--brass-soft); border-color: var(--brass-edge); }
+.meter { width: 64px; height: 6px; border-radius: 999px; background: var(--track); overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--brass); border-radius: 999px; }
+.meter.tight i { background: linear-gradient(90deg, var(--brass), var(--danger)); }
+.checkdetail { display: none; font-size: 13px; color: var(--ash); padding: 10px 14px; border-radius: 12px; border: 1px dashed var(--line-strong); }
+.checkdetail.open { display: block; }
+.checkdetail b { color: var(--ivory); font-weight: 500; }
+
+/* the three stages */
+.stages { position: relative; display: grid; gap: 10px; }
+.stage { position: relative; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 12px; padding: 14px 16px 14px 12px; }
+.stage + .stage::before { content: ""; position: absolute; left: 28px; top: -11px; height: 12px; width: 1px; background: var(--line-strong); }
+.num { width: 30px; height: 30px; border-radius: 999px; border: 1px solid var(--line-strong); display: grid; place-items: center; font: 500 13px var(--mono); color: var(--ash); margin-top: 1px; }
+.num.done { border-color: rgba(159,209,143,.45); color: var(--success); background: var(--success-wash); }
+.num.now { border-color: var(--brass); color: var(--on-brass); background: var(--brass); }
+.num svg { width: 15px; height: 15px; }
+.stage-h { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.stage-h .lbl { font: 500 11px/1 var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--dim); }
+.stage-h .big { font: 500 22px/1.1 var(--serif); color: var(--ivory); }
+.stage-h .aside { margin-left: auto; color: var(--ash); font-size: 12.5px; }
+.stage .line { color: var(--ash); font-size: 13px; margin-top: 4px; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+
+.src { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 999px; background: var(--well); border: 1px solid var(--line); font-size: 12.5px; color: var(--text); }
+.src svg { width: 13px; height: 13px; color: var(--brass); }
+.src em { font-style: normal; color: var(--dim); }
+
+.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.stat { border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; background: var(--well); }
+.stat b { display: block; font: 500 26px/1 var(--serif); color: var(--ivory); }
+.stat span { font-size: 12px; color: var(--dim); }
+.stat.zero b { color: var(--dim); }
+
+.seg { display: inline-flex; padding: 3px; border-radius: 999px; border: 1px solid var(--line-strong); background: var(--well); margin-top: 12px; max-width: 100%; overflow-x: auto; }
+.seg button { border: 0; background: transparent; color: var(--ash); font: 500 13px var(--sans); height: 30px; padding: 0 14px; border-radius: 999px; cursor: pointer; white-space: nowrap; }
+.seg button:hover { color: var(--ivory); }
+.seg button.on { background: var(--brass-picked); color: var(--ivory); box-shadow: inset 0 0 0 1px var(--brass-edge); }
+.seg-note { color: var(--dim); font-size: 12.5px; margin-top: 8px; min-height: 1.5em; }
+
+/* switch */
+.sw { position: relative; width: 36px; height: 22px; border-radius: 999px; border: 1px solid var(--line-strong); background: var(--well); flex: none; cursor: pointer; }
+.sw i { position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 999px; background: var(--ash); transition: left .18s, background .18s; }
+.sw.on { background: var(--brass); border-color: var(--brass); }
+.sw.on i { left: 17px; background: var(--on-brass); }
+.swrow { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: 13px; color: var(--text); }
+.swrow .muted { color: var(--dim); }
+
+/* lists */
+.list { display: grid; }
+.li { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 10px 14px; border-top: 1px solid var(--line-faint); }
+.li:first-child { border-top: 0; }
+.thumb { width: 34px; height: 34px; border-radius: 8px; background: var(--photo); display: grid; place-items: center; color: var(--brass); border: 1px solid var(--line-faint); }
+.thumb svg { width: 16px; height: 16px; }
+.li .n { color: var(--ivory); font-weight: 500; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.li .m { color: var(--dim); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.li .r { color: var(--ash); font: 12px var(--mono); text-align: right; white-space: nowrap; }
+.sec { font: 500 11px/1 var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--dim); display: flex; align-items: center; gap: 8px; margin: 4px 2px -4px; }
+.sec .rest { margin-left: auto; letter-spacing: .06em; text-transform: none; font-family: var(--sans); font-size: 12px; }
+
+/* route */
+.route { display: grid; }
+.leg { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 12px; padding: 10px 14px 10px 12px; position: relative; }
+.leg .pin { width: 22px; height: 22px; border-radius: 999px; border: 1px solid var(--line-strong); display: grid; place-items: center; color: var(--brass); background: var(--ink); position: relative; z-index: 1; }
+.leg .pin svg { width: 12px; height: 12px; }
+.leg:not(:last-child)::after { content: ""; position: absolute; left: 22.5px; top: 32px; bottom: -10px; width: 1px; background: var(--line-strong); }
+.leg .n { color: var(--ivory); font-size: 13.5px; font-weight: 500; }
+.leg .m { color: var(--dim); font-size: 12px; }
+.leg .r { color: var(--text); font: 12.5px var(--mono); white-space: nowrap; }
+.leg.home .pin { border-color: var(--brass-edge); background: var(--brass-wash); }
+
+/* journey */
+.journey { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; position: relative; margin: 4px 0 2px; }
+.journey .s { display: grid; justify-items: center; gap: 6px; position: relative; font-size: 11.5px; color: var(--dim); text-align: center; }
+.journey .s::before { content: ""; position: absolute; top: 13px; left: -50%; width: 100%; height: 2px; background: var(--track); }
+.journey .s:first-child::before { display: none; }
+.journey .s.done::before, .journey .s.now::before { background: var(--brass); }
+.journey .c { width: 28px; height: 28px; border-radius: 999px; border: 1px solid var(--line-strong); background: var(--ink); display: grid; place-items: center; position: relative; z-index: 1; color: var(--dim); }
+.journey .c svg { width: 13px; height: 13px; }
+.journey .done .c { background: var(--brass); border-color: var(--brass); color: var(--on-brass); }
+.journey .now .c { border-color: var(--brass); color: var(--brass); box-shadow: 0 0 0 4px var(--brass-wash); }
+.journey .now { color: var(--ivory); }
+
+.figure { display: flex; align-items: baseline; gap: 10px; }
+.figure b { font: 500 56px/1 var(--serif); color: var(--ivory); }
+.figure span { color: var(--dim); }
+.bar { height: 8px; border-radius: 999px; background: var(--track); overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--brass); border-radius: 999px; }
+.split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.kv { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--glass); }
+.kv .k { font: 500 10.5px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--dim); }
+.kv .v { color: var(--ivory); font: 500 20px/1.2 var(--serif); margin: 6px 0 6px; }
+.kv .v small { font: 12px var(--sans); color: var(--dim); }
+.log { font: 12px/1.7 var(--mono); color: var(--dim); }
+.log b { color: var(--text); font-weight: 400; }
+
+.drop { border: 1px dashed rgba(239,230,214,.28); border-radius: 16px; padding: 18px; display: flex; align-items: center; gap: 14px; }
+.round { width: 44px; height: 44px; border-radius: 999px; background: var(--brass-wash); border: 1px solid var(--brass-edge); display: grid; place-items: center; color: var(--brass); flex: none; }
+.round svg { width: 18px; height: 18px; }
+.drop .t { flex: 1; min-width: 0; }
+.drop .t b { display: block; color: var(--ivory); font-weight: 500; }
+.drop .t span { color: var(--dim); font-size: 12.5px; }
+
+.home { padding: 14px 16px; display: grid; gap: 12px; }
+.home .top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.home .top .big { font: 500 22px var(--serif); color: var(--ivory); }
+.home .top .m { color: var(--dim); font-size: 12.5px; }
+.home .meter { width: 100%; height: 6px; }
+
+.tally { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.tally .stat b { font-size: 32px; }
+
+.setgroup { display: grid; }
+.setrow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 11px 14px; border-top: 1px solid var(--line-faint); }
+.setrow:first-child { border-top: 0; }
+.setrow .n { color: var(--ivory); font-size: 13.5px; }
+.setrow .m { color: var(--dim); font-size: 12px; }
+.setrow .val { color: var(--ash); font-size: 13px; display: flex; align-items: center; gap: 6px; }
+.tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+.tab { height: 30px; padding: 0 12px; border-radius: 999px; border: 1px solid transparent; color: var(--ash); font-size: 13px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; background: transparent; font-family: var(--sans); }
+.tab.on { border-color: var(--line-strong); background: var(--glass); color: var(--ivory); }
+.tab .count { font: 11px var(--mono); color: var(--dim); }
+
+.center { text-align: center; }
+.tick { width: 52px; height: 52px; border-radius: 999px; display: grid; place-items: center; background: var(--success-wash); border: 1px solid rgba(159,209,143,.4); color: var(--success); margin: 4px auto 0; }
+.tick svg { width: 24px; height: 24px; }
+.small { font-size: 12.5px; color: var(--dim); }
+.ivory { color: var(--ivory); }
+.mono { font-family: var(--mono); }
+.spacer { flex: 1; }
+
+.legend { margin-top: 56px; border-top: 1px solid var(--line); padding-top: 26px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 22px; }
+.legend h3 { font: 500 22px var(--serif); color: var(--ivory); margin: 0 0 8px; }
+.legend p, .legend li { color: var(--ash); font-size: 13px; }
+.legend ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+
+@media (max-width: 900px) {
+  .intro { grid-template-columns: minmax(0, 1fr); gap: 22px; }
+  h1 { font-size: 44px; }
+}
+@media (max-width: 520px) {
+  .rules { grid-template-columns: minmax(0, 1fr); }
+  .body { padding: 16px 14px; }
+  .foot { padding: 12px 14px; }
+  .title { font-size: 28px; }
+  .journey .s span { display: none; }
+  .foot .hint { margin-left: 0; text-align: left; width: 100%; }
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-bag" viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z M3 6h18 M16 10a4 4 0 0 1-8 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-sofa" viewBox="0 0 24 24"><path d="M20 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v3 M2 16a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-5a2 2 0 0 0-4 0v1.5H6V11a2 2 0 0 0-4 0z M4 18v2 M20 18v2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-brick" viewBox="0 0 24 24"><path d="M3 3h18v18H3z M3 9h18 M3 15h18 M9 3v6 M15 9v6 M9 15v6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="m6 4 14 8-14 8z" fill="currentColor"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M7 4h3v16H7zM14 4h3v16h-3z" fill="currentColor"/></symbol>
+    <symbol id="i-square" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5" fill="currentColor"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z M12 9v4 M12 17h.01" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15-6.7L21 8 M21 3v5h-5 M21 12a9 9 0 0 1-15 6.7L3 16 M3 21v-5h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9 M10.3 21a1.9 1.9 0 0 0 3.4 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-store" viewBox="0 0 24 24"><path d="M3 9 4.5 4h15L21 9 M3 9h18v2a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0z M5 13v7h14v-7 M10 20v-5h4v5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-scale" viewBox="0 0 24 24"><path d="M12 3v18 M5 21h14 M3 7h18 M6 7l-3 7a3 3 0 0 0 6 0z M18 7l-3 7a3 3 0 0 0 6 0z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-house" viewBox="0 0 24 24"><path d="M3 10 12 3l9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+    <symbol id="i-hammer" viewBox="0 0 24 24"><path d="m15 12-8.5 8.5a2.1 2.1 0 0 1-3-3L12 9 M17.6 15 22 10.6 M20.9 11.7 12.3 3.1a2 2 0 0 0-2.8 0L7 5.6l7.4 7.4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M17 8l-5-5-5 5 M12 3v12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4z M22 2 11 13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-save" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z M17 21v-8H7v8 M7 3v5h8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5 M4 9h10.5a5.5 5.5 0 0 1 0 11H11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 22s7-6.2 7-12a7 7 0 0 0-14 0c0 5.8 7 12 7 12z" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="10" r="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+    <symbol id="i-flask" viewBox="0 0 24 24"><path d="M9 3h6 M10 3v6L4.5 19a1.5 1.5 0 0 0 1.3 2h12.4a1.5 1.5 0 0 0 1.3-2L14 9V3 M7 15h10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7 M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  </defs>
+</svg>
+
+<div class="page">
+
+  <section class="intro">
+    <div>
+      <div class="kicker">Housing Studio plugin · mock-up for 0.6</div>
+      <h1>One flow: <em>get</em>, place, finish</h1>
+      <p class="lede">0.5 added shopping sources, errands, clear out and swaps, set the fixtures, care checks and the site link. Each one landed as its own panel, so Ready became a long column of notes. This mock-up folds them into the path you already take: what you need, what Start does, what's left after.</p>
+    </div>
+    <div class="rules">
+      <div class="rule"><b>One screen, three stages</b><span>Get, Place and Finish are numbered steps on Ready, not separate panels.</span></div>
+      <div class="rule"><b>Chips, not paragraphs</b><span>Checks and states are short chips that open a detail when you press them.</span></div>
+      <div class="rule"><b>One brass button</b><span>Each screen has a single primary action, and its words say what it will do.</span></div>
+      <div class="rule"><b>Beta stays in place</b><span>Experimental features appear where they belong, with a small Beta tag. No separate pages.</span></div>
+    </div>
+  </section>
+
+  <div class="flowbar" aria-label="The flow">
+    <span class="stop">Start</span><span class="arrow">→</span>
+    <span class="stop core">Ready · get · place · finish</span><span class="arrow">→</span>
+    <span class="stop">Running</span><span class="arrow">→</span>
+    <span class="stop">Done</span>
+    <span class="arrow" style="margin-left:12px">·</span>
+    <span class="stop">Settings</span>
+  </div>
+
+  <div class="screens">
+
+    <!-- ===================== START ===================== -->
+    <section class="screen">
+      <h2>Start</h2>
+      <p class="sub">Load a design, or do something with the home you're in.</p>
+      <div class="win">
+        <div class="tbar"><span class="t">Housing Studio</span><span class="g">☰ ▾ ✕</span></div>
+        <div class="body">
+          <div class="head">
+            <div class="grow">
+              <div class="eyebrow"><span class="pill ok"><span class="dot"></span>In your house · Mist, plot 12</span></div>
+              <div class="title big">Housing <em>Studio</em></div>
+            </div>
+            <div class="iconbtns"><span class="ib" title="Settings"><svg><use href="#i-gear"/></svg></span></div>
+          </div>
+
+          <div class="drop">
+            <span class="round"><svg><use href="#i-upload"/></svg></span>
+            <div class="t"><b>Load a design</b><span>Drop a .build or MakePlace file here</span></div>
+            <span class="btn sm">Choose a file</span>
+          </div>
+
+          <div class="panel home">
+            <div class="top">
+              <span class="thumb"><svg><use href="#i-house"/></svg></span>
+              <div style="flex:1;min-width:0">
+                <div class="big">This house</div>
+                <div class="m">Medium house · 312 of 450 pieces placed inside</div>
+              </div>
+              <span class="check brass" title="3 pieces moved since your last run"><svg><use href="#i-refresh"/></svg>3 changed</span>
+            </div>
+            <div class="meter"><i style="width:69%"></i></div>
+            <div class="row" style="margin-top:0">
+              <span class="btn sm"><svg><use href="#i-save"/></svg>Save as a build</span>
+              <span class="btn sm"><svg><use href="#i-send"/></svg>Send to my builds</span>
+            </div>
+          </div>
+
+          <div class="sec">Recent</div>
+          <div class="panel list">
+            <div class="li"><span class="thumb"><svg><use href="#i-file"/></svg></span><div style="min-width:0"><div class="n">kokomed2</div><div class="m">447 pieces · House (medium) · today 18.57</div></div><span class="r">BUILD <svg style="width:14px;height:14px;vertical-align:-3px"><use href="#i-chev"/></svg></span></div>
+            <div class="li"><span class="thumb"><svg><use href="#i-file"/></svg></span><div style="min-width:0"><div class="n">Winter Lodge</div><div class="m">Kept from a swap · 391 pieces · yesterday</div></div><span class="r">KEPT <svg style="width:14px;height:14px;vertical-align:-3px"><use href="#i-chev"/></svg></span></div>
+            <div class="li"><span class="thumb"><svg><use href="#i-file"/></svg></span><div style="min-width:0"><div class="n">Riviera Café</div><div class="m">212 pieces · Cottage · 28 Oct</div></div><span class="r">MAKEPLACE <svg style="width:14px;height:14px;vertical-align:-3px"><use href="#i-chev"/></svg></span></div>
+          </div>
+          <div class="spacer"></div>
+          <div class="small center">Looking for a design? <span class="ivory">Browse designs</span></div>
+        </div>
+      </div>
+      <ul class="notes">
+        <li><b>This house</b> combines how full it is, Save, Send to my builds and Check for changes into one card. Today those are four separate blocks.</li>
+        <li>"Since your last run" becomes a <b>3 changed</b> chip. Pressing it opens the changes.</li>
+        <li>Recent marks a swap's kept home as <b>KEPT</b>, so you can find it to swap back to.</li>
+      </ul>
+    </section>
+
+    <!-- ===================== READY ===================== -->
+    <section class="screen" id="ready">
+      <h2>Ready <span class="beta" style="font-size:10px">the core</span></h2>
+      <p class="sub">Get, Place and Finish as three steps, with one button that does them in order.</p>
+      <div class="win">
+        <div class="tbar"><span class="t">Housing Studio</span><span class="g">☰ ▾ ✕</span></div>
+        <div class="body">
+          <div class="head">
+            <div class="grow">
+              <div class="eyebrow">Build · inside · <span class="pill ok"><span class="dot"></span>Fits this house</span></div>
+              <div class="title">kokomed2</div>
+            </div>
+            <div class="iconbtns">
+              <span class="ib" title="Pieces"><svg><use href="#i-list"/></svg></span>
+              <span class="ib" title="Settings"><svg><use href="#i-gear"/></svg></span>
+              <span class="ib" title="Close"><svg><use href="#i-x"/></svg></span>
+            </div>
+          </div>
+
+          <div class="banner">
+            <svg><use href="#i-refresh"/></svg>
+            <div class="txt"><b>A run was cut off at piece 212 of 447.</b></div>
+            <span class="btn sm primary">Carry on</span><span class="btn sm quiet">Forget</span>
+          </div>
+
+          <div class="checks" role="group" aria-label="Checks">
+            <button class="check" data-detail="d-limit"><span class="meter tight"><i style="width:99%"></i></span>447 of 450</button>
+            <button class="check warn" data-detail="d-refuse"><svg><use href="#i-alert"/></svg>2 may be refused</button>
+            <button class="check" data-detail="d-dyes"><svg><use href="#i-flask"/></svg>3 dyes short</button>
+          </div>
+          <div class="checkdetail" id="d-limit"><b>447 of the 450 pieces a medium house holds.</b> The pieces placed now that aren't in the design count too, unless Clear out puts them away first.</div>
+          <div class="checkdetail" id="d-refuse"><b>2 pieces sit below the basement floor.</b> With Place anywhere on, the game takes them. <span class="ivory">Show where</span></div>
+          <div class="checkdetail" id="d-dyes"><b>Soot Black ×2, Snow White ×1</b> aren't in your bags. They're added to Get. <span class="ivory">Copy list</span></div>
+
+          <div class="stages">
+            <div class="panel stage">
+              <span class="num now">1</span>
+              <div>
+                <div class="stage-h"><span class="lbl">Get</span><span class="big">12 missing</span><span class="aside">about 61,400 gil</span></div>
+                <div class="row">
+                  <span class="src"><svg><use href="#i-bell"/></svg>4 <em>retainers</em></span>
+                  <span class="src"><svg><use href="#i-store"/></svg>5 <em>vendors</em></span>
+                  <span class="src"><svg><use href="#i-scale"/></svg>2 <em>market</em></span>
+                  <span class="src"><svg><use href="#i-hammer"/></svg>1 <em>craft</em></span>
+                </div>
+                <div class="swrow"><span class="sw on" data-sw="get"><i></i></span><span>Get them for me first <span class="beta">Beta</span></span><span class="spacer"></span><span class="btn sm quiet">See the list <svg><use href="#i-chev"/></svg></span></div>
+              </div>
+            </div>
+
+            <div class="panel stage">
+              <span class="num">2</span>
+              <div>
+                <div class="stage-h"><span class="lbl">Place</span><span class="big">443 to do</span><span class="aside">4 already in place</span></div>
+                <div class="stats">
+                  <div class="stat"><b>31</b><span>to move</span></div>
+                  <div class="stat"><b>412</b><span>to place</span></div>
+                  <div class="stat"><b>87</b><span>to dye</span></div>
+                </div>
+                <div class="seg" role="tablist" aria-label="What's here now">
+                  <button class="on" data-mode="keep">Keep what's here</button>
+                  <button data-mode="clear">Clear out 14</button>
+                  <button data-mode="swap">Swap</button>
+                </div>
+                <div class="seg-note" id="mode-note">The 14 pieces not in the design stay where they are.</div>
+              </div>
+            </div>
+
+            <div class="panel stage">
+              <span class="num">3</span>
+              <div>
+                <div class="stage-h"><span class="lbl">Finish</span><span class="big">8 fixtures</span><span class="aside">3 of 11 set</span></div>
+                <div class="line">Walls, flooring and lights on 3 floors. All 8 are in your bags.</div>
+                <div class="swrow"><span class="sw" data-sw="fix"><i></i></span><span>Set them for me after placing <span class="beta">Beta</span></span><span class="spacer"></span><span class="btn sm quiet">Tick off</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="foot">
+          <span class="btn lg primary" id="go"><svg><use href="#i-play"/></svg><span id="go-label">Get 12, then place</span></span>
+          <span class="btn lg"><svg><use href="#i-eye"/></svg>Preview</span>
+          <span class="hint" id="go-hint">About 40 minutes · 2 trips, then a quick pace</span>
+        </div>
+      </div>
+      <ul class="notes">
+        <li><b>Three numbered steps</b> replace nine panels. Each shows one large number, then details only if you open them.</li>
+        <li><b>Clear out and Swap</b> become one choice about the pieces already here: <i>Keep</i>, <i>Clear out</i> or <i>Swap</i>. Try them.</li>
+        <li>Warnings and the item limit move into <b>check chips</b> that open a detail. Turn the Beta switches on and off to see the button's words change.</li>
+        <li>Carry on is a single banner line at the top, shown only when a run was cut off.</li>
+      </ul>
+    </section>
+
+    <!-- ===================== GET (errands plan) ===================== -->
+    <section class="screen">
+      <h2>Get, before setting out</h2>
+      <p class="sub">The errands estimate as a route list, with the cost before anything is bought.</p>
+      <div class="win">
+        <div class="tbar"><span class="t">Housing Studio</span><span class="g">☰ ▾ ✕</span></div>
+        <div class="body">
+          <div class="head">
+            <div class="grow">
+              <div class="eyebrow">kokomed2 · get <span class="beta">Beta</span></div>
+              <div class="title">12 things, <em>2 trips</em></div>
+            </div>
+            <div class="iconbtns"><span class="ib" title="Back"><svg style="transform:rotate(180deg)"><use href="#i-chev"/></svg></span></div>
+          </div>
+
+          <div class="checks">
+            <span class="check"><svg style="color:var(--success)"><use href="#i-check"/></svg>vnavmesh</span>
+            <span class="check"><svg style="color:var(--success)"><use href="#i-check"/></svg>Lifestream</span>
+            <span class="check"><svg style="color:var(--success)"><use href="#i-check"/></svg>AutoRetainer</span>
+          </div>
+
+          <div class="sec">Trip 1 <span class="rest">28 of 32 bag slots</span></div>
+          <div class="panel route">
+            <div class="leg"><span class="pin"><svg><use href="#i-bell"/></svg></span><div><div class="n">Bell in your house</div><div class="m">Mugino'shizuri · Glade Shelf ×2, Oasis Rug, Soot Black</div></div><span class="r">free</span></div>
+            <div class="leg"><span class="pin"><svg><use href="#i-store"/></svg></span><div><div class="n">Mist · Housing merchant</div><div class="m">Riviera Table ×2, Glade Round Table, Oasis Lamp ×2</div></div><span class="r">8,400</span></div>
+            <div class="leg"><span class="pin"><svg><use href="#i-scale"/></svg></span><div><div class="n">Limsa · Market board</div><div class="m">Hedge-trimmed Flower Bed · Snow White ×1</div></div><span class="r">≤ 53,000</span></div>
+            <div class="leg home"><span class="pin"><svg><use href="#i-house"/></svg></span><div><div class="n">Home, and place</div><div class="m">11 pieces go in</div></div><span class="r"></span></div>
+          </div>
+          <div class="sec">Trip 2 <span class="rest">what didn't fit, and the rest</span></div>
+          <div class="panel route">
+            <div class="leg home"><span class="pin"><svg><use href="#i-house"/></svg></span><div><div class="n">Whatever's left, then home again</div><div class="m">Worked out again after trip 1</div></div><span class="r"></span></div>
+          </div>
+
+          <div class="panel list">
+            <div class="li"><span class="thumb"><svg><use href="#i-hammer"/></svg></span><div style="min-width:0"><div class="n">1 to craft</div><div class="m">Carpenter · not on the board</div></div><span class="btn sm">Teamcraft</span></div>
+          </div>
+
+          <div class="setrow panel" style="border-top:1px solid var(--line)">
+            <div><div class="n">Limits</div><div class="m">Market up to 100,000 · home world only · 2 slots spare</div></div>
+            <span class="btn sm quiet">Change</span>
+          </div>
+        </div>
+        <div class="foot">
+          <span class="btn lg primary"><svg><use href="#i-play"/></svg>Set out · up to 61,400 gil</span>
+          <span class="hint">You can stop at any time.<br>Nothing is bought above the price shown.</span>
+        </div>
+      </div>
+      <ul class="notes">
+        <li>Each <b>stop on the route</b> takes one line: where, what's bought there, and the gil.</li>
+        <li>The plugins it needs show as <b>green chips</b>. A missing one turns into a red chip with an Install button.</li>
+        <li>The five settings become one <b>Limits</b> row. The button names the gil, which replaces the confirmation pop-up.</li>
+      </ul>
+    </section>
+
+    <!-- ===================== RUNNING ===================== -->
+    <section class="screen">
+      <h2>Running</h2>
+      <p class="sub">Errands and placing as one journey, so you always know which leg it's on.</p>
+      <div class="win">
+        <div class="tbar"><span class="t">Housing Studio</span><span class="g">☰ ▾ ✕</span></div>
+        <div class="body">
+          <div class="head">
+            <div class="grow">
+              <div class="eyebrow">Getting kokomed2 · trip 1 of 2</div>
+              <div class="title">At the <em>housing merchant</em></div>
+            </div>
+            <span class="pill live"><span class="dot"></span>Running</span>
+          </div>
+
+          <div class="journey">
+            <div class="s done"><span class="c"><svg><use href="#i-check"/></svg></span><span>Bell</span></div>
+            <div class="s now"><span class="c"><svg><use href="#i-store"/></svg></span><span>Vendors</span></div>
+            <div class="s"><span class="c"><svg><use href="#i-scale"/></svg></span><span>Market</span></div>
+            <div class="s"><span class="c"><svg><use href="#i-house"/></svg></span><span>Home</span></div>
+            <div class="s"><span class="c"><svg><use href="#i-sofa"/></svg></span><span>Place</span></div>
+          </div>
+
+          <div class="panel pad" style="display:flex;gap:12px;align-items:center">
+            <span class="thumb"><svg><use href="#i-sofa"/></svg></span>
+            <div style="flex:1;min-width:0"><div class="ivory" style="font-weight:500">Buying Riviera Table ×2</div><div class="small">2,000 gil each · the game asked, and the price matched</div></div>
+          </div>
+
+          <div class="split">
+            <div class="kv"><div class="k">Got</div><div class="v">6 <small>of 12</small></div><div class="bar"><i style="width:50%"></i></div></div>
+            <div class="kv"><div class="k">Spent</div><div class="v">4,000 <small>of 61,400</small></div><div class="bar"><i style="width:7%"></i></div></div>
+          </div>
+
+          <div class="sec">What it's doing <span class="rest">Copy</span></div>
+          <div class="log">
+            <div><b>18.41</b> Took Glade Shelf ×2, Oasis Rug, Soot Black from Mugino'shizuri</div>
+            <div><b>18.42</b> Teleported to Mist · walked to the housing merchant</div>
+            <div><b>18.43</b> Bought Riviera Table ×1 for 2,000 gil</div>
+          </div>
+          <div class="spacer"></div>
+          <div class="small center">Leave the keyboard and mouse alone while it walks and buys.</div>
+        </div>
+        <div class="foot">
+          <span class="btn lg"><svg><use href="#i-pause"/></svg>Pause</span>
+          <span class="btn lg danger"><svg><use href="#i-square"/></svg>Stop</span>
+          <span class="hint">About 35 minutes left</span>
+        </div>
+      </div>
+      <ul class="notes">
+        <li>A single <b>journey bar</b>: Bell → Vendors → Market → Home → Place. When it reaches Place, the usual placing figure and phases take over this screen.</li>
+        <li><b>Got</b> and <b>Spent</b> each show progress against the total you agreed to.</li>
+        <li>The title always says where it is now, in plain words.</li>
+      </ul>
+    </section>
+
+    <!-- ===================== DONE ===================== -->
+    <section class="screen">
+      <h2>Done</h2>
+      <p class="sub">What happened, what needs you, and one undo, whichever kind of run it was.</p>
+      <div class="win">
+        <div class="tbar"><span class="t">Housing Studio</span><span class="g">☰ ▾ ✕</span></div>
+        <div class="body">
+          <div class="center">
+            <span class="tick"><svg><use href="#i-check"/></svg></span>
+            <div class="title" style="margin-top:12px">kokomed2 is <em>in</em></div>
+            <div class="small" style="margin-top:4px">445 of 447 pieces · 12 got on 2 trips for 58,920 gil</div>
+          </div>
+          <div class="tally">
+            <div class="stat"><b>31</b><span>moved</span></div>
+            <div class="stat"><b>412</b><span>placed</span></div>
+            <div class="stat"><b>85</b><span>dyed</span></div>
+          </div>
+
+          <div class="sec">Needs you <span class="rest">2</span></div>
+          <div class="panel list">
+            <div class="li"><span class="thumb" style="color:var(--danger)"><svg><use href="#i-alert"/></svg></span><div style="min-width:0"><div class="n">Glade Partition</div><div class="m">The game refused its spot</div></div><span class="btn sm quiet"><svg><use href="#i-pin"/></svg>Show</span></div>
+            <div class="li"><span class="thumb" style="color:var(--danger)"><svg><use href="#i-flask"/></svg></span><div style="min-width:0"><div class="n">2 left undyed</div><div class="m">Snow White wasn't on the board</div></div><span class="btn sm quiet">Copy</span></div>
+          </div>
+
+          <div class="panel" style="display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 14px">
+            <span class="thumb"><svg><use href="#i-undo"/></svg></span>
+            <div style="min-width:0"><div class="ivory" style="font-weight:500">Not what you wanted?</div><div class="small">What was here is kept as “Winter Lodge”</div></div>
+            <span class="btn sm">Swap back</span>
+          </div>
+
+          <div class="panel" style="display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 14px">
+            <span class="thumb"><svg><use href="#i-brick"/></svg></span>
+            <div style="min-width:0"><div class="ivory" style="font-weight:500">8 fixtures to set</div><div class="small">Walls, flooring and lights</div></div>
+            <span class="btn sm">Set them <span class="beta">Beta</span></span>
+          </div>
+        </div>
+        <div class="foot">
+          <span class="btn lg primary"><svg><use href="#i-refresh"/></svg>Try the 2 again</span>
+          <span class="btn lg">Done</span>
+        </div>
+      </div>
+      <ul class="notes">
+        <li>One line of <b>what happened</b> includes the errands' trips and gil.</li>
+        <li><b>Put them back</b> and <b>Swap back</b> share one undo card. Its button changes with the kind of run.</li>
+        <li>Fixtures carry over as <b>step 3 of the flow</b>. Today it's a note at the bottom of the screen.</li>
+      </ul>
+    </section>
+
+    <!-- ===================== SETTINGS ===================== -->
+    <section class="screen">
+      <h2>Settings</h2>
+      <p class="sub">Tabs instead of one long scroll, with each setting described in a single line.</p>
+      <div class="win">
+        <div class="tbar"><span class="t">Housing Studio</span><span class="g">☰ ▾ ✕</span></div>
+        <div class="body">
+          <div class="head">
+            <div class="grow"><div class="title">Settings</div></div>
+            <div class="iconbtns"><span class="ib" title="Back"><svg style="transform:rotate(180deg)"><use href="#i-chev"/></svg></span></div>
+          </div>
+          <div class="tabs" role="tablist">
+            <button class="tab on" data-tab="t-place">Placing</button>
+            <button class="tab" data-tab="t-get">Getting <span class="count">4</span></button>
+            <button class="tab" data-tab="t-beta">Beta <span class="count">3</span></button>
+            <button class="tab" data-tab="t-help">Help</button>
+          </div>
+
+          <div class="panel setgroup tabpane" id="t-place">
+            <div class="setrow"><div><div class="n">Place pieces for me</div><div class="m">From the storeroom and your bags</div></div><span class="sw on"><i></i></span></div>
+            <div class="setrow"><div><div class="n">Dye after placing</div><div class="m">Uses dyes from your bags</div></div><span class="sw on"><i></i></span></div>
+            <div class="setrow"><div><div class="n">Keep a backup</div><div class="m">So a run can be undone</div></div><span class="sw on"><i></i></span></div>
+            <div class="setrow"><div><div class="n">Pace</div><div class="m">0.4 s between pieces</div></div><div class="seg" style="margin:0"><button>Steady</button><button class="on">Quick</button><button>Daring</button></div></div>
+            <div class="setrow"><div><div class="n">Show where pieces go</div><div class="m">Markers in the world</div></div><span class="sw on"><i></i></span></div>
+            <div class="setrow"><div><div class="n">More options</div><div class="m">Place anywhere, floors, markers…</div></div><span class="val">12 <svg style="width:14px;height:14px"><use href="#i-chev"/></svg></span></div>
+          </div>
+
+          <div class="panel setgroup tabpane" id="t-get" hidden>
+            <div class="setrow"><div><div class="n">Market prices</div><div class="m">Asks Universalis for your data centre</div></div><span class="sw on"><i></i></span></div>
+            <div class="setrow"><div><div class="n">Market ceiling</div><div class="m">The most errands spend there</div></div><span class="val mono">100,000</span></div>
+            <div class="setrow"><div><div class="n">Other worlds</div><div class="m">Buy across your data centre</div></div><span class="sw"><i></i></span></div>
+            <div class="setrow"><div><div class="n"><svg style="width:14px;height:14px;vertical-align:-2px;color:var(--brass)"><use href="#i-link"/></svg> Housing Studio account</div><div class="m">Linked · hsp_••••3f2a</div></div><span class="btn sm quiet">Unlink</span></div>
+          </div>
+
+          <div class="panel setgroup tabpane" id="t-beta" hidden>
+            <div class="setrow"><div><div class="n">Get everything for me <span class="beta">Beta</span></div><div class="m">Retainers, vendors, the board, then home</div></div><span class="sw on"><i></i></span></div>
+            <div class="setrow"><div><div class="n">Set the fixtures for me <span class="beta">Beta</span></div><div class="m">After placing, from your bags</div></div><span class="sw"><i></i></span></div>
+            <div class="setrow"><div><div class="n">Put back what changed <span class="beta">Beta</span></div><div class="m">Since your last run</div></div><span class="sw"><i></i></span></div>
+          </div>
+
+          <div class="panel setgroup tabpane" id="t-help" hidden>
+            <div class="setrow"><div><div class="n">Step by step</div><div class="m">Hold before every click</div></div><span class="sw"><i></i></span></div>
+            <div class="setrow"><div><div class="n">Record what I do</div><div class="m">For a bug report</div></div><span class="btn sm">Start</span></div>
+            <div class="setrow"><div><div class="n">Trust the new clicks</div><div class="m">Stop holding the ones not yet seen working</div></div><span class="sw"><i></i></span></div>
+          </div>
+          <div class="spacer"></div>
+          <div class="small center">Housing Studio 0.6.0 · <span class="ivory">What's new</span></div>
+        </div>
+      </div>
+      <ul class="notes">
+        <li>Four tabs: <b>Placing</b>, <b>Getting</b> (prices, errands' limits, the site link), <b>Beta</b> and <b>Help</b>.</li>
+        <li>Each setting has a name and a single line saying what it does. Longer explanations move to tooltips.</li>
+        <li>The Beta switches are also on Ready, where they're used. This tab is just the overview.</li>
+      </ul>
+    </section>
+
+  </div>
+
+  <section class="legend">
+    <div>
+      <h3>What moves where</h3>
+      <ul>
+        <li>Shopping list → <b class="ivory">Ready · Get</b> (the list opens from it)</li>
+        <li>Errands' estimate → <b class="ivory">Get, before setting out</b></li>
+        <li>Clear out, Swap → <b class="ivory">Ready · Place</b>, as one choice</li>
+        <li>Set the fixtures → <b class="ivory">Ready · Finish</b> and Done</li>
+        <li>Carry on → banner · item limit, clashes, dyes → check chips</li>
+        <li>Since your last run → <b class="ivory">Start · This house</b></li>
+      </ul>
+    </div>
+    <div>
+      <h3>What stays</h3>
+      <p>The tokens, fonts, icons and controls are the ones the plugin already draws: brass is the one accent, panels are glass, and footers are walnut. Every element here is a <span class="mono">Kit</span> control that already exists, except the journey bar and the check chip, which are new.</p>
+    </div>
+    <div>
+      <h3>Wording</h3>
+      <p>The button always says what will happen: <i>Get 12, then place</i> · <i>Clear out 14, then place</i> · <i>Swap and place</i> · <i>Start placing</i>. Notes are one line. Anything longer moves behind a chip or into a tooltip.</p>
+    </div>
+  </section>
+</div>
+
+<script>
+(function () {
+  var notes = {
+    keep: "The 14 pieces not in the design stay where they are.",
+    clear: "First, the 14 pieces not in the design go to your storeroom.",
+    swap: "What's here is kept as “Winter Lodge” so you can swap back. Then it clears out and places."
+  };
+  var state = { mode: "keep", get: true, fix: false };
+  var label = document.getElementById("go-label");
+  var hint = document.getElementById("go-hint");
+  function render() {
+    var place = state.mode === "clear" ? "clear out 14, then place" : state.mode === "swap" ? "swap and place" : "place";
+    var text = state.get ? "Get 12, then " + place : place.charAt(0).toUpperCase() + place.slice(1);
+    if (!state.get && state.mode === "keep") text = "Start placing";
+    if (state.fix) text += " · fixtures";
+    label.textContent = text;
+    hint.textContent = (state.get ? "About 40 minutes · 2 trips, then a quick pace" : "About 25 minutes at a quick pace");
+    document.getElementById("mode-note").textContent = notes[state.mode];
+  }
+  document.querySelectorAll("#ready .seg button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      document.querySelectorAll("#ready .seg button").forEach(function (x) { x.classList.toggle("on", x === b); });
+      state.mode = b.dataset.mode; render();
+    });
+  });
+  document.querySelectorAll("#ready [data-sw]").forEach(function (s) {
+    s.addEventListener("click", function () {
+      s.classList.toggle("on"); state[s.dataset.sw] = s.classList.contains("on"); render();
+    });
+  });
+  document.querySelectorAll("#ready .check[data-detail]").forEach(function (c) {
+    c.addEventListener("click", function () {
+      var d = document.getElementById(c.dataset.detail);
+      var open = !d.classList.contains("open");
+      document.querySelectorAll("#ready .checkdetail").forEach(function (x) { x.classList.remove("open"); });
+      if (open) d.classList.add("open");
+    });
+  });
+  document.querySelectorAll(".tab[data-tab]").forEach(function (t) {
+    t.addEventListener("click", function () {
+      document.querySelectorAll(".tab[data-tab]").forEach(function (x) { x.classList.toggle("on", x === t); });
+      document.querySelectorAll(".tabpane").forEach(function (p) { p.hidden = p.id !== t.dataset.tab; });
+    });
+  });
+  document.querySelectorAll(".setgroup .sw, .home .sw").forEach(function (s) {
+    s.addEventListener("click", function () { s.classList.toggle("on"); });
+  });
+  render();
+})();
+</script>
+</body>
+</html>
