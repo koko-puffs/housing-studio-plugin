@@ -93,6 +93,22 @@ public sealed partial class Configuration : IPluginConfiguration
     public string SiteToken { get; set; } = string.Empty;
 
     /// <summary>
+    /// Settings → Getting, "Check for things sent from the site": while linked and logged in, the
+    /// inbox of builds and designs sent with the site's Send to game is checked about once a minute
+    /// (Session/GameLink.cs), and what's new is said in chat and a notification.
+    /// </summary>
+    public bool CheckInbox { get; set; } = true;
+
+    /// <summary>The newest thing sent from the site already told of (UTC): what's sent after it is new.</summary>
+    public DateTime InboxSeenAt { get; set; }
+
+    /// <summary>
+    /// Settings → Getting, "Show homes on Housing Studio when I visit": in any home's interior, the
+    /// site is asked whether it's a published design verified there, and a small panel shows it.
+    /// </summary>
+    public bool ShowHomesWhenVisiting { get; set; } = true;
+
+    /// <summary>
     /// Settings → Beta, Experimental features: features not yet tried in the game (or that act further on your
     /// behalf). Off by default; each has its own switch under it, which only counts while this is on.
     /// </summary>

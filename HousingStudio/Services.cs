@@ -19,6 +19,8 @@ internal sealed class Services
     [PluginService] internal static IGameGui GameGui { get; private set; } = null!;
     [PluginService] internal static ISigScanner SigScanner { get; private set; } = null!;
     [PluginService] internal static ITextureProvider Textures { get; private set; } = null!;
+    [PluginService] internal static ITextureReadbackProvider TextureReadback { get; private set; } = null!;
+    [PluginService] internal static INotificationManager Notifications { get; private set; } = null!;
     [PluginService] internal static IChatGui Chat { get; private set; } = null!;
     [PluginService] internal static IToastGui Toasts { get; private set; } = null!;
     [PluginService] internal static IPluginLog Log { get; private set; } = null!;

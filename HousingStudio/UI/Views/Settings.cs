@@ -23,7 +23,7 @@ public enum SettingsTab
 /// <summary>
 /// Settings (the 0.6 flow, docs/mockups/flow.html), from the header: four tabs as small pills under the
 /// title, Placing (what Start does, the pace, markers, and More options), Getting (market prices, the
-/// errands' limits, the Housing Studio account), Beta (the experimental features' switches) and Help
+/// errands' limits, the Housing Studio account and what it brings from the site), Beta (the experimental features' switches) and Help
 /// (step by step, the recorder, the place words, the windows and clicks, trusting the errands' new
 /// clicks). Each setting is one row: its name, one line, the control on the right; the longer words
 /// are its tooltip. The version and What's new at the foot.
@@ -42,7 +42,7 @@ public sealed partial class MainWindow
     /// <summary>The settings under More options (shown on its row).</summary>
     private const int MoreCount = 12;
 
-    private const int GettingRows = 5;
+    private const int GettingRows = 7;
     private const int BetaRows = 5;
 
     private static readonly TabSpec[] SettingsTabs =
@@ -416,7 +416,8 @@ public sealed partial class MainWindow
             config.ErrandsSpareSlots = Math.Clamp(spare + d, 0, 20);
             config.Save();
         }
-        DrawAccountRow(i);
+        DrawAccountRow(i++);
+        DrawGameLinkRows(i);
         Kit.EndPanel();
     }
 

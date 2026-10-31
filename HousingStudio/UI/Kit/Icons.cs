@@ -48,6 +48,13 @@ public enum Icon
     File,
     Link,
     AlertTriangle,
+    Camera,
+    Heart,
+    Bookmark,
+    Stamp,
+    ExternalLink,
+    Inbox,
+    ChevronLeft,
 }
 
 /// <summary>
@@ -123,6 +130,19 @@ public static class Icons
         [Icon.File] = (new[] { "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z", "M14 2v6h6" }, false),
         [Icon.Link] = (new[] { "M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7", "M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7" }, false),
         [Icon.AlertTriangle] = (new[] { "M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z", "M12 9v4", "M12 17h.01" }, false),
+        // 0.7's site link: Take a shot, the visitor panel's like, save and stamp, Open on the site, From the site.
+        [Icon.Camera] = (new[] { "M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z", Circle(12, 13, 3) }, false),
+        [Icon.Heart] = (new[] { "M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" }, false),
+        [Icon.Bookmark] = (new[] { "m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z" }, false),
+        [Icon.Stamp] = (new[]
+        {
+            "M5 22h14",
+            "M19.27 13.73A2.5 2.5 0 0 0 17.5 13h-11A2.5 2.5 0 0 0 4 15.5V17a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-1.5c0-.66-.26-1.3-.73-1.77Z",
+            "M14 13V8.5C14 7 15 7 15 5a3 3 0 0 0-6 0c0 2 1 2 1 3.5V13",
+        }, false),
+        [Icon.ExternalLink] = (new[] { "M15 3h6v6", "M10 14 21 3", "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" }, false),
+        [Icon.ChevronLeft] = (new[] { "m15 18-6-6 6-6" }, false),
+        [Icon.Inbox] = (new[] { "M22 12h-6l-2 3h-4l-2-3H2", "M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" }, false),
     };
 
     private static readonly Dictionary<Icon, (List<SvgPath.Sub> Subs, bool Filled)> Parsed = new();

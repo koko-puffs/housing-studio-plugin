@@ -10,7 +10,7 @@ using static HousingStudio.UI.Theme;
 
 namespace HousingStudio.UI;
 
-/// <summary>Start (mockup 1): nothing loaded. The title and where you are, the drop zone, Recent, and Browse designs.</summary>
+/// <summary>Start (mockup 1): nothing loaded. The title and where you are, the drop zone, This house, From the site, Recent, and Browse designs.</summary>
 public sealed partial class MainWindow
 {
     private const string BrowseUrl = "https://www.kokos-tools.com/housing-studio/browse";
@@ -51,6 +51,7 @@ public sealed partial class MainWindow
             AlertNote(session.LoadError, Palette.Danger);
         }
         DrawThisHouse();
+        DrawFromSite();
         DrawRecent();
         Frame.BeginBottom("start-bottom");
         DrawBrowse();
@@ -144,7 +145,8 @@ public sealed partial class MainWindow
     /// In a home you may decorate: the card for it. Its name, the home and how full it is ("Medium
     /// house · 312 of 450 pieces placed inside", read every 2 s while Start shows) with a meter; a chip
     /// for what changed since your last run here (with a snapshot), which checks and opens the changes
-    /// under the card; Save as a build and Send to my builds.
+    /// under the card; the home on Housing Studio (verified, Verify as …, or Post it); Save as a
+    /// build, Send to my builds, and Take a shot when it's verified as one of your designs.
     /// </summary>
     private void DrawThisHouse()
     {
@@ -225,6 +227,9 @@ public sealed partial class MainWindow
             Kit.Reserve(m, w, S(6));
         }
 
+        // On Housing Studio: verified, Verify as …, or Post it (Views/GameLink.cs).
+        DrawSiteHome();
+
         Kit.Gap(12);
         var row = new Kit.Wrap(8);
         var bh = Kit.ButtonHeight(BtnSize.Tiny);
@@ -237,8 +242,10 @@ public sealed partial class MainWindow
         if (Kit.Button("##send-home", row.Next(Kit.ButtonWidth(send, BtnSize.Tiny, Icon.Send), bh), send, Btn.Glass, BtnSize.Tiny, Icon.Send, 0, cant != null,
                 cant ?? "What's placed here, straight into your builds on Housing Studio"))
             SendHome();
+        ShotButton(ref row, bh);
         row.End();
         DrawSendState();
+        DrawShotHint();
         Kit.EndPanel();
 
         if (changesOpen && kept != null) DrawChanges(check);

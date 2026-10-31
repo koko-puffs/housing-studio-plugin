@@ -43,6 +43,9 @@ public sealed class Plugin : IDalamudPlugin
     private readonly WindowSystem windows = new("HousingStudio");
     private readonly MainWindow window;
     private readonly Overlay overlay;
+    private readonly GameLink link;
+    private readonly VisitorPanel visitorPanel;
+    private readonly ShotPanel shotPanel;
     private DateTime nextRefresh;
 
     public Plugin(IDalamudPluginInterface pluginInterface)
@@ -87,9 +90,18 @@ public sealed class Plugin : IDalamudPlugin
         window.Use(care);
         windows.AddWindow(window);
 
+        // The site link (0.7.0): the inbox, verified homes and visitors, shots from the game. Nothing of
+        // it starts while a run goes (the visitor panel's like, save and stamp excepted).
+        link = new GameLink(config, log, Plots, () => runner.Active || FixtureRun.Active || Errands.Active);
+        window.Use(link);
+        visitorPanel = new VisitorPanel(config, link, fonts, window.ShowSettings);
+        shotPanel = new ShotPanel(link, fonts);
+        windows.AddWindow(visitorPanel);
+        windows.AddWindow(shotPanel);
+
         Services.Commands.AddHandler(Command, new CommandInfo(OnCommand)
         {
-            HelpMessage = "Open Housing Studio. /hstudio pause, resume, stop, or continue (step-by-step mode) control a run.",
+            HelpMessage = "Open Housing Studio. /hstudio pause, resume, stop, or continue (step-by-step mode) control a run; /hstudio shot takes a shot of your verified home for its page on the site.",
         });
 
         Services.PluginInterface.UiBuilder.Draw += Draw;
@@ -98,6 +110,7 @@ public sealed class Plugin : IDalamudPlugin
         Services.Framework.Update += OnUpdate;
         Services.ClientState.TerritoryChanged += OnTerritoryChanged;
         Services.ClientState.Logout += OnLogout;
+        Services.ClientState.Login += OnLogin;
 
         // Reopen the last design, so it's there when you come back to your house.
         if (config.RecentFiles.Count > 0 && System.IO.File.Exists(config.RecentFiles[0])) session.Load(config.RecentFiles[0]);
@@ -156,6 +169,7 @@ public sealed class Plugin : IDalamudPlugin
             // "Set them for me after placing" follows its run here, whether the window is open or not.
             window.Tick();
             care.Tick(ctx);
+            link.Tick(ctx);
             recorder.Tick();
             Shop.Tick();
             if (DateTime.UtcNow >= nextRefresh)
@@ -186,7 +200,10 @@ public sealed class Plugin : IDalamudPlugin
         runner.Stop("You logged out.");
         FixtureRun.Stop("You logged out.");
         Errands.Stop("You logged out.");
+        Safely(link.LoggedOut);
     }
+
+    private void OnLogin() => Safely(link.LoggedIn);
 
     private void OnCommand(string command, string args)
     {
@@ -217,6 +234,10 @@ public sealed class Plugin : IDalamudPlugin
             case "config":
                 OpenSettings();
                 break;
+            case "shot":
+                // On the framework thread already (commands are run there): the camera is read now.
+                if (!link.TakeShot(HousingContext.Read(Plots), out var why)) Services.Chat.PrintError($"No shot: {why}", "Housing Studio");
+                break;
             default:
                 window.Toggle();
                 break;
@@ -233,11 +254,14 @@ public sealed class Plugin : IDalamudPlugin
         Services.Framework.Update -= OnUpdate;
         Services.ClientState.TerritoryChanged -= OnTerritoryChanged;
         Services.ClientState.Logout -= OnLogout;
+        Services.ClientState.Login -= OnLogin;
         Services.PluginInterface.UiBuilder.Draw -= Draw;
         Services.PluginInterface.UiBuilder.OpenMainUi -= OpenMain;
         Services.PluginInterface.UiBuilder.OpenConfigUi -= OpenSettings;
         Safely(() => Services.Commands.RemoveHandler(Command));
         Safely(windows.RemoveAllWindows);
+        // After the windows: nothing draws its textures once they're let go of.
+        Safely(link.Dispose);
         Safely(runner.Dispose);
         Safely(recorder.Dispose);
         Safely(anywhere.Dispose);

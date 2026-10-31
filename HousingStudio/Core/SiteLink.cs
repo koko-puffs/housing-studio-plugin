@@ -23,7 +23,7 @@ public sealed record SendResult(string? BuildId, string? Why, bool TokenRefused 
 /// database function <c>hs_plugin_save_build</c> with the site's publishable key, as the site
 /// itself would; the token says whose builds it goes in. It's never logged, nor put in the log.
 /// </summary>
-public static class SiteLink
+public static partial class SiteLink
 {
     /// <summary>The site's database (Supabase): its address and its publishable key, public by design.</summary>
     public const string SupabaseUrl = "https://upjcxjuuzxujqddtwehn.supabase.co";

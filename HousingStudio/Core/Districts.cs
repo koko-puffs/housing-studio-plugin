@@ -19,6 +19,26 @@ public static class Districts
         return null;
     }
 
+    /// <summary>
+    /// The district of a ward's or a district's interior's TerritoryType name, by its first two
+    /// letters ("s1h1" the Mist's ward, "s1i2" a medium house there, "f1…" the Lavender Beds); null
+    /// for anything else (a Minimalist interior's "h1i2" says no district).
+    /// </summary>
+    public static string? OfTerritoryName(string? territoryName)
+    {
+        var n = (territoryName ?? string.Empty).ToLowerInvariant();
+        if (n.Length < 4) return null;
+        return n[..2] switch
+        {
+            "s1" => "mist",
+            "f1" => "lavender-beds",
+            "w1" => "goblet",
+            "e1" => "shirogane",
+            "r1" => "empyreum",
+            _ => null,
+        };
+    }
+
     public static string Display(string? key) => key switch
     {
         "mist" => "Mist",

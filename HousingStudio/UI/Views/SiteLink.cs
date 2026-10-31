@@ -30,7 +30,7 @@ public sealed partial class MainWindow
 
     private bool Sending => sendState is { Result: null };
 
-    private (string? Token, string Note) linkedNote = (null, string.Empty);
+    private (string? Token, bool Refused, string Note) linkedNote = (null, false, string.Empty);
 
     /// <summary>
     /// Settings → Getting, one row: "Housing Studio account · Linked · hsp_••••3f2a" with Unlink, or,
@@ -41,7 +41,12 @@ public sealed partial class MainWindow
         const string name = "Housing Studio account";
         if (Linked)
         {
-            if (linkedNote.Token != config.SiteToken) linkedNote = (config.SiteToken, $"Linked · {SiteLink.Masked(config.SiteToken)}");
+            // The site may have refused it since (revoked there): it says so, and Unlink makes room for a new one.
+            var refused = link?.TokenRefused == true;
+            if (linkedNote.Token != config.SiteToken || linkedNote.Refused != refused)
+                linkedNote = (config.SiteToken, refused, refused
+                    ? $"Not accepted by the site · {SiteLink.Masked(config.SiteToken)}: unlink, then link a new token"
+                    : $"Linked · {SiteLink.Masked(config.SiteToken)}");
             const string unlink = "Unlink";
             SetRow(index, name, linkedNote.Note, Kit.ButtonWidth(unlink, BtnSize.Tiny, null, Btn.Quiet), Kit.ButtonHeight(BtnSize.Tiny), p =>
             {
@@ -53,7 +58,7 @@ public sealed partial class MainWindow
                     sendState = null;
                     Notify("Unlinked from Housing Studio");
                 }
-            }, tip: "Send to my builds, on Start, puts the house you're in straight into your builds on the site.", icon: Icon.Link);
+            }, tip: "Send to my builds, on Start, puts the house you're in straight into your builds on the site; things sent from the site wait under From the site; This house can be verified as your design, and shots taken of it.", icon: Icon.Link);
             return;
         }
         var width = Kit.Width - S(28);
