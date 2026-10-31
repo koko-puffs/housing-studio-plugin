@@ -144,21 +144,21 @@ public static unsafe class ErrandGame
     {
         var hm = HousingManager.Instance();
         if (hm == null || hm->IndoorTerritory == null || ctx.Kind != PlaceKind.Interior) return null;
-        var id = hm->GetCurrentIndoorHouseId();
+        var id = hm->IndoorTerritory->HouseId;
         var kind = id.IsApartment ? HomeKind.Apartment : HomeKind.House;
         var owned = false;
         try
         {
-            if (hm->GetOwnedHouseId(EstateType.PersonalEstate, -1).Id == id.Id) owned = true;
-            else if (hm->GetOwnedHouseId(EstateType.FreeCompanyEstate, -1).Id == id.Id) (kind, owned) = (HomeKind.CompanyHouse, true);
-            else if (hm->GetOwnedHouseId(EstateType.ApartmentRoom, -1).Id == id.Id) (kind, owned) = (HomeKind.Apartment, true);
+            if (HousingManager.GetOwnedHouseId(EstateType.PersonalEstate, -1).Id == id.Id) owned = true;
+            else if (HousingManager.GetOwnedHouseId(EstateType.FreeCompanyEstate, -1).Id == id.Id) (kind, owned) = (HomeKind.CompanyHouse, true);
+            else if (HousingManager.GetOwnedHouseId(EstateType.ApartmentRoom, -1).Id == id.Id) (kind, owned) = (HomeKind.Apartment, true);
         }
         catch (Exception ex)
         {
             Services.Log.Debug(ex, "Couldn't read which home is yours");
         }
         int? plot = id.IsApartment ? null : id.PlotIndex + 1;
-        return new HomeRef(ctx.TerritoryId, ctx.HouseId, hm->GetOriginalHouseTerritoryTypeId(), id.WardIndex, plot, ctx.District, kind, owned);
+        return new HomeRef(ctx.TerritoryId, ctx.HouseId, HousingManager.GetOriginalHouseTerritoryTypeId(), id.WardIndex, plot, ctx.District, kind, owned);
     }
 
     /// <summary>Inside that home now.</summary>
