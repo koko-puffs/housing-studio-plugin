@@ -22,6 +22,19 @@ public enum ReadyMode
 public static class ReadyWords
 {
     /// <summary>
+    /// Clear out's ask, when the storeroom hasn't room for every piece: " The storeroom has room for
+    /// 3: those go first, and the other 26 once the design is placed (…)". Empty when it has room, or
+    /// isn't known.
+    /// </summary>
+    public static string StoreroomRoomNote(int clearOut, int? room)
+    {
+        if (room is not { } r || r >= clearOut || clearOut <= 0) return string.Empty;
+        if (r <= 0)
+            return $" The storeroom is full: the {clearOut} go once the design is placed (each piece placed from the storeroom makes room for one), and any it still has no room for are left for you.";
+        return $" The storeroom has room for {r}: those go first, and the other {clearOut - r} once the design is placed (each piece placed from the storeroom makes room for one); any it still has no room for are left for you.";
+    }
+
+    /// <summary>
     /// The brass button: "Get 12, then place", "Get 12, then clear out 14", "Get 12, then swap";
     /// without getting first "Clear out 14, then place", "Swap and place", "Start placing"; and
     /// " · fixtures" when they're set after placing.

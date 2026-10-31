@@ -294,14 +294,17 @@ A rehearsal (Ready's Preview → Rehearse the run; [DETAILS.md](../DETAILS.md#re
 same scripts with every commit point backed out, in `Session/PlacementRunner.Rehearsal.cs`,
 `ErrandRunner.Rehearsal.cs` and `FixtureRunner.Rehearsal.cs`:
 - **Moves**: `MoveSteps` as usual; at "Picked up?" `RehearseHold` replaces `SetDownSteps`: the held
-  piece's transform is set to its spot (what the set-down would use), shown, its old transform
-  written back, then `UiTable.LetGo` (`HousingLayout ← [i:0]`, the Move button; recorded: the mode went to
-  Move, the editor held nothing, the piece was where it was). Still held → you press Esc. Its stored position is checked against where it was.
+  piece isn't shifted, and `UiTable.LetGo` (`HousingLayout ← [i:0]`, the Move button) lets go of it.
+  The Move button sets a held piece down where the editor has it: 0.7.0–0.7.1 set the transform to the
+  spot, wrote the old one back and let go, and the piece ended up away from where it was (writing the
+  layout instance back didn't reach whatever the editor sets it down from). Still held → you press Esc.
+  Its stored spot and turn (`FurnitureReader.Stored`) are checked against what they were.
 - **Storeroom**: `StoreroomAttempt` up to the preview, then `RehearsePlace`: `AimPreview` at the spot,
   "Place" found in the menu, `MenuCancel`, and a check that the menu closed and nothing was placed (the
   game keeps the row's preview, as the editor's active item, until another row is picked: recorded).
 - **Bags**: `RehearseBag`: the item's menu, "Store" (or "Place") found, `MenuCancel`.
 - **Clear out**: `RehearseStore`: Store mode pressed, the piece not picked (Store mode's pick may store it).
+  With a storeroom short of room, the pieces it has no room for are listed last (`ClearOutSplit`), as a run does.
 - **Dyes**: `DyeSteps` up to `DyePick`, then `RehearseDyeEnd`: `DyeClose` (and `DyeConfirmNo` if it
   asks), the stain checked unchanged; dyes of pieces not placed are only counted.
 - **Errands**: `RehearseBuy` / `RehearseListing`: the purchase sent, the yes/no read and checked with
@@ -319,8 +322,16 @@ The guard (`Core/Rehearsal.cs`): `GameUi.Fire` refuses what `RehearsalRules.Comm
 and what didn't work go in `Rehearsals.Report`. Care, backups, swaps, place anywhere and fixture
 ticks are skipped for a rehearsal.
 
-**The let-go** was confirmed by a recording of a rehearsal (`HousingLayout ← [i:0]` while holding:
-mode Move, nothing held, the piece where it was, the pieces placed unchanged). The fixtures window's close: a recording of putting a fixture in its slot and closing the window
+**The let-go** (`HousingLayout ← [i:0]` while holding) is a set-down where the editor has the piece,
+not a cancel: a recording of an unshifted piece showed mode Move, nothing held, the piece where it
+was; 0.7.1's rehearsal of a shifted one (old transform written back) left it moved.
+
+**Clear out and the storeroom's room**: `InventoryReader.StoreroomRoom(side)` (the loaded pages' `Size`
+less the occupied slots), `ClearOutSplit.Split` at the start, `PutOffClearOut` before each first store
+(room 0, or a refusal at this room → the rest wait), `PlanClearOutLater` at the end (after dyes and
+Put them back's pieces; found again by item and position within 0.25). `StoreSteps` decides in its
+wait: still placed after a toast and 1 s, or after 3.5 s → skipped; with a toast or room 0 it records
+`refusedAtRoom`, and later stores aren't picked while the room is unchanged. The fixtures window's close: a recording of putting a fixture in its slot and closing the window
 without applying, saying whether it asked anything and whether the fixture went back to the bags.
 
 ## For the window (the run's state)

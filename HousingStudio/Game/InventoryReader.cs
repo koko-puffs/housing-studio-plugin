@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using HousingStudio.Core;
@@ -94,6 +95,32 @@ public static unsafe class InventoryReader
             }
         }
         return list;
+    }
+
+    /// <summary>
+    /// How many more pieces the storeroom takes on a side: its pages' slots, less those holding a piece;
+    /// null before the game has sent it. (The pages the game sends are the storeroom's size: 9 pages
+    /// of 50 for one holding 449 of 450.)
+    /// </summary>
+    public static int? StoreroomRoom(Side side)
+    {
+        var mgr = InventoryManager.Instance();
+        if (mgr == null) return null;
+        int slots = 0, used = 0;
+        var loaded = false;
+        foreach (var t in side == Side.Interior ? InteriorStoreroom : ExteriorStoreroom)
+        {
+            var c = mgr->GetInventoryContainer(t);
+            if (c == null || !c->IsLoaded) continue;
+            loaded = true;
+            slots += (int)c->Size;
+            for (var i = 0; i < c->Size; i++)
+            {
+                var item = c->GetInventorySlot(i);
+                if (item != null && !item->IsEmpty()) used++;
+            }
+        }
+        return loaded ? Math.Max(0, slots - used) : null;
     }
 
     /// <summary>Has the game sent this side's storeroom yet?</summary>

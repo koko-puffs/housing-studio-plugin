@@ -8,7 +8,16 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.7.1. Placing works in the game; the newer features haven't all been tried in it yet.**
+> **Status: 0.7.2. Placing works in the game; the newer features haven't all been tried in it yet.**
+> 0.7.2: a rehearsal's move no longer moves anything. Pressing Move while the editor holds a piece
+> turned out to set it down where the editor has it, not to cancel: 0.7.1 showed the piece at its spot,
+> wrote its old spot back and let go, and an Icebox ended up away from where it was. Now the piece is
+> picked up and let go without being shifted, so it's set down where it already was, and its spot and
+> turn are checked after. **Clear out with a full storeroom**: the storeroom's room is read before
+> starting (its pages' slots less those in use); the pieces it has room for are put away first and the
+> rest once the design is placed (each piece placed from the storeroom makes room for one), found again
+> by item and spot. The ask before starting says so. A piece the game refuses puts the rest off too,
+> rather than each waiting 4 s; any still without room at the end are under **Needs you**.
 > 0.7.1: the rehearsal, from a report and a recording of one. After closing a storeroom row's menu it
 > waits only for the menu (the game keeps the row's preview, as the piece it holds, until another row
 > is picked, so 0.7.0 waited 3 s a piece and reported each one); a preview left at the end isn't called
@@ -244,7 +253,20 @@ it; the storeroom's list is made again before it's read (it doesn't show pieces 
 it was open). The garden works the same way (Store mode on the outdoor editor, as for Put them
 back). Done says how many were put away; a piece Store mode wouldn't take is under **Needs you**,
 with Show where, to put away by hand ("Try again" puts those away again, last). A preview lists them
-first ("Would put … away"). Not yet seen in the game: Store mode from the plugin (also new in Put
+first ("Would put … away").
+
+**A full storeroom** (0.7.2): before starting, the storeroom's room is read
+(`InventoryReader.StoreroomRoom`: the slots of the pages the game sent, less those holding a piece; a
+storeroom of 9 pages holding 449 has room for 1). If it can't take every piece, the ones it can are
+put away first and the rest wait (`Core/ClearOutSplit`, tested); "Clear out first?" says so. Once the
+design is placed (each piece placed from the storeroom makes room for one), they're put away last
+(`PlacementRunner.PlanClearOutLater`), each found again by its item and spot, as storing and placing
+may have given it another furniture slot. If the game refuses a piece (it says something, or 3.5 s
+go by with the room at 0), the rest of the first ones wait too (`PutOffClearOut`) rather than each
+being refused, and later pieces aren't tried until the room changes. Any still without room at the end
+are under **Needs you**: make room and Try again, or put them in your bags by hand. A preview or
+rehearsal lists the waiting ones last, where a run would put them away. A run stopped before the end
+leaves them placed (the log says so). Not yet seen in the game: Store mode from the plugin (also new in Put
 them back, 0.3.5).
 
 **Swap** (Ready's Place stage; not for a backup loaded as the design; the brass button then reads
@@ -596,7 +618,7 @@ run.
 
 | | A real run | A rehearsal |
 | --- | --- | --- |
-| Move a placed piece | picks it up, sets its spot, sets it down | picks it up and holds it at its spot a moment, writes its old spot back, then lets go by pressing the editor's **Move** button (`UiTable.LetGo`), never the set-down. A recording showed it: the editor went to Move holding nothing, and the piece was where it was (its old spot is written back first in any case). If the editor still holds it, you're asked to press Esc. Then it checks the piece is where it was. |
+| Move a placed piece | picks it up, sets its spot, sets it down | picks it up and lets go of it where it is by pressing the editor's **Move** button (`UiTable.LetGo`), never the set-down, and never shifting it while held: pressing Move while holding a piece sets it down where the editor has it (0.7.1 showed it at its spot, wrote its old spot back and let go, and the piece ended up away from where it was), so unshifted it's set down where it already was. If the editor still holds it, you're asked to press Esc. Then it checks the piece's spot and turn are as they were. |
 | Place from the storeroom | finds and picks the row, the preview shows, Place | the same up to the preview, which is moved to the piece's spot for a moment; "Place" is found in the row's menu (its words checked), then the menu is closed (as a run closes a row that isn't the piece); the game keeps the row's preview shown (as the editor's active item) until another row is picked, so only the menu closing is waited for, and a preview left at the end isn't a piece held; it checks nothing was placed. |
 | Place from your bags | the item's menu → Store, then from the storeroom (or Place, then set down) | the item's menu opened, "Store" (or "Place") found, the menu closed. |
 | Placed by hand | waits for you | doesn't wait: noted. |

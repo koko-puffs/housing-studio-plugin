@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
-using FFXIVClientStructs.FFXIV.Client.LayoutEngine.Group;
 using HousingStudio.Automation;
 using HousingStudio.Core;
 using HousingStudio.Game;
@@ -13,8 +12,8 @@ namespace HousingStudio.Session;
 /// A rehearsal (Ready's Preview → Rehearse the run): the same plan, order, windows, clicks and waits
 /// as a real run, with every commit point done up to the moment before it and then backed out:
 /// <list type="bullet">
-/// <item>a move: picked up, held at its spot, its old spot written back, and let go
-/// (<see cref="UiTable.LetGo"/>, unconfirmed: it waits for Continue until trusted) instead of set down;</item>
+/// <item>a move: picked up and let go where it is (<see cref="UiTable.LetGo"/>: pressing Move sets
+/// a held piece down where the editor has it, so it's never shifted while held), and checked unmoved;</item>
 /// <item>a storeroom piece: its row found and picked, the game's preview shown at its spot, "Place"
 /// found in the menu, and the menu closed instead (the preview goes with it);</item>
 /// <item>a bag piece: its menu opened, "Store" (or "Place") found, and the menu closed;</item>
@@ -41,8 +40,8 @@ public sealed unsafe partial class PlacementRunner
     /// <summary>Step by step is holding before the rehearsal's let-go (a click not yet seen working).</summary>
     public bool HoldingALetGo => AwaitingContinue && Rehearsal && queue.Current?.Key == LetGoKey;
 
-    /// <summary>A piece the rehearsal holds at its spot, with where it was (written back before it's let go, or on a stop).</summary>
-    private (nint Instance, Vector3 Translation, Quaternion Rotation, string Name)? rehearsalHeld;
+    /// <summary>A placed piece the rehearsal holds (picked up as a move does; never shifted), by name for what's said if it's left held.</summary>
+    private (nint Instance, string Name)? rehearsalHeld;
 
     private Func<bool>? rehearsingNow;
 
@@ -115,46 +114,38 @@ public sealed unsafe partial class PlacementRunner
     };
 
     /// <summary>
-    /// A move's commit point: the piece is held (picked up as a real move does). It's moved to its spot
-    /// (the transform the set-down would use), shown there a moment, its old spot written back, and let
-    /// go with <see cref="UiTable.LetGo"/> (unconfirmed: held for Continue until trusted). If the
-    /// editor still holds it, you press Esc; it's never set down.
+    /// A move's commit point: the piece is picked up as a real move does, and let go where it is with
+    /// <see cref="UiTable.LetGo"/>. It isn't shifted to its spot while held: pressing Move while
+    /// holding a piece sets it down where the editor has it (0.7.1's rehearsal showed it: an Icebox shown
+    /// at its spot, its old spot written back, and let go ended up away from where it was), so a rehearsal holding
+    /// it unmoved sets it down where it already was. Its spot and turn are checked after; if the editor
+    /// still holds it, you press Esc.
     /// </summary>
     private List<Step> RehearseHold(RunJob job, int key, nint instance)
     {
         var name = Name(job);
-        Vector3? was = null;
+        (Vector3 Position, float Yaw)? was = null;
         return new List<Step>
         {
             new Step
             {
-                Label = $"Hold {name} at its spot (as the set-down would put it; not set down)",
+                Label = $"Hold {name} where it is (a rehearsal doesn't take it to its spot)",
                 Key = "hold at spot",
                 IsAction = true,
                 Run = () =>
                 {
-                    if (HousingEditor.ActiveItem != instance) return StepOutcome.Skip("The game let go of it before it could be held at its spot.", ProblemKind.DidNotLand);
-                    was = ReadLive() is { } live && live.TryGetValue(key, out var p) ? p.Position : null;
-                    var sg = (SharedGroupLayoutInstance*)instance;
-                    var t0 = sg->Transform.Translation;
-                    var r0 = sg->Transform.Rotation;
-                    rehearsalHeld = (instance, new Vector3(t0.X, t0.Y, t0.Z), new Quaternion(r0.X, r0.Y, r0.Z, r0.W), name);
-                    sg->Transform.Translation = job.Target.Position;
-                    sg->Transform.Rotation = Transforms.YawQuaternion(job.Target.Yaw);
+                    if (HousingEditor.ActiveItem != instance) return StepOutcome.Skip("The game let go of it before the rehearsal could look at it.", ProblemKind.DidNotLand);
+                    was = FurnitureReader.Stored(side == Side.Garden, key);
+                    rehearsalHeld = (instance, name);
                     var t = job.Target.Position;
                     Would(job, $"set {name} down at ({t.X:0.00}, {t.Y:0.00}, {t.Z:0.00}), turned {job.Target.Yaw * 180 / MathF.PI:0}°");
                     return StepOutcome.Done;
                 },
             },
-            Step.Pause("Show it there a moment", Speed.Wait(400)),
-            Step.Act($"Put {name} back where it was (its old spot written back)", () =>
-            {
-                RestoreHeld();
-                return StepOutcome.Done;
-            }),
+            Step.Pause("Hold it a moment", Speed.Wait(200)),
             new Step
             {
-                Label = $"Let go of {name} without setting it down: {UiTable.LetGo.Describe()}",
+                Label = $"Let go of {name} where it was: {UiTable.LetGo.Describe()}",
                 Key = LetGoKey,
                 IsAction = true,
                 Run = () =>
@@ -182,12 +173,12 @@ public sealed unsafe partial class PlacementRunner
                     {
                         log.Warn($"  The editor still holds {name} after {UiTable.LetGo.Describe()}: you let go (Esc). A rehearsal never sets a piece down.");
                         Rehearsals.Report.Issue(name, $"The editor didn't let go of it after {UiTable.LetGo.Describe()} (pressing Move while holding a piece): you were asked to press Esc.", RehearsalTrouble.NoMatch);
-                        if (config.ChatMessages) Services.Chat.Print($"Press Esc to let go of {name} (it's back where it was; a rehearsal never sets it down).", "Housing Studio");
+                        if (config.ChatMessages) Services.Chat.Print($"Press Esc to let go of {name} (a rehearsal never sets it down).", "Housing Studio");
                         queue.InsertNext(new[]
                         {
                             new Step
                             {
-                                Label = $"You: press Esc to let go of {name} (it's back where it was; a rehearsal never sets it down)",
+                                Label = $"You: press Esc to let go of {name} (a rehearsal never sets it down)",
                                 Timeout = YouWait,
                                 TimeoutMessage = $"The editor still holds {name}: it's left for you (press Esc).",
                                 Run = () =>
@@ -206,29 +197,22 @@ public sealed unsafe partial class PlacementRunner
             new Step
             {
                 Label = $"Check {name} is where it was",
-                Delay = Speed.Wait(150),
+                Delay = Speed.Wait(300),
                 Run = () =>
                 {
                     var now = FurnitureReader.Stored(side == Side.Garden, key);
-                    if (was is { } w && now is { } n && Vector3.Distance(w, n.Position) > LandedDistance)
+                    if (was is { } w && now is { } n
+                        && (Vector3.Distance(w.Position, n.Position) > LandedDistance || Transforms.AngleDiff(w.Yaw, n.Yaw) > LandedYaw))
                     {
-                        log.Warn($"  {name} is at ({n.Position.X:0.00}, {n.Position.Y:0.00}, {n.Position.Z:0.00}), not where it was ({w.X:0.00}, {w.Y:0.00}, {w.Z:0.00}).");
-                        Rehearsals.Report.Issue(name, $"After letting go it's at ({n.Position.X:0.00}, {n.Position.Y:0.00}, {n.Position.Z:0.00}), not where it was ({w.X:0.00}, {w.Y:0.00}, {w.Z:0.00}): the let-go may have set it down.");
+                        var line = $"After letting go it's at ({n.Position.X:0.00}, {n.Position.Y:0.00}, {n.Position.Z:0.00}) turned {n.Yaw * 180 / MathF.PI:0}°, "
+                                   + $"not where it was ({w.Position.X:0.00}, {w.Position.Y:0.00}, {w.Position.Z:0.00}) turned {w.Yaw * 180 / MathF.PI:0}°: put it back by hand.";
+                        log.Warn($"  {name}: {line}");
+                        Rehearsals.Report.Issue(name, line);
                     }
                     return StepOutcome.Done;
                 },
             },
         };
-    }
-
-    /// <summary>Writes the held piece's old spot back (only while the editor still holds that very piece).</summary>
-    private void RestoreHeld()
-    {
-        if (rehearsalHeld is not { } h) return;
-        if (!StillInStartHome() || HousingEditor.ActiveItem != h.Instance) return;
-        var sg = (SharedGroupLayoutInstance*)h.Instance;
-        sg->Transform.Translation = h.Translation;
-        sg->Transform.Rotation = h.Rotation;
     }
 
     /// <summary>
@@ -429,8 +413,8 @@ public sealed unsafe partial class PlacementRunner
     }
 
     /// <summary>
-    /// When a rehearsal's piece ends badly with the editor holding something: a piece held at its
-    /// spot has its old spot written back and is left for you to let go (Esc); nothing is set down.
+    /// When a rehearsal's piece ends badly with the editor holding something: it's left for you to let
+    /// go (Esc); nothing is set down.
     /// </summary>
     private List<Step> RehearsalHeldCleanup() => new()
     {
@@ -440,7 +424,6 @@ public sealed unsafe partial class PlacementRunner
             Run = () =>
             {
                 if (!StillInStartHome()) return StepOutcome.Done;
-                RestoreHeld();
                 var held = HousingEditor.ActiveItem;
                 if (held == 0)
                 {
@@ -462,7 +445,7 @@ public sealed unsafe partial class PlacementRunner
             log.Info("  The game still shows the last storeroom row's preview (nothing was placed): picking another row, or Esc, clears it.");
             return;
         }
-        var what = rehearsalHeld is { } h && h.Instance == HousingEditor.ActiveItem ? $"{h.Name} (back where it was)" : "a piece";
+        var what = rehearsalHeld is { } h && h.Instance == HousingEditor.ActiveItem ? $"{h.Name} (where it was)" : "a piece";
         var line = HousingEditor.Mode == EditorMode.Place
             ? "The editor is still holding a piece to place: press Esc to put it back. A rehearsal never sets a piece down."
             : $"The editor still holds {what}: press Esc to let go. A rehearsal never sets a piece down.";
@@ -475,7 +458,6 @@ public sealed unsafe partial class PlacementRunner
     private void RehearsalEnded()
     {
         if (!StillInStartHome()) return;
-        RestoreHeld();
         if (HousingEditor.ActiveItem != 0) SayStillHeld();
         rehearsalHeld = null;
     }

@@ -80,14 +80,14 @@ public static class UiTable
     public static readonly UiCall LayoutStore = new(LayoutBar, "i:2", true, "0.3.3 recording");
 
     /// <summary>
-    /// A rehearsal's let-go: the editor holds a placed piece (picked up in Rotate, moved to its spot and
-    /// then its old spot written back), and pressing Move changes the mode, which is expected to drop
-    /// what the editor holds without setting it down. Its old spot is written back first, so even if the
-    /// game set it down, it would land where it was. [Recording 3: a rehearsal's let-go,
-    /// HousingLayout [i:0] while holding a piece in Rotate: the mode went to Move, the editor held
-    /// nothing, the piece was where it was, and the pieces placed didn't change]
+    /// A rehearsal's let-go: the editor holds a placed piece (picked up in Rotate, not shifted), and
+    /// pressing Move changes the mode and sets the piece down where the editor has it: not a cancel.
+    /// [Recording 3: an unshifted piece, HousingLayout [i:0] while holding it in Rotate: the mode went to
+    /// Move, the editor held nothing, and the piece was where it was. 0.7.1's rehearsal: a piece shown at
+    /// its spot, its old spot written back, then let go, ended up away from where it was (it seems the editor
+    /// keeps its own copy of where the held piece is): so a rehearsal never shifts what it holds]
     /// </summary>
-    public static readonly UiCall LetGo = new(LayoutBar, "i:0", true, "Recording 3: holding a piece in Rotate, Move let go of it (the editor held nothing after), and it was where it was");
+    public static readonly UiCall LetGo = new(LayoutBar, "i:0", true, "Recording 3 and 0.7.1's rehearsal: Move while holding a piece in Rotate sets it down where the editor has it (an unshifted piece stays where it was)");
 
     /// <summary>Close the editor (back to the Housing menu). [Recording 1]</summary>
     public static readonly UiCall LayoutClose = new(LayoutBar, "i:-2", false, "Recording 1");

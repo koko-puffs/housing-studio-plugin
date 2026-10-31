@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Numerics;
 using HousingStudio.Core;
 using Xunit;
@@ -173,5 +174,43 @@ public class FixtureJobsTests
         Assert.True(FixtureJobs.MenuInPlace(menu));
         // A title read first moves every entry along one: not trusted.
         Assert.False(FixtureJobs.MenuInPlace(new[] { "Housing", "Indoor Furnishings", "Furnishing Color" }));
+    }
+}
+
+public class ClearOutRoomTests
+{
+    private static PlacedPiece At(int key, float x, float y) => new(key, 100, new Vector3(x, y, 0), 0, 0);
+
+    [Fact]
+    public void AStoreroomWithRoomTakesThemAllFirst()
+    {
+        var pieces = new[] { At(1, 0, 0), At(2, 0, 1), At(3, 0, 2) };
+        var (first, later) = ClearOutSplit.Split(pieces, 3);
+        Assert.Equal(3, first.Count);
+        Assert.Empty(later);
+        // Not known (the storeroom not sent yet): all first, and a refusal puts the rest off then.
+        Assert.Equal(3, ClearOutSplit.Split(pieces, null).First.Count);
+    }
+
+    [Fact]
+    public void AFullStoreroomPutsTheRestOffUntilPlaced()
+    {
+        var pieces = new[] { At(1, 0, 0), At(2, 0, 1), At(3, 0, 2) };
+        var (first, later) = ClearOutSplit.Split(pieces, 1);
+        Assert.Equal(new[] { 1 }, first.Select(p => p.Key));
+        Assert.Equal(new[] { 2, 3 }, later.Select(p => p.Key));
+        var (none, all) = ClearOutSplit.Split(pieces, 0);
+        Assert.Empty(none);
+        Assert.Equal(3, all.Count);
+        Assert.Empty(ClearOutSplit.Split(pieces, -2).First);
+    }
+
+    [Fact]
+    public void TheAskSaysWhenTheStoreroomIsShort()
+    {
+        Assert.Equal(string.Empty, HousingStudio.UI.Model.ReadyWords.StoreroomRoomNote(29, null));
+        Assert.Equal(string.Empty, HousingStudio.UI.Model.ReadyWords.StoreroomRoomNote(29, 40));
+        Assert.Contains("room for 1: those go first, and the other 28", HousingStudio.UI.Model.ReadyWords.StoreroomRoomNote(29, 1));
+        Assert.Contains("The storeroom is full: the 29 go once the design is placed", HousingStudio.UI.Model.ReadyWords.StoreroomRoomNote(29, 0));
     }
 }

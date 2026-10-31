@@ -555,6 +555,8 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         LogRows();
         if (!DryRun) foreach (var line in timings.Summary()) log.Info(line);
         log.Warn($"{(Rehearsal ? "Rehearsal stopped" : "Stopped")}: {reason}");
+        if (clearOutLater.Count > 0)
+            log.Warn($"{clearOutLater.Count} piece{(clearOutLater.Count == 1 ? " was" : "s were")} to be cleared out once the design was placed (the storeroom had no room at the start): still placed. Clear out again from Ready to put them away.");
         if (config.ChatMessages) Services.Chat.PrintError($"{(Rehearsal ? "Rehearsal stopped" : "Stopped")}: {reason}", "Housing Studio");
     }
 
@@ -698,7 +700,24 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     return;
                 }
             }
+            if (clearOutLater.Count > 0)
+            {
+                PlanClearOutLater();
+                if (index < jobs.Count)
+                {
+                    index--;
+                    nextJobAt = DateTime.UtcNow;
+                    return;
+                }
+            }
             Finish();
+            return;
+        }
+        // Clear out's first pieces, with a storeroom that's full: they wait for the end.
+        if (PutOffClearOut())
+        {
+            index--;
+            nextJobAt = DateTime.UtcNow;
             return;
         }
 
@@ -863,7 +882,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     var now = InstanceOf(key);
                     if (HousingEditor.ActiveItem == instance && now == instance)
                     {
-                        // A rehearsal holds it at its spot and lets go instead of setting it down.
+                        // A rehearsal lets go of it where it is (never shifted) instead of setting it down at its spot.
                         queue.InsertNext(Rehearsal ? RehearseHold(job, key, instance) : SetDownSteps(job, key, instance, attempt, justPlaced));
                         return StepOutcome.Done;
                     }
@@ -2491,6 +2510,8 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     if (live == null || !live.TryGetValue(key, out var piece) || piece.ItemId != job.Target.ItemId)
                         return StepOutcome.Skip("It's no longer where it was (moved or put away already).", ProblemKind.NotFound);
                     if (piece.Instance == 0) return StepOutcome.Skip("The game hasn't loaded it (walk closer to it).", ProblemKind.NotLoaded);
+                    if (StoreroomRefuses()) return StepOutcome.Skip(StoreroomFullWords, ProblemKind.Other);
+                    lastToast = null;
                     return editor.Select(piece.Instance) ? StepOutcome.Done : StepOutcome.Halt("Couldn't pick the piece (the editor closed?).");
                 },
             },
@@ -2506,13 +2527,30 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 {
                     if (AnswerYes()) return StepOutcome.Waiting;
                     var live = ReadLive();
-                    if (live == null || live.TryGetValue(key, out var piece) && piece.ItemId == job.Target.ItemId) return StepOutcome.Waiting;
+                    if (live == null || live.TryGetValue(key, out var piece) && piece.ItemId == job.Target.ItemId)
+                    {
+                        // Still placed: the game said something (the storeroom is full?), or 3.5 s went by.
+                        var said = lastToast != null && queue.Elapsed > TimeSpan.FromSeconds(1);
+                        if (!said && queue.Elapsed <= TimeSpan.FromSeconds(3.5)) return StepOutcome.Waiting;
+                        var room = InventoryReader.StoreroomRoom(side);
+                        log.Warn($"  {name} wasn't put away ({(said ? $"the game said \"{lastToast}\"" : "nothing changed in 3.5 s")}; room for {room?.ToString() ?? "?"} in the storeroom).");
+                        if (said || room is <= 0)
+                        {
+                            refusedAtRoom = room;
+                            return StepOutcome.Skip(said
+                                ? $"It wasn't put away (the game said \"{lastToast}\"): make room in the storeroom and Try again, or put it in your bags by hand (the editor's inventory button)."
+                                : StoreroomFullWords, ProblemKind.Other);
+                        }
+                        return StepOutcome.Skip("It wasn't put away (Store mode didn't take it from the plugin). Put it in the storeroom by hand.", ProblemKind.Other);
+                    }
                     job.Note = "Put away in the storeroom.";
                     return StepOutcome.Done;
                 },
             },
         };
     }
+
+    private const string StoreroomFullWords = "The storeroom is full, so it wasn't put away: make room in the storeroom and Try again, or put it in your bags by hand (the editor's inventory button).";
 
     private void LogRows()
     {

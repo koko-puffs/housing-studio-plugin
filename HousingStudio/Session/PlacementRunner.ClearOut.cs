@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 using HousingStudio.Core;
 using HousingStudio.Game;
 
@@ -36,6 +37,15 @@ public sealed unsafe partial class PlacementRunner
 
     /// <summary>The pieces this run clears out (the first jobs), for the window.</summary>
     private int clearOutCount;
+
+    /// <summary>
+    /// Clear out's pieces the storeroom has no room for at the start: put away once the design is
+    /// placed (placing it from the storeroom makes room), found again then by item and spot.
+    /// </summary>
+    private List<PlacedPiece> clearOutLater = new();
+
+    /// <summary>The storeroom's room when it last refused a piece (it's tried again once that changes).</summary>
+    private int? refusedAtRoom;
 
     /// <summary>A restore (Swap back) puts away what isn't in the backup first, rather than last.</summary>
     private bool restoreClearsFirst;
@@ -143,6 +153,8 @@ public sealed unsafe partial class PlacementRunner
         clearOutDoneAt = null;
         clearOutWanted = new HashSet<(int, uint)>();
         clearOutCount = 0;
+        clearOutLater = new List<PlacedPiece>();
+        refusedAtRoom = null;
         // A preview leaves the swap as it was; a run that isn't the swap carried on forgets it.
         if (!dryRun && !CarriesOnSwap(dryRun))
         {
@@ -153,24 +165,96 @@ public sealed unsafe partial class PlacementRunner
 
         // (The run's side is set after this: it's where you are now.)
         var garden = session.Context.Side == Side.Garden;
-        var stores = pieces.Select(p => new RunJob
-        {
-            Kind = JobKind.Store,
-            Target = new Target(-1 - p.Key, p.ItemId, p.Position, p.Yaw, p.Stain, garden ? Floor.Garden : Floor.Ground, false),
-            Key = p.Key,
-        }).ToList();
-        clearOutCount = stores.Count;
+        // A storeroom without room for them all: what fits goes first, the rest once the design is
+        // placed (each piece placed from the storeroom makes room for one).
+        var room = InventoryReader.StoreroomRoom(garden ? Side.Garden : Side.Interior);
+        var (first, later) = ClearOutSplit.Split(pieces, room);
+        if (later.Count > 0)
+            log.Warn($"The storeroom has room for {Words(first.Count)} of the {Words(pieces.Count)} to clear out: {(first.Count > 0 ? $"those go first, and " : string.Empty)}"
+                     + $"the other {later.Count} once the design is placed (placing from the storeroom makes room). Any it still has no room for are left for you.");
+        var stores = first.Select(p => StoreJob(p, garden)).ToList();
+        clearOutCount = pieces.Count;
         if (dryRun)
         {
+            // A preview or rehearsal: the rest are listed last, where a run would put them away.
             jobs.InsertRange(0, stores);
+            jobs.AddRange(later.Select(p => StoreJob(p, garden)));
             return;
         }
+        clearOutLater = later.ToList();
         clearOutWanted = entries.Select(e => (e.Target.Key, e.Target.ItemId)).ToHashSet();
         jobs.Clear();
         jobs.AddRange(stores);
         clearOutReplan = true;
         log.Info($"Clearing out first: {Words(stores.Count)} placed here and not in the design go to the storeroom (Store mode); "
                  + "then the design is matched again against what's placed, and placed.");
+    }
+
+    private static RunJob StoreJob(PlacedPiece p, bool garden) => new()
+    {
+        Kind = JobKind.Store,
+        Target = new Target(-1 - p.Key, p.ItemId, p.Position, p.Yaw, p.Stain, garden ? Floor.Garden : Floor.Ground, false),
+        Key = p.Key,
+    };
+
+    /// <summary>
+    /// Before one of clear out's first pieces: if the storeroom has no room now (or refused a piece at
+    /// this room), it and the rest of them wait for the end (<see cref="PlanClearOutLater"/>), rather
+    /// than each being refused. True when they were put off.
+    /// </summary>
+    private bool PutOffClearOut()
+    {
+        if (!clearOutReplan || index >= jobs.Count || jobs[index].Kind != JobKind.Store) return false;
+        if (!StoreroomRefuses()) return false;
+        var n = 0;
+        while (index + n < jobs.Count && jobs[index + n].Kind == JobKind.Store && jobs[index + n].Outcome == JobOutcome.Pending) n++;
+        if (n == 0) return false;
+        foreach (var j in jobs.GetRange(index, n))
+            clearOutLater.Add(new PlacedPiece(j.Key!.Value, j.Target.ItemId, j.Target.Position, j.Target.Yaw, j.Target.Stain));
+        jobs.RemoveRange(index, n);
+        jobsVersion++;
+        log.Warn($"The storeroom is full: the other {Words(n)} to clear out wait until the design is placed (placing from the storeroom makes room).");
+        return true;
+    }
+
+    /// <summary>The storeroom has no room (or refused a piece, and its room hasn't changed since).</summary>
+    private bool StoreroomRefuses()
+    {
+        var room = InventoryReader.StoreroomRoom(side);
+        return room is <= 0 || (refusedAtRoom != null && room == refusedAtRoom);
+    }
+
+    /// <summary>
+    /// At the end of a run: clear out's pieces that waited for room become its last jobs. Each is found
+    /// again by its item and spot (storing and placing may have given it another furniture slot); one
+    /// that's gone or moved is left be.
+    /// </summary>
+    private void PlanClearOutLater()
+    {
+        var waiting = clearOutLater;
+        clearOutLater = new List<PlacedPiece>();
+        var live = ReadLive();
+        if (live == null || waiting.Count == 0) return;
+        var used = new HashSet<int>();
+        var garden = side == Side.Garden;
+        var added = 0;
+        foreach (var p in waiting)
+        {
+            var key = live.TryGetValue(p.Key, out var same) && same.ItemId == p.ItemId && Vector3.Distance(same.Position, p.Position) <= 0.25f && !used.Contains(p.Key)
+                ? p.Key
+                : live.Values.Where(l => l.ItemId == p.ItemId && !used.Contains(l.Key) && Vector3.Distance(l.Position, p.Position) <= 0.25f)
+                    .OrderBy(l => Vector3.Distance(l.Position, p.Position)).Select(l => (int?)l.Key).FirstOrDefault();
+            if (key == null)
+            {
+                log.Info($"  {data.ItemName(p.ItemId)}: no longer where it was; not put away.");
+                continue;
+            }
+            used.Add(key.Value);
+            jobs.Add(StoreJob(p with { Key = key.Value }, garden));
+            added++;
+        }
+        jobsVersion++;
+        log.Info($"Clearing out the rest: {Words(added)} the storeroom had no room for at the start{(InventoryReader.StoreroomRoom(side) is { } r ? $" (room for {r} now)" : string.Empty)}.");
     }
 
     /// <summary>
@@ -186,7 +270,7 @@ public sealed unsafe partial class PlacementRunner
         if (clearOutDoneAt == null)
         {
             clearOutDoneAt = now;
-            log.Info($"Cleared out: {PutAwayDone} of {Words(clearOutCount)} put away. Matching the design again against what's placed now.");
+            log.Info($"Cleared out: {PutAwayDone} of {Words(clearOutCount)} put away{(clearOutLater.Count > 0 ? $" ({clearOutLater.Count} wait for room in the storeroom, until the design is placed)" : string.Empty)}. Matching the design again against what's placed now.");
         }
         // A moment for the furniture list and the storeroom to catch up with the last piece put away.
         if (now - clearOutDoneAt.Value < Speed.Wait(500))

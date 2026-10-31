@@ -153,8 +153,9 @@ public sealed partial class MainWindow
     private void AskSwap(string keep, int count)
     {
         Ask("Swap to this design?",
-            $"This keeps what's placed now as “{keep}” (in Recent), puts the {Words.Count(count, "piece")} that {(count == 1 ? "isn't" : "aren't")} in this design away in the storeroom, then places the design. "
-            + "Swap back, when it's done or another day, puts it all back.",
+            $"This keeps what's placed now as “{keep}” (in Recent), puts the {Words.Count(count, "piece")} that {(count == 1 ? "isn't" : "aren't")} in this design away in the storeroom, then places the design."
+            + ReadyWords.StoreroomRoomNote(count, StoreroomRoomHere())
+            + " Swap back, when it's done or another day, puts it all back.",
             "Swap", "Not now", () =>
             {
                 Mode = ReadyMode.Swap;
@@ -173,9 +174,13 @@ public sealed partial class MainWindow
         }
         Ask("Clear out first?",
             $"The {Words.Count(clear.Count, "piece")} in your home that {(clear.Count == 1 ? "isn't" : "aren't")} in this design {(clear.Count == 1 ? "goes" : "go")} to the storeroom first, then the design is placed."
+            + ReadyWords.StoreroomRoomNote(clear.Count, StoreroomRoomHere())
             + (config.BackupBeforePlacing ? " A backup of what's placed is saved before." : " No backup is saved first (Settings)."),
             "Start placing", "Not now", () => StartRun(false, entries, ChosenClearOut(), ArmFixturesAfterPlacing));
     }
+
+    /// <summary>How many more pieces the storeroom of the side being placed takes (asked once, when Start is pressed).</summary>
+    private int? StoreroomRoomHere() => InventoryReader.StoreroomRoom(session.PlanSide ?? session.Context.Side ?? Side.Interior);
 
     // ---------------------------------------------------------------------------------------------
     // Done.
