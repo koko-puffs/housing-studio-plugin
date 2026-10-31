@@ -73,7 +73,7 @@ public sealed partial class MainWindow
             line += $". Last time: {(run.State == RunState.Stopped ? $"stopped ({run.StopReason}) " : string.Empty)}{run.Result ?? run.StopReason}";
 
         const string label = "Set them for me";
-        var blocked = run.CanStart(runner.Active) ?? (toSet == 0 ? "Nothing here to set from your bags" : null);
+        var blocked = run.CanStart() ?? (toSet == 0 ? "Nothing here to set from your bags" : null);
         var at = Kit.At;
         var w = Kit.Width;
         var bw = Kit.ButtonWidth(label, BtnSize.Sm, Icon.Play);

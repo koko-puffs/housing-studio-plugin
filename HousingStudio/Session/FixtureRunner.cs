@@ -111,12 +111,15 @@ public sealed unsafe class FixtureRunner
         return FixtureJobs.Plan(design, current, here, Owned, data.IsUnited);
     }
 
+    /// <summary>A placing run (or a restore about to start): fixtures aren't set while it goes.</summary>
+    public Func<bool>? OtherRunActive { get; set; }
+
     /// <summary>Why "Set them for me" can't start now, or null.</summary>
-    public string? CanStart(bool placingActive)
+    public string? CanStart()
     {
         if (!Enabled) return "Switch it on in Settings → Experimental.";
         if (Active) return "Already setting them.";
-        if (placingActive) return "Wait until the run is done.";
+        if (OtherRunActive?.Invoke() == true) return "Wait until the run is done.";
         var ctx = session.Context;
         if (session.Layout == null) return "Load a design first.";
         if (!data.FixturesReady) return "Still reading the game's fixture tables: try again in a moment.";
@@ -133,7 +136,7 @@ public sealed unsafe class FixtureRunner
     {
         StopReason = null;
         Result = null;
-        if (CanStart(false) is { } why)
+        if (CanStart() is { } why)
         {
             StopReason = why;
             return;

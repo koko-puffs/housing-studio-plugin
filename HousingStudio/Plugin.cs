@@ -65,6 +65,7 @@ public sealed class Plugin : IDalamudPlugin
         runner = new PlacementRunner(config, session, editor, actions, furniture, anywhere, data, log);
         FixtureRun = new FixtureRunner(config, session, data, log);
         runner.OtherRunActive = () => FixtureRun.Active;
+        FixtureRun.OtherRunActive = () => runner.Active;
 
         fonts = new Fonts();
         Txt.Fonts = fonts;
