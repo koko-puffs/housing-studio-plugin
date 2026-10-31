@@ -11,6 +11,12 @@ everything to match. It saves a backup first, so **Put them back** can undo a ru
 It also works the other way: **Save this house as a build** saves the home you're in (furniture,
 dyes, fixtures, the outside and wallpapers) as a file you can upload to the site.
 
+Ready can also **clear out** what isn't in the design first, or **swap** designs and swap back
+later. The **shopping list** says where each missing piece comes from (your retainers, a vendor,
+the market board, or crafting). Settings → **Experimental** holds the newer features not yet
+tried in the game, such as **Get everything for me**, which fetches what's missing and places it
+(it needs the vnavmesh and Lifestream plugins).
+
 ## Installing
 
 1. In the game, open `/xlsettings` → **Experimental** → **Custom Plugin Repositories**.

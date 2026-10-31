@@ -8,7 +8,22 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.4.3, working in the game.** 0.4.3: a scan's small fixes. Stopping a Put them
+> **Status: 0.5.0. Placing works in the game; the new features below haven't been tried in it yet.**
+> 0.5.0: new features. **Clear out** what's placed and not in the design first, and **swap** to a
+> design keeping what was there to **Swap back** to ([Clearing out and swapping](#clearing-out-and-swapping)).
+> A **shopping list** that says where each missing piece comes from: your retainers, a vendor (with
+> the NPC and the gil), the market board (Universalis' prices for your data centre), or crafting (with
+> **Open in Teamcraft**) ([Shopping](#shopping)). **Looking after a home**: Check for changes since a
+> run, warnings for pieces the game may refuse and for the item limit, **Carry on** after a
+> crash or a disconnect, and the game's own menu words in German, French and Japanese
+> ([Looking after a home](#looking-after-a-home)). **Send to my builds** sends the house you're in to
+> your builds on the site ([Sending a house to the site](#sending-a-house-to-the-site)). And, behind
+> Settings → Experimental: **Set the fixtures for me**, **Put back what changed since a run**, and
+> **Get everything for me**, which fetches what's missing from your retainers, vendors and the
+> market board (with vnavmesh and Lifestream; you search the board for each item, it buys), goes
+> home, places it, and goes again until it's done
+> ([Getting everything for you](#getting-everything-for-you-experimental)).
+> 0.4.3: a scan's small fixes. Stopping a Put them
 > back run by a zone change or a logout no longer reads the editor or clicks its Rotate (the
 > editor may be half torn down then, as with a held piece in 0.4.1); a diagnostics recording
 > left running out of the house reads the editor's state only in a home; one piece reads as
@@ -273,7 +288,9 @@ One window, no tabs: what it shows follows what you're doing.
   Universalis), how far Near me reaches,
   storeroom and bags separately, floors to place, marker options, save what's placed as a build) and
   **Something not working?** (step by step, the old preview method, the recorder, the "Place" menu
-  words, the windows and clicks used).
+  words, the windows and clicks used), and **Experimental**: one switch for the features not yet
+  tried in the game, each with its own under it ([Set the fixtures for me](#setting-the-fixtures-experimental),
+  Put back what changed since a run, [Get everything for me](#getting-everything-for-you-experimental)).
 
 While a run goes, Pieces and Settings are hidden, so nothing that steers the run changes under it.
 [docs/UI.md](docs/UI.md) maps each part of the design to the code that draws it.
@@ -327,7 +344,8 @@ Each thing is taken from the first source that has it, in this order (`Core/Sour
    fewer are listed than needed, the rest falls through. Answers are kept 15 minutes (and shown up to
    an hour while a new one is asked); a request times out after 10 seconds and fails quietly (asked
    again after 2 minutes, the list says so). Off with Settings → More options → **Look up market
-   prices (asks Universalis)**, on by default: it's the plugin's only request over the internet.
+   prices (asks Universalis)**, on by default. The plugin asks the internet for two things only:
+   these prices, and **Send to my builds** (see [Sending a house to the site](#sending-a-house-to-the-site)).
 4. **Craft** ("Carpenter, level 50"), from `RecipeLookup`, with **Open in Teamcraft**: opens
    `https://ffxivteamcraft.com/import/<base64>`, the base64 of `itemId,null,count` joined by `;` (the
    format Allagan Tools' and Artisan's exports use), which makes a Teamcraft list of them.
@@ -399,6 +417,9 @@ district, zone, NPC) → the market (by world), packed into trips by bag slots. 
 duty pop, a cutscene, a logout, a zone change no travel asked for: it stops. Before each purchase:
 your gil, your free slots, the gil you agreed to (all trips together) and the market ceiling; after
 it, what was really spent (a vendor dearer than planned, or a listing dearer than shown, stops it).
+A purchase's yes/no is answered only when it's about that purchase: the board's must name the chosen
+listing's price (with tax, without, or for one; `MarketRule.QuestionMatches`, tested), a shop's the
+item's name. Otherwise it's closed, nothing is bought, and the errands stop.
 A trip that got nothing, more trips than planned (+3), or a next trip that would go past the gil
 agreed: it stops. A window that doesn't open, a menu without the expected entry, a path vnavmesh
 can't find, a plugin that stops answering: it stops, saying which. **Stop** (or `/hstudio stop`)
