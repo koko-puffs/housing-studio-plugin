@@ -84,6 +84,12 @@ public sealed class Configuration : IPluginConfiguration
     public bool ChatMessages { get; set; } = true;
 
     /// <summary>
+    /// Settings → Experimental: features not yet tried in the game (or that act further on your
+    /// behalf). Off by default; each has its own switch under it, which only counts while this is on.
+    /// </summary>
+    public bool Experimental { get; set; }
+
+    /// <summary>
     /// The furnishing list's storeroom rows learnt in each house (by house id), kept while the
     /// storeroom holds the same pieces, so a later run doesn't pick its way down the list again.
     /// </summary>

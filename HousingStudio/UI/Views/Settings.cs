@@ -22,6 +22,7 @@ public sealed partial class MainWindow
 
     private bool moreOpen;
     private bool troubleOpen;
+    private bool experimentalOpen;
     private bool callsOpen;
     private string? placeWords;
 
@@ -94,6 +95,13 @@ public sealed partial class MainWindow
             16, Txt.Measure(count, Face.Mono, 12).X, Txt.Natural(Face.Mono, 12),
             (p, _) => Txt.Draw(Kit.Dl, p, count, Face.Mono, 12, Palette.Dim), false, Palette.Dim);
         if (moreOpen) DrawMoreOptions();
+        Kit.EndPanel();
+
+        Kit.Gap(18);
+        Kit.BeginPanel("##experimental", 0, 0, 0);
+        Disclosure("##experimental-row", ref experimentalOpen, "Experimental", ExperimentalSummary(),
+            16, 0, 0, null, false, Palette.Dim);
+        if (experimentalOpen) DrawExperimental();
         Kit.EndPanel();
 
         Kit.Gap(18);
