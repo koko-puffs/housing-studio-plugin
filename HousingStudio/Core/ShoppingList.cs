@@ -25,7 +25,7 @@ public static class ShoppingList
         var groups = missing.GroupBy(e => e.Target.ItemId)
             .Select(g => (Id: g.Key, Name: itemName(g.Key), Count: g.Count(), Dyes: g.Where(e => e.Target.Stain != 0).GroupBy(e => e.Target.Stain).Select(d => (d.Key, d.Count())).OrderByDescending(d => d.Item2).ToList()))
             .OrderByDescending(g => g.Count).ThenBy(g => g.Name, StringComparer.OrdinalIgnoreCase);
-        sb.AppendLine($"Missing ({missing.Count} pieces, {missing.Select(e => e.Target.ItemId).Distinct().Count()} different)");
+        sb.AppendLine($"Missing ({missing.Count} {(missing.Count == 1 ? "piece" : "pieces")}, {missing.Select(e => e.Target.ItemId).Distinct().Count()} different)");
         foreach (var g in groups)
         {
             var parts = g.Dyes.Select(d => $"{dyeName(d.Key)} ×{d.Item2}").ToList();

@@ -46,11 +46,11 @@ public sealed partial class MainWindow
         if (preview)
             sentence = $"Every spot was marked and nothing was moved. Start works on {Words.Count(runner.Count(RunPhase.Move) + runner.Count(RunPhase.Place), "piece")}{(config.DyeAfterPlacing ? ", then the dyes" : string.Empty)}.";
         else if (stopped)
-            sentence = (vm.StoppedByYou ? "You stopped it." : runner.StopReason ?? "It stopped.") + (needYou > 0 ? $" {needYou} need you." : string.Empty);
+            sentence = (vm.StoppedByYou ? "You stopped it." : runner.StopReason ?? "It stopped.") + (needYou > 0 ? $" {needYou} {(needYou == 1 ? "needs" : "need")} you." : string.Empty);
         else if (vm.Figure >= vm.RunPieces && needYou == 0)
             sentence = $"All {Words.Count(vm.RunPieces, "piece")} are where the design has them.";
         else
-            sentence = $"{vm.Figure} of {vm.RunPieces} pieces are where the design has them.{(needYou > 0 ? $" {needYou} need you." : string.Empty)}";
+            sentence = $"{vm.Figure} of {vm.RunPieces} pieces are where the design has them.{(needYou > 0 ? $" {needYou} {(needYou == 1 ? "needs" : "need")} you." : string.Empty)}";
         var sh = Txt.Flow(new Vector2(at.X, y), w, new[] { new Run(sentence, Face.Sans, 14, Palette.Ash) }, 21, out _);
         y += sh;
         Kit.Reserve(at, w, y - at.Y);
