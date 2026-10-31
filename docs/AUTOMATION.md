@@ -172,6 +172,25 @@ editor's own pick, a yes/no answered, and the piece watched leaving the furnitur
 it's skipped to be put away by hand). Last, because whether storing renumbers the furniture slots
 the other steps use isn't known; the editor is put back in Rotate when the run ends.
 
+**Clearing out** (chosen in Ready). The same Store steps as putting things back, but first: a run
+with clear out starts with only the Store jobs; once they're done it waits a moment, reads the
+session afresh (`LayoutSession.Refresh`), matches the design again and adds its moves and placements
+(`PlacementRunner.AfterClearOut`), so no furniture slot planned before a piece was stored is used
+after it. The storeroom's rows are learnt again and the list made again before it's read. A swap is
+the same run with its backup kept under a name (`Backups.SaveKept`); Swap back is a restore whose
+put-away comes first.
+
+**Setting fixtures** (experimental, `Session/FixtureRunner`, `Automation/FixtureTable`). Untested in
+the game; it goes step by step. The windows `HousingEditInterior` and `HousingEditExterior` and their
+edit containers (InventoryType 2012 and 2011) are from FFXIVClientStructs. The Housing menu's
+fixtures entry is fired as `HousingMenu ← [i:entry]`, its place among the menu's text values, only
+when the first two read as Indoor Furnishings and Furnishing Color (the recorded [i:0] and [i:1]);
+a fixture is put in its slot with `InventoryManager.MoveItemSlot` (bag → edit container), only when
+the container's slots hold what's set in the guessed order (floors in the game's order, five parts
+each); the apply is pressed by you. Everything it can't do, it asks you for, and it stops if a
+window doesn't appear. A recording of setting one interior and one exterior fixture by hand (and
+dyeing an outside part) confirms or corrects all of it.
+
 **0.3.4: making the list again.** The furnishing list doesn't show a piece that came into the
 storeroom while it was open (0.3.3's log: a bag piece stored, then 170 rows searched for it one by
 one). So after a bag piece is stored, and whenever neither a piece's name nor the list's order puts

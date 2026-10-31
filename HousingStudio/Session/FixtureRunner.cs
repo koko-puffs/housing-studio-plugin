@@ -54,6 +54,11 @@ public sealed unsafe class FixtureRunner
     /// <summary>The fixtures window is up, and closing it now (before applying) would lose what's in it: the run stops if it closes.</summary>
     private bool watchWindow;
 
+    /// <summary>Fixtures that couldn't be put in (no longer in your bags): not waited for at the apply.</summary>
+    private readonly HashSet<FixtureTask> dropped = new();
+
+    private DateTime nextSetCheck;
+
     /// <summary>How many of each item the window's container held when it opened (to see a piece you put in, when the slots aren't trusted).</summary>
     private Dictionary<uint, int> containerBefore = new();
 
@@ -98,7 +103,8 @@ public sealed unsafe class FixtureRunner
     {
         var layout = session.Layout;
         var ctx = session.Context;
-        if (layout == null || ctx.Side is not { } here) return new List<FixtureTask>();
+        // The fixture tables are read in the background when the plugin starts: not on the game's thread.
+        if (layout == null || ctx.Side is not { } here || !data.FixturesReady) return new List<FixtureTask>();
         var current = Current(here, ctx);
         if (current == null) return new List<FixtureTask>();
         var design = here == Side.Interior ? layout.InteriorFixtures : layout.ExteriorFixtures;
@@ -113,6 +119,7 @@ public sealed unsafe class FixtureRunner
         if (placingActive) return "Wait until the run is done.";
         var ctx = session.Context;
         if (session.Layout == null) return "Load a design first.";
+        if (!data.FixturesReady) return "Still reading the game's fixture tables: try again in a moment.";
         if (ctx.Side == null) return "Go to your home (inside for its walls, floors and lights; your plot for the outside).";
         if (!ctx.HasPermission) return "You can only set fixtures in a home you may decorate.";
         if (ctx.Busy) return "Wait until you're free (not in combat, a cutscene or between areas).";
@@ -150,6 +157,7 @@ public sealed unsafe class FixtureRunner
         startPlot = ctx.Plot;
         slotsTrusted = false;
         watchWindow = false;
+        dropped.Clear();
         containerBefore = new Dictionary<uint, int>();
         // While any of it is a guess, every action waits for Continue.
         queue.StepByStep = !FixtureTable.Verified || config.StepByStep;
@@ -178,6 +186,11 @@ public sealed unsafe class FixtureRunner
     public void Tick(HousingContext ctx)
     {
         if (!Active) return;
+        if (!Enabled)
+        {
+            Stop("Set the fixtures for me was switched off.");
+            return;
+        }
         if (ctx.Kind != startKind || ctx.TerritoryId != startTerritory || ctx.HouseId != startHouse || (side == Side.Garden && ctx.Plot != startPlot))
         {
             Stop("You left the home this was started in.");
@@ -372,7 +385,8 @@ public sealed unsafe class FixtureRunner
                     var from = FindInBags(task.Fixture.ItemId);
                     if (from == null)
                     {
-                        log.Warn($"  {name} isn't in your bags any more.");
+                        log.Warn($"  {name} isn't in your bags any more: it's left out.");
+                        dropped.Add(task);
                         return StepOutcome.Done;
                     }
                     var (bag, bagSlot) = from.Value;
@@ -433,7 +447,11 @@ public sealed unsafe class FixtureRunner
             {
                 // Applying may close the window: from here, that's expected.
                 watchWindow = false;
-                return toSet.All(IsSet) ? StepOutcome.Done : StepOutcome.Waiting;
+                // The game's tables, read a few times a second (not every frame).
+                if (DateTime.UtcNow < nextSetCheck) return StepOutcome.Waiting;
+                nextSetCheck = DateTime.UtcNow + TimeSpan.FromMilliseconds(250);
+                var now = Current(side, session.Context);
+                return toSet.All(t => dropped.Contains(t) || IsSet(t, now)) ? StepOutcome.Done : StepOutcome.Waiting;
             },
         });
         steps.Add(new Step
@@ -441,9 +459,9 @@ public sealed unsafe class FixtureRunner
             Label = "Check each fixture in the game's tables",
             Run = () =>
             {
-                var set = toSet.Where(IsSet).Select(t => t.Fixture).ToList();
-                TickSet(set);
-                foreach (var t in toSet) log.Info($"  {Describe(t)}: {data.AnyItemName(t.Fixture.ItemId)} {(IsSet(t) ? "is set" : "isn't set")}.");
+                var now = Current(side, session.Context);
+                TickSet(toSet.Where(t => IsSet(t, now)).Select(t => t.Fixture));
+                foreach (var t in toSet) log.Info($"  {Describe(t)}: {data.AnyItemName(t.Fixture.ItemId)} {(IsSet(t, now) ? "is set" : "isn't set")}.");
                 return StepOutcome.Done;
             },
         });
@@ -505,9 +523,9 @@ public sealed unsafe class FixtureRunner
         }
     }
 
-    private bool IsSet(FixtureTask task)
+    /// <summary>Is the fixture set, in what's set now (read once for several).</summary>
+    private static bool IsSet(FixtureTask task, List<CurrentFixture>? now)
     {
-        var now = Current(side, session.Context);
         return now != null && now.Any(c => FixtureJobs.Norm(c.Level) == FixtureJobs.Norm(task.Fixture.Level)
                                            && FixtureJobs.Norm(c.Type) == FixtureJobs.Norm(task.Fixture.Type) && c.ItemId == task.Fixture.ItemId);
     }
@@ -589,7 +607,8 @@ public sealed unsafe class FixtureRunner
 
     private string Summary()
     {
-        var set = toSet.Count(IsSet);
+        var now = Current(side, session.Context);
+        var set = toSet.Count(t => IsSet(t, now));
         return set == toSet.Count ? $"{set} of {toSet.Count} set." : $"{set} of {toSet.Count} set; the rest are still to set (the log says what each step saw).";
     }
 

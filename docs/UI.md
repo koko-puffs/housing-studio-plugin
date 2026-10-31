@@ -42,6 +42,8 @@ Paths are under `HousingStudio/UI/`.
 | "2 pieces are already in place. 29 pieces…" | `SummaryLine` (also: missing pieces, Near me, floors left out, storeroom not read, the other side's pieces) |
 | Fixtures disclosure with "x of 11 done" | `DrawFixtures` → `Disclosure`, `Kit.Chip`; ticks in `Configuration.FixturesDone` via `Model/FixtureTicks` |
 | Info note | the bottom block of `DrawReady` |
+| Clear out what isn't in the design (switch), Swap to this design | `Views/ClearOut.cs` → `DrawClearOut` (`SwitchRow`, `SetRow`); the pieces from `Core/ClearOut.Pick` (cached per plan and filters); Start placing asks first (`StartFromReady`), Swap asks (`AskSwap`) and starts with `keepAs` |
+| Set them for me (Settings → Experimental) | `Views/SetFixtures.cs` → `DrawSetFixtures` under the fixtures' note: the plan's counts (`FixtureRunner.Plan`, read once a second), the button, and while it runs a brass panel with the step, Continue and Stop |
 | Start placing / Preview first; "About N minutes at a quick pace"; "Preview marks each spot, moving nothing" | `DrawReadyFooter`; estimate from `Core/RunEstimate` (cached), words from `Words.About`. When Start can't run, it's at 50% and the left line says why (`runner.CanStart`). |
 
 ## Running (`Views/Running.cs`)
@@ -66,6 +68,8 @@ Paths are under `HousingStudio/UI/`.
 | Check mark, "<name> is *in*", sentence | `DrawDone` header; "Stopped at N of M" (neutral square, or danger when stopped for safety); "Preview *done*" after a preview |
 | Tally cells | `DrawTally` |
 | Needs you (icon, name, reason, Show where / Copy list) | `Issues` → `IssueRow`: each problem from `runner.Problems`; "N pieces left undyed" grouped with Copy list; "N pieces you don't have" grouped with Copy list (the shopping list) |
+| "N pieces not in the design were put away" | `DrawPutAwayLine` (`Views/ClearOut.cs`), under the tally; the moved cell leaves them out (`runner.PutAwayDone`) |
+| After a swap: "Swap back?" + Swap back | `DrawSwapBack` (`Views/ClearOut.cs`) in place of Put them back → `runner.SwapBack` |
 | "Not what you wanted?" + Put them back | `DrawPutBack` → a confirmation (`MainWindow.Ask`) → `runner.RestoreBackup` |
 | Fixtures note | the bottom block of `DrawDone` (hidden when all are ticked) |
 | Try the N again / Carry on / Done | `DrawDoneFooter` (`runner.RetryProblems`; Carry on starts again with what's left; a preview offers Start placing; nothing needs you → Done alone, in brass) |

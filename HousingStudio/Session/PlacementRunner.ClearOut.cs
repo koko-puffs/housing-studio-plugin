@@ -44,7 +44,17 @@ public sealed unsafe partial class PlacementRunner
     public string? KeptAs { get; private set; }
 
     /// <summary>How many pieces this run put away in the storeroom (clearing out, or putting things back).</summary>
-    public int PutAwayDone => jobs.Count(j => j.Kind == JobKind.Store && j.Outcome == JobOutcome.Done);
+    public int PutAwayDone
+    {
+        get
+        {
+            // Asked every frame by the window: a plain count, no allocation.
+            var n = 0;
+            foreach (var j in jobs)
+                if (j.Kind == JobKind.Store && j.Outcome == JobOutcome.Done) n++;
+            return n;
+        }
+    }
 
     /// <summary>How many pieces this run clears out first (0 when it doesn't).</summary>
     public int ClearOutCount => clearOutCount;
@@ -120,10 +130,12 @@ public sealed unsafe partial class PlacementRunner
         KeptAs = null;
         if (pieces is not { Count: > 0 }) return;
 
+        // (The run's side is set after this: it's where you are now.)
+        var garden = session.Context.Side == Side.Garden;
         var stores = pieces.Select(p => new RunJob
         {
             Kind = JobKind.Store,
-            Target = new Target(-1 - p.Key, p.ItemId, p.Position, p.Yaw, p.Stain, side == Side.Garden ? Floor.Garden : Floor.Ground, false),
+            Target = new Target(-1 - p.Key, p.ItemId, p.Position, p.Yaw, p.Stain, garden ? Floor.Garden : Floor.Ground, false),
             Key = p.Key,
         }).ToList();
         clearOutCount = stores.Count;

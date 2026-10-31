@@ -104,6 +104,8 @@ public sealed class Plugin : IDalamudPlugin
             if (DateTime.UtcNow - drawFailedAt > TimeSpan.FromSeconds(10)) Services.Log.Error(ex, "Housing Studio couldn't draw its window");
             drawFailedAt = DateTime.UtcNow;
             Safely(() => runner.Pause("The window couldn't be drawn (see /xllog); /hstudio resume or stop."));
+            // Setting fixtures waits for Continue in the window: without it, it stops.
+            Safely(() => FixtureRun.Stop("The window couldn't be drawn (see /xllog)."));
         }
     }
 

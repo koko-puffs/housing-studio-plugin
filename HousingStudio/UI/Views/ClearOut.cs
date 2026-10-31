@@ -24,6 +24,8 @@ public sealed partial class MainWindow
 
     private (Plan? Plan, bool B, bool G, bool U, bool Near, float Reach, DateTime Until, List<PlacedPiece> Pieces) clearOutCache;
 
+    private static readonly List<PlacedPiece> NoPieces = new();
+
     /// <summary>
     /// The pieces placed here that the design doesn't use, less those the run's filters leave out
     /// (floors, Near me). Worked out again when the plan or the filters change, and with Near me on
@@ -32,7 +34,7 @@ public sealed partial class MainWindow
     private List<PlacedPiece> ClearOutPieces()
     {
         var plan = session.Plan;
-        if (plan == null || plan.Extras.Count == 0) return new List<PlacedPiece>();
+        if (plan == null || plan.Extras.Count == 0) return NoPieces;
         var c = clearOutCache;
         var now = DateTime.UtcNow;
         if (c.Plan == plan && c.B == config.ShowBasement && c.G == config.ShowGround && c.U == config.ShowUpper && c.Near == config.NearMe

@@ -103,13 +103,78 @@ its exact spot, then dyes everything to match.
 
 ### What it doesn't do
 
-- **Walls, floors, lights, the house's outside**: listed ("set these yourself").
+- **Walls, floors, lights, the house's outside**: listed ("set these yourself"); with Settings →
+  Experimental → Set the fixtures for me, the plugin can put them in from your bags (see
+  [Setting the fixtures](#setting-the-fixtures-experimental)).
 - **Removing a dye** (a piece dyed in your house but undyed in the design): listed.
 - **Pieces the game refuses** (floating, sunk or overlapping) if **Place anywhere** is switched off
   in Settings → More options. It's on by default: the game's placement check is off while a run
   lasts (as MakePlace does), and back on when it ends.
 - **The garden's storeroom**: you put those pieces down, the plugin sets them at their spot.
 - **Paintings' and fish prints' pictures, aquarium fish, a partition's wall material**.
+
+## Clearing out and swapping
+
+**Clear out what isn't in the design** (Ready, under What Start does; off until you turn it on, and
+only for the design loaded). The pieces placed in your home that the design doesn't use
+(`Plan.Extras`) are put away in the storeroom before the design is placed, with the editor's Store
+mode, the same steps Put them back uses (`PlacementRunner.StoreSteps`: the Store button, each piece
+picked with the editor's own pick, a yes/no answered, the piece watched leaving the furniture list).
+The run's filters count: the floors switched off and what Near me leaves out stay where they are
+(`Core/ClearOut.Pick`, tested). Starting asks first ("Clear out first?"), and the backup is saved
+before as usual. Once they're put away, the design is matched again against what's placed now and
+the run carries on with it (`PlacementRunner.AfterClearOut`): whether storing a piece renumbers the
+furniture slots the moves use isn't known, so nothing planned before the clear out is trusted after
+it; the storeroom's list is made again before it's read (it doesn't show pieces that came in while
+it was open). The garden works the same way (Store mode on the outdoor editor, as for Put them
+back). Done says how many were put away; a piece Store mode wouldn't take is under **Needs you**,
+with Show where, to put away by hand ("Try again" puts those away again, last). A preview lists them
+first ("Would put … away"). Not yet seen in the game: Store mode from the plugin (also new in Put
+them back, 0.3.5).
+
+**Swap to this design** (Ready, under Clear out; not for a backup loaded as the design): clears out,
+places the design, and keeps the backup it saves under a name you'll know, "<home> before
+<design>" ("Medium house in Mist, plot 12 before Winter Lodge"; `Core/SwapNames`), in the backups
+folder. That backup is saved even with the backup switched off (a swap doesn't start without it),
+isn't one of the backups' own names so it's never pruned, and goes second on the Recent list (the
+first is the design that reopens when the game starts). Done then offers **Swap back** in place of
+Put them back: it loads that backup as the design and runs it with what isn't in it put away
+first (Put them back puts it away last), only in the home the backup is of. Another day, open it
+from Recent, turn on Clear out, and Start placing.
+
+## Setting the fixtures (experimental)
+
+Settings → Experimental → **Set the fixtures for me** (with Experimental on) gives Ready's fixtures a
+**Set them for me** button: the design's fixtures for the side you're on (inside, each floor's
+wall, flooring and light; on your plot, the outside's parts) that are in your bags are set through
+the game's own fixtures window (`Session/FixtureRunner`, with `Core/FixtureJobs` for the plan,
+tested). Nothing of it has been tried in the game, so it goes **step by step** whatever Settings
+says: before each action it holds, shows it, and waits for **Continue** (in Ready's fixtures, or
+`/hstudio continue`). The steps:
+
+1. The furnishing editor is closed (its own close) or the Housing menu opened (the housing agent),
+   and **Interior Fixtures** (or Exterior Fixtures) chosen by its words, at its place in the menu;
+   only when the menu's first two entries read as Indoor Furnishings and Furnishing Color (the
+   recorded [i:0] and [i:1]); otherwise you're asked to choose it. If the window
+   (`HousingEditInterior` / `HousingEditExterior`) doesn't open, by itself or by you, it stops.
+2. The window's container (InventoryType 2012 inside, 2011 outside) is read and logged, and its slots
+   checked against what's set: floor by floor, five parts each (wall, window, door, flooring,
+   light; the outside's eight parts in their order). Only if what's set is where that order says is
+   a fixture put in its slot by the plugin, with the game's item move from your bag (what dragging
+   it there does); if it doesn't go in 3 s, or the slots can't be told apart, you're asked to put it
+   in, and the window is watched for it.
+3. You press the window's apply (its click isn't known yet); the run waits up to 5 minutes for the
+   game's tables (`FixtureReader`) to show each fixture, logs which are set, and ticks them.
+
+What it leaves to you: a floor's window and door (the house's, set from outside), a themed outside,
+and the outside's dyes; fixtures not in your bags are counted. It stops on leaving the home, a zone
+change, combat, a logout, losing permission, and the window closing before the apply; it never
+presses anything to clean up (an open fixtures window is left for you to apply or close). Every
+window name, container and word it uses is in `Automation/FixtureTable.cs`, with where each came
+from. **To confirm it**, a recording (Settings → Something not working? → Start recording) of, by
+hand: Housing → Interior Fixtures, putting a wall in its slot (dragging it from the bag), applying
+it (and the same for Exterior Fixtures with a fence, and dyeing an outside part) shows the menu's
+values, whether the item move is what the window does, the slots, and the apply's click.
 
 ## The window
 
@@ -230,14 +295,17 @@ HousingStudio/
   Core/        game-free, unit-tested: reading .build/.json, axes and turns, plots, floors,
                dyes, matching, the shopping list, pacing, backups; and for the automation the
                step queue (StepQueue), the run's order and dye planning (RunSequence),
-               callbacks as data (UiCall) and menu/list helpers (Menus).
-  Automation/  UiTable (every window and click, with sources), GameUi (reading and clicking
-               windows), UiRecorder (diagnostics recording).
+               callbacks as data (UiCall) and menu/list helpers (Menus), clearing out and
+               swaps' names (ClearOut), the fixtures' plan (FixtureJobs).
+  Automation/  UiTable (every window and click, with sources), FixtureTable (the fixtures
+               windows, guesses with sources), GameUi (reading and clicking windows),
+               UiRecorder (diagnostics recording).
   Game/        GameData (Lumina sheets), HousingContext (where you are), HousingEditor (the
                editor's state, pick up / set down), HousingActions (item menus, the dye window,
                aiming the held piece), FurnitureReader, FixtureReader (the home's fixtures, inside and out, for saving it), InventoryReader, PlaceAnywhere.
   Session/     LayoutSession (the design matched to the game), PlacementRunner (the run: each
-               piece's steps), Backups, ActivityLog.
+               piece's steps; PlacementRunner.ClearOut, clearing out and swapping), FixtureRunner
+               (Set them for me), Backups, ActivityLog.
   UI/          the window: Kit/ (the design system's tokens, fonts, icons and controls drawn with
                ImGui's draw lists), Model/ (game-free, unit-tested: words, the Pieces list, pace,
                fixture ticks, SVG icon paths), Views/ (Start, Ready, Running, Done, Pieces,
