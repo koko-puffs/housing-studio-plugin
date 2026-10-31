@@ -96,6 +96,7 @@ public sealed partial class MainWindow
             AlertNote("Go to your home to see where each piece stands: what's in place, what moves, and what comes from your storeroom or bags.", Palette.Dim, Icon.Info);
             Kit.Gap(14);
         }
+        DrawPiecesClashes();
         var groups = PieceRows.Build(entries, filter, data.ItemName, pieceSearch, known);
         if (groups.Count == 0)
         {

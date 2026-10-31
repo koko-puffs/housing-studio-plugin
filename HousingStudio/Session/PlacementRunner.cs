@@ -44,7 +44,7 @@ public sealed record RunProblem(RunJob Job, string Name, ProblemKind Kind, strin
 /// <see cref="TimeLeft"/>, <see cref="Problems"/>, <see cref="DyeShortfall"/>, <see cref="RetryProblems"/>,
 /// <see cref="LastBackupPath"/> and <see cref="RestoreBackup"/>.
 /// </summary>
-public sealed unsafe class PlacementRunner : IDisposable
+public sealed unsafe partial class PlacementRunner : IDisposable
 {
     private const float LandedDistance = 0.05f;
     private const float LandedYaw = 0.03f;

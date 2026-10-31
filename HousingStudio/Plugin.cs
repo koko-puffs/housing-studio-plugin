@@ -29,6 +29,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly PlaceAnywhere anywhere = new();
     private readonly LayoutSession session;
     private readonly PlacementRunner runner;
+    private readonly Care care;
     private readonly Fonts fonts;
     private readonly WindowSystem windows = new("HousingStudio");
     private readonly MainWindow window;
@@ -60,11 +61,13 @@ public sealed class Plugin : IDalamudPlugin
 
         session = new LayoutSession(data, furniture, Plots, log);
         runner = new PlacementRunner(config, session, editor, actions, furniture, anywhere, data, log);
+        care = new Care(config, session, runner, data, log);
 
         fonts = new Fonts();
         Txt.Fonts = fonts;
         overlay = new Overlay(config, session, runner, data);
         window = new MainWindow(config, session, runner, data, log, fonts, recorder, overlay);
+        window.Use(care);
         windows.AddWindow(window);
 
         Services.Commands.AddHandler(Command, new CommandInfo(OnCommand)
@@ -126,6 +129,7 @@ public sealed class Plugin : IDalamudPlugin
             var ctx = HousingContext.Read(Plots);
             runner.Update();
             runner.Tick(ctx);
+            care.Tick(ctx);
             recorder.Tick();
             if (DateTime.UtcNow >= nextRefresh)
             {

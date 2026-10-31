@@ -89,6 +89,9 @@ public sealed class Configuration : IPluginConfiguration
     /// </summary>
     public bool Experimental { get; set; }
 
+    /// <summary>Experimental: "Put them back where they were" after Check for changes (a run on the snapshot kept after the last run).</summary>
+    public bool PutBackChanges { get; set; }
+
     /// <summary>
     /// The furnishing list's storeroom rows learnt in each house (by house id), kept while the
     /// storeroom holds the same pieces, so a later run doesn't pick its way down the list again.

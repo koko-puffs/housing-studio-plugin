@@ -69,6 +69,20 @@ public sealed class GameData
     public bool GoesOnSomethingElse(uint itemId) =>
         items.TryGetValue(itemId, out var i) && i.UiCategory is TabletopCategory or WallMountedCategory;
 
+    /// <summary>
+    /// Whether the item goes on this side: an indoor furnishing (a HousingFurniture row) inside, an
+    /// outdoor one (HousingYardObject) in the garden. An item the game doesn't list either way counts as yes.
+    /// </summary>
+    public bool PlaceableOn(uint itemId, Side side)
+    {
+        sides ??= (indoorFurnitureToItem.Values.ToHashSet(), yardObjectToItem.Values.ToHashSet());
+        var (inside, outside) = sides.Value;
+        if (!inside.Contains(itemId) && !outside.Contains(itemId)) return true;
+        return side == Side.Interior ? inside.Contains(itemId) : outside.Contains(itemId);
+    }
+
+    private (HashSet<uint> Inside, HashSet<uint> Outside)? sides;
+
     /// <summary>The Item behind a placed piece (its HousingFurniture or HousingYardObject row).</summary>
     public uint ItemOfPlaced(uint baseId, bool yard) =>
         (yard ? yardObjectToItem : indoorFurnitureToItem).TryGetValue(baseId, out var item) ? item : 0;

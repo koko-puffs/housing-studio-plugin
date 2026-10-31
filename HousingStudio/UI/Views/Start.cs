@@ -45,6 +45,7 @@ public sealed partial class MainWindow
         Frame.BeginBody("##start", null, 24, 24);
         DrawDropZone();
         DrawSaveHome();
+        DrawHomeCare();
         if (session.LoadError != null && session.Layout == null)
         {
             Kit.Gap(12);
