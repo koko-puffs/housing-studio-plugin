@@ -19,6 +19,10 @@ its exact spot, then dyes everything to match.
 > ([Visitors](#visitors)). In your verified home, **Take a shot** (or `/hstudio shot`) sends a
 > picture with where the camera was to the design's page ([Shots from the game](#shots-from-the-game)).
 > Settings → Getting has two new switches for the first two.
+> Also in 0.7.0: **Rehearse the run** (Ready's Preview → Rehearse the run) does every step a
+> real start does, errands and fixtures too, and commits nothing: every purchase's question is
+> checked and cancelled, pieces are taken to their spots and let go, dyes picked and not applied.
+> Then a report of what it would have done and what didn't work ([Rehearsal](#rehearsal)).
 > 0.6.0: a tidier window, from the flow mock-up (docs/mockups/flow.html). Ready is three steps,
 > **Get**, **Place** and **Finish**, with one brass button whose words say what it does ("Get 12,
 > then place", "Clear out 14, then place", "Swap and place"); the warnings and the item limit are
