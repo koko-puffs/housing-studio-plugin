@@ -1358,6 +1358,7 @@ public sealed partial class ErrandRunner : IDisposable
         var asked = DateTime.MinValue;
         var went = false;
         var skipped = false;
+        var explained = false;
         steps.Add(Step.Act(leave ? "Go out to your ward (Lifestream, your home's teleport)" : "Go home (Lifestream)", () =>
         {
             skipped = leave ? ErrandGame.InHomeWard(home!) : Inside();
@@ -1382,6 +1383,12 @@ public sealed partial class ErrandRunner : IDisposable
                     return StepOutcome.Done;
                 }
                 var there = ErrandGame.InHomeWard(home!) || (!leave && Inside());
+                if (!explained && went && !there && ErrandGame.Settled && !Travel.Busy && DateTime.UtcNow - asked > TimeSpan.FromSeconds(20))
+                {
+                    // Arrived somewhere that doesn't read as home: said once, with what was compared.
+                    explained = true;
+                    log.Warn($"  Still not home after the teleport ({ErrandGame.WardCheck(home!)}{(leave ? string.Empty : $"; inside {here.HouseId}, your home {home!.HouseId}")}).");
+                }
                 if (!went || !there || !ErrandGame.Settled || Travel.Busy) return StepOutcome.Waiting;
                 travelling = false;
                 lastTerritory = ErrandGame.Territory;

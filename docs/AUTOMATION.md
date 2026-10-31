@@ -338,7 +338,7 @@ first, gets `DyeSteps` as a stand-in `RunJob` (in `standIns`: its `Would` isn't 
 
 **Chambers for the errands**: `ErrandGame.HomeHere` marks a room in a house (`RoomNumber > 0`, not an
 apartment or the workshop) as `HomeRef.Chamber`, yours (`CompanyHouse`) when the company's estate has
-its ward and plot and you may decorate. `EnterSteps` then waits for the house's hall
+its ward and plot and you may decorate. `HomeRef.WardTerritory` is the house id's bits 32-47 (0.7.5; the game's original house territory, read in chambers, wasn't the ward's), and `ErrandGame.WardCheck` says what "outside your home" compared when it waits over 20 s. `EnterSteps` then waits for the house's hall
 (`ErrandGame.InHouseOf`), and `ChamberSteps` goes up (0.7.4, from 0.7.2's chamber recording): the
 door found by `ErrandTable.ChamberDoorWords` in its name (`ErrandGame.NearestContaining`; a guess),
 walked to (vnavmesh), used; its SelectString's `ChamberMenuWords` ("Move to your private chambers");

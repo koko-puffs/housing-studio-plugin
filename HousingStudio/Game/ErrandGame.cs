@@ -167,7 +167,12 @@ public static unsafe class ErrandGame
             Services.Log.Debug(ex, "Couldn't read which home is yours");
         }
         int? plot = id.IsApartment ? null : id.PlotIndex + 1;
-        return new HomeRef(ctx.TerritoryId, ctx.HouseId, HousingManager.GetOriginalHouseTerritoryTypeId(), id.WardIndex, plot, ctx.District, kind, owned, chamber);
+        // The ward's territory is in the house's own id (bits 32-47: 340 for a Lavender Beds house and for
+        // private chambers in it, as 0.7.3's logs showed); the game's "original house territory" is the
+        // fallback (for chambers it didn't match the ward: the errands waited outside for ever).
+        var wardTerritory = (uint)((id.Id >> 32) & 0xFFFF);
+        if (wardTerritory == 0) wardTerritory = HousingManager.GetOriginalHouseTerritoryTypeId();
+        return new HomeRef(ctx.TerritoryId, ctx.HouseId, wardTerritory, id.WardIndex, plot, ctx.District, kind, owned, chamber);
     }
 
     /// <summary>Inside that home now.</summary>
@@ -187,6 +192,14 @@ public static unsafe class ErrandGame
     {
         var hm = HousingManager.Instance();
         return hm != null && hm->OutdoorTerritory != null && Territory == home.WardTerritory && hm->GetCurrentWard() == home.Ward;
+    }
+
+    /// <summary>Why <see cref="InHomeWard"/> says no, for the log: the territory and ward here against the home's.</summary>
+    public static string WardCheck(HomeRef home)
+    {
+        var hm = HousingManager.Instance();
+        var ward = hm != null && hm->OutdoorTerritory != null ? hm->GetCurrentWard().ToString() : "none (not in a ward)";
+        return $"here: territory {Territory}, ward {ward}; your home: territory {home.WardTerritory}, ward {home.Ward}";
     }
 
     // ---------------------------------------------------------------------------------------------

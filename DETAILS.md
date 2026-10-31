@@ -8,7 +8,12 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.7.4. Placing works in the game; the newer features haven't all been tried in it yet.**
+> **Status: 0.7.5. Placing works in the game; the newer features haven't all been tried in it yet.**
+> 0.7.5: from private chambers the errands teleported out and then waited outside the house for ever:
+> "outside your home" compared the ward's territory with the game's "original house territory", read
+> inside the chambers, which isn't the ward's there. It's read from the house's own id now (bits 32-47:
+> 340 for The Lavender Beds, for the house and its chambers alike), and if arriving still doesn't read
+> as home after 20 s, the log says what was compared.
 > 0.7.4: the errands go up to **private chambers** themselves, from a recording of doing it by hand:
 > into the company's hall, to the door to the chambers (found by "Chambers" in its name, a guess: its
 > name isn't in the recording, and the names near you are logged if it isn't found), its menu's "Move
