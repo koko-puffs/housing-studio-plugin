@@ -183,13 +183,16 @@ put-away comes first.
 **Setting fixtures** (experimental, `Session/FixtureRunner`, `Automation/FixtureTable`). Untested in
 the game; it goes step by step. The windows `HousingEditInterior` and `HousingEditExterior` and their
 edit containers (InventoryType 2012 and 2011) are from FFXIVClientStructs. The Housing menu's
-fixtures entry is fired as `HousingMenu ← [i:entry]`, its place among the menu's text values, only
-when the first two read as Indoor Furnishings and Furnishing Color (the recorded [i:0] and [i:1]);
-a fixture is put in its slot with `InventoryManager.MoveItemSlot` (bag → edit container), only when
-the container's slots hold what's set in the guessed order (floors in the game's order, five parts
-each); the apply is pressed by you. Everything it can't do, it asks you for, and it stops if a
-window doesn't appear. A recording of setting one interior and one exterior fixture by hand (and
-dyeing an outside part) confirms or corrects all of it.
+fixtures entry ("Remodel Interior", recorded as [i:2]) is fired as `HousingMenu ← [i:entry]`, its
+place among the menu's text values, only when the first two read as Indoor Furnishings and
+Furnishing Color (the recorded [i:0] and [i:1]); a fixture is put in its slot with
+`InventoryManager.MoveItemSlot` (bag → edit container), only when the container's slots hold what's
+set in the guessed order (floors in the game's order, five parts each). The game's own way, recorded,
+is a slot clicked (`HousingEditInterior ← [i:2, u:0, empty, empty, u:1]`) and a fixture chosen from
+its icons (`ContextIconMenu ← [i:0, i:0, u:51218, u:0, empty]`), not decoded yet. The apply is
+`HousingEditInterior ← [i:0, empty, empty, empty, empty]` (recorded), then yes to "Proceed with
+fixture changes?". Everything it can't do, it asks you for, and it stops if a window doesn't appear.
+Still to record: the same on a plot (Remodel Exterior), and which slot and fixture were used.
 
 **0.3.4: making the list again.** The furnishing list doesn't show a piece that came into the
 storeroom while it was open (0.3.3's log: a bag piece stored, then 170 rows searched for it one by
@@ -304,9 +307,12 @@ log**.
 "Get everything for me" (`Session/ErrandRunner.cs`) uses the same step queue for its trips: teleports
 and world visits through Lifestream's IPC, walking through vnavmesh's, talking to NPCs and using bells,
 boards and doors with the game's `TargetSystem.InteractWithObject`, and the windows' callbacks as
-above. Every window, callback and word it uses is in `Automation/ErrandTable.cs`; the ones not yet
-seen working (a gil shop's purchase, choosing a retainer, retrieving from their bags, buying a
-listing, the door's name) wait for Continue until you trust them. The market board's listings are
+above. Every window, callback and word it uses is in `Automation/ErrandTable.cs`. Recorded by hand:
+a gil shop's purchase (`Shop ← [i:0, row, count, empty]`), choosing a retainer (`RetainerList ←
+[i:2, u:row, empty, empty]`), "Retrieve from Retainer", buying a listing (`ItemSearchResult ← [i:2,
+row]`), and each one's question; a purchase's question is checked against its price before yes. The
+ones still guessed (opening a retainer's item menu, the door's and the board's names) wait for
+Continue until you trust them. The market board's listings are
 read from the game's own record of them (`InfoProxyItemSearch`), not the window. See
 [DETAILS.md](../DETAILS.md#getting-everything-for-you-experimental) for what it does and what would
 confirm each guess.

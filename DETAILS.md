@@ -8,7 +8,13 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.5.0. Placing works in the game; the new features below haven't been tried in it yet.**
+> **Status: 0.5.1. Placing works in the game; the new features below haven't been tried in it yet.**
+> 0.5.1: what a recording of each by hand showed. Set the fixtures for me chooses **Remodel
+> Interior** (the menu's real words; it looked for "Interior Fixtures", which isn't there), presses
+> the window's apply and says yes to "Proceed with fixture changes?". The errands' shop purchase,
+> retainer pick, board purchase and their questions are the game's own now, and no longer hold for
+> Continue; a shop's question is checked against the price (an item's name in it can be a plural).
+> The door is said yes to only for "Enter …".
 > 0.5.0: new features. **Clear out** what's placed and not in the design first, and **swap** to a
 > design keeping what was there to **Swap back** to ([Clearing out and swapping](#clearing-out-and-swapping)).
 > A **shopping list** that says where each missing piece comes from: your retainers, a vendor (with
@@ -221,9 +227,10 @@ says: before each action it holds, shows it, and waits for **Continue** (in Read
 `/hstudio continue`). The steps:
 
 1. The furnishing editor is closed (its own close) or the Housing menu opened (the housing agent),
-   and **Interior Fixtures** (or Exterior Fixtures) chosen by its words, at its place in the menu;
-   only when the menu's first two entries read as Indoor Furnishings and Furnishing Color (the
-   recorded [i:0] and [i:1]); otherwise you're asked to choose it. If the window
+   and **Remodel Interior** (or Remodel Exterior) chosen by its words, at its place in the menu
+   (inside it's the third, [i:2], as recorded); only when the menu's first two entries read as
+   Indoor Furnishings and Furnishing Color (the recorded [i:0] and [i:1]); otherwise you're asked
+   to choose it. If the window
    (`HousingEditInterior` / `HousingEditExterior`) doesn't open, by itself or by you, it stops.
 2. The window's container (InventoryType 2012 inside, 2011 outside) is read and logged, and its slots
    checked against what's set: floor by floor, five parts each (wall, window, door, flooring,
@@ -231,18 +238,22 @@ says: before each action it holds, shows it, and waits for **Continue** (in Read
    a fixture put in its slot by the plugin, with the game's item move from your bag (what dragging
    it there does); if it doesn't go in 3 s, or the slots can't be told apart, you're asked to put it
    in, and the window is watched for it.
-3. You press the window's apply (its click isn't known yet); the run waits up to 5 minutes for the
-   game's tables (`FixtureReader`) to show each fixture, logs which are set, and ticks them.
+3. The window's apply (`HousingEditInterior` [i:0, empty, empty, empty, empty], as recorded; the
+   outside's taken to be the same), then yes to "Proceed with fixture changes?" (only to that
+   question); the window closes. The run waits up to 5 minutes for the game's tables
+   (`FixtureReader`) to show each fixture, logs which are set, and ticks them.
 
 What it leaves to you: a floor's window and door (the house's, set from outside), a themed outside,
 and the outside's dyes; fixtures not in your bags are counted. It stops on leaving the home, a zone
 change, combat, a logout, losing permission, and the window closing before the apply; it never
 presses anything to clean up (an open fixtures window is left for you to apply or close). Every
 window name, container and word it uses is in `Automation/FixtureTable.cs`, with where each came
-from. **To confirm it**, a recording (Settings → Something not working? → Start recording) of, by
-hand: Housing → Interior Fixtures, putting a wall in its slot (dragging it from the bag), applying
-it (and the same for Exterior Fixtures with a fence, and dyeing an outside part) shows the menu's
-values, whether the item move is what the window does, the slots, and the apply's click.
+from. A recording of setting one fixture by hand showed the menu's entry, the apply and its
+question. The game itself puts a fixture in by a slot clicked (`HousingEditInterior` [i:2, u:0,
+empty, empty, u:1]) and the fixture chosen from its icons (`ContextIconMenu` [i:0, i:0, u:51218,
+u:0, empty]); which slot and which number those are isn't known yet, so the plugin's item move is
+still the guess. **Still to confirm**: the same on your plot (Remodel Exterior with a fence), and
+which slot and fixture a recording like that one used.
 
 ## The window
 
@@ -426,16 +437,17 @@ can't find, a plugin that stops answering: it stops, saying which. **Stop** (or 
 stops walking and travel, its placing run if it's going, and closes the windows it opened; AutoRetainer
 is let be again. Placing, fixtures and errands never run at once (the errands start their own placing).
 
-**The clicks not yet seen working** are all in `Automation/ErrandTable.cs`, with where each came
-from. Until **trust the new clicks** is on, each waits for **Continue** (step by step) so you can
-watch it. To confirm them, a recording (Settings → Something not working? → Start recording) of, by hand:
-
-- buying one furnishing from the Material Supplier (the `Shop` window's purchase: guessed `[0, row, count]`);
-- opening a summoning bell and choosing a retainer (`RetainerList`: guessed `[2, index]`), and
-  right-clicking a furnishing in their bags and taking it (the menu's words: "Retrieve" / "Retrieve All");
-- buying one listing on the market board, with its listings open (`ItemSearchResult`: guessed `[2, index]`),
-  and the search itself (not done by the plugin yet);
-- going in at your front door (the door's name, and the yes/no).
+**The clicks** are all in `Automation/ErrandTable.cs`, with where each came from. A recording
+of doing each by hand confirmed: a gil shop's purchase (`Shop` [i:0, row, count, empty], the row as
+the list shows it), the NPC's menu ([i:index]), the bell's retainer pick (`RetainerList` [i:2,
+u:row, empty, empty]), the retainer item menu's "Retrieve from Retainer", the board's purchase
+(`ItemSearchResult` [i:2, row]), and the questions each asks ("Purchase 1 riviera table for 2,000
+gil?", "Purchase 1 hedge-trimmed flower bed for 22,107 gil (1,052 fee included)?", "Enter the
+estate hall?"); those go without holding. Each purchase's question is checked against its price
+before yes. Still guesses, held for **Continue** until **trust the new clicks** is on: opening a
+retainer's item menu from the plugin, and the objects found by name (the door's "Entrance", the
+board's). The search on the board is still yours (the game's was `ItemSearch` [i:9, empty, empty,
+s:"hedge", …] then [i:5, result]); NPC and retainer greetings are clicked through by you.
 
 Words are matched in English only so far. IPC names used (`Game/Vnavmesh.cs`, `Game/Lifestream.cs`,
 `Game/AutoRetainer.cs`): `vnavmesh.Nav.IsReady`, `vnavmesh.SimpleMove.PathfindAndMoveTo`,

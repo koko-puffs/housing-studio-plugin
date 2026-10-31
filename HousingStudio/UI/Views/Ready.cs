@@ -348,8 +348,8 @@ public sealed partial class MainWindow
         {
             Kit.PushBox(Kit.Left + S(20), Kit.Width - S(40));
             Txt.Note(Plugin.FixtureRun.Enabled
-                ? "Set them with the game's Housing → Interior Fixtures (or Exterior Fixtures), or let the plugin put them in from your bags (experimental). Tick each one as it's set."
-                : "The plugin doesn't set these: use the game's Housing → Interior Fixtures (or Exterior Fixtures), and tick each one as you set it.");
+                ? "Set them with the game's Housing → Remodel Interior (or Remodel Exterior), or let the plugin put them in from your bags (experimental). Tick each one as it's set."
+                : "The plugin doesn't set these: use the game's Housing → Remodel Interior (or Remodel Exterior), and tick each one as you set it.");
             Kit.Gap(6);
             Kit.PopBox();
             DrawSetFixtures();

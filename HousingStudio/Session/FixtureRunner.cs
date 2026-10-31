@@ -247,7 +247,7 @@ public sealed unsafe class FixtureRunner
 
     private int EditContainer => side == Side.Interior ? FixtureTable.InteriorEdit : FixtureTable.ExteriorEdit;
 
-    private string MenuName => side == Side.Interior ? "Interior Fixtures" : "Exterior Fixtures";
+    private string MenuName => side == Side.Interior ? "Remodel Interior" : "Remodel Exterior";
 
     private List<Step> Steps()
     {
@@ -451,6 +451,21 @@ public sealed unsafe class FixtureRunner
                 watchWindow = false;
                 return GameUi.Fire(apply) ? StepOutcome.Done : StepOutcome.Halt($"The {MenuName} window closed.");
             }));
+            // "Proceed with fixture changes?" [Recording 2]: yes, only to that question.
+            steps.Add(Step.Wait("The game asks to proceed", () => GameUi.YesNoText() != null || !GameUi.IsOpen(Window), WindowWait, StepStatus.Done));
+            steps.Add(new Step
+            {
+                Label = "Answer yes to \"Proceed with fixture changes?\"",
+                IsAction = true,
+                Run = () =>
+                {
+                    if (GameUi.YesNoText() is not { } question) return StepOutcome.Done;
+                    if (!FixtureTable.ApplyWords.Any(w => question.Contains(w, StringComparison.OrdinalIgnoreCase)))
+                        return StepOutcome.Halt($"The game asked \"{question}\", not to proceed with the fixtures: left for you.");
+                    return GameUi.Fire(UiTable.YesNoYes) ? StepOutcome.Done : StepOutcome.Halt("The yes/no closed.");
+                },
+            });
+        }
         steps.Add(new Step
         {
             Label = apply != null ? "The fixtures are set" : $"You: apply the fixtures in the {MenuName} window (and say yes if it asks)",

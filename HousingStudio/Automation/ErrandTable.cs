@@ -5,8 +5,10 @@ namespace HousingStudio.Automation;
 
 /// <summary>
 /// ERRANDS (experimental): every game window and click "Get everything for me" uses, in one place, with
-/// where each came from and how sure it is. None of these has been seen working with this plugin yet.
-/// The ones marked unconfirmed (<see cref="UiCall.Verified"/> false) are always done step by step (the
+/// where each came from and how sure it is. Recording 2 (a player's, by hand: a Material Supplier's
+/// and a housing merchant's purchase, a summoning bell, a retainer's item taken, a market board
+/// listing bought, the estate's door) showed the shop's purchase, the retainer list's pick, the
+/// board's purchase and the yes/no each asks. The ones still marked unconfirmed (<see cref="UiCall.Verified"/> false) are always done step by step (the
 /// run holds before the click until you press Continue) until you switch that off in the errands'
 /// screen, having watched them work. To confirm or fix one: Settings → Something not working? → Start
 /// recording, do the thing by hand (the recording each entry names), Stop recording, Copy recording +
@@ -19,6 +21,7 @@ namespace HousingStudio.Automation;
 /// <item>[AutoRetainer] NightmareXIV/AutoRetainer, from memory: RetainerList picks a retainer with
 /// (2, index); the retainer menu is a SelectString.</item>
 /// <item>[Guess] Written from what other plugins are known to send, not checked against a recording.</item>
+/// <item>[Recording 2] Seen sent by the game, by hand.</item>
 /// </list>
 /// Words are matched in English only so far: in another client's language a menu entry or object isn't
 /// found, and the run stops and says which.
@@ -31,11 +34,13 @@ public static class ErrandTable
     public const string Shop = "Shop";
 
     /// <summary>
-    /// Buy <c>count</c> of the item in row <c>row</c> of the gil shop. [Guess: (0, row, count), as plugins that
-    /// buy from vendors send.] Confirm with: a recording of buying one furnishing from the Material
-    /// Supplier by hand (right-click → Purchase, or the quantity box and Purchase).
+    /// Buy <c>count</c> of the item in row <c>row</c> of the gil shop (0 is the list's first, as shown).
+    /// The game then asks "Purchase 1 riviera table for 2,000 gil?" (OK / Cancel). [Recording 2:
+    /// [i:0, i:14, i:1, empty] for a lump of beeswax, row 14 of the Material Supplier's; [i:0, i:4,
+    /// i:1, empty] for a Riviera Table, row 4 of the housing merchant's Tables, Food. [i:6, row] and
+    /// [i:7, row] are the mouse going over a row.]
     /// </summary>
-    public static readonly UiCall ShopBuy = new(Shop, "i:0 i:{row} i:{count}", false, "Guess", Verified: false);
+    public static readonly UiCall ShopBuy = new(Shop, "i:0 i:{row} i:{count} empty", true, "Recording 2");
 
     /// <summary>The menu some NPCs open first ("Purchase Furnishings (Tier 1)", "Purchase Items"). [ECommons]</summary>
     public const string SelectString = "SelectString";
@@ -46,7 +51,8 @@ public static class ErrandTable
     /// <summary>Picks a menu's entry (0 is the first). [ECommons: Callback.Fire(addon, true, index)]</summary>
     public static readonly UiCall MenuPick = new(SelectString, "i:{index}", true, "ECommons");
 
-    public static readonly UiCall IconMenuPick = new(SelectIconString, "i:{index}", true, "ECommons");
+    /// <summary>[Recording 2: the Material Supplier's "Purchase Items" [i:0]; the housing merchant's "Purchase Furnishings (Tables, Food)", the fourth, [i:3]]</summary>
+    public static readonly UiCall IconMenuPick = new(SelectIconString, "i:{index}", true, "ECommons, Recording 2");
 
     /// <summary>An NPC's words, which you click through. Not clicked by the plugin: it waits for you.</summary>
     public const string Talk = "Talk";
@@ -57,10 +63,10 @@ public static class ErrandTable
     public const string RetainerList = "RetainerList";
 
     /// <summary>
-    /// Picks the retainer in row <c>index</c> of the list. [AutoRetainer, from memory: (2, index)] Confirm
-    /// with: a recording of opening the bell and choosing one retainer by hand.
+    /// Picks the retainer in row <c>index</c> of the list. [Recording 2: [i:2, u:5, empty, empty] for the
+    /// sixth; [i:3, empty, u:row, empty] and [i:4] are the mouse going over a row and off it.]
     /// </summary>
-    public static readonly UiCall RetainerPick = new(RetainerList, "i:2 i:{index}", false, "AutoRetainer (from memory)", Verified: false);
+    public static readonly UiCall RetainerPick = new(RetainerList, "i:2 u:{index} empty empty", true, "Recording 2");
 
     /// <summary>The retainer's menu entry that opens their bags ("Entrust or withdraw items."), matched by its words (English).</summary>
     public static readonly string[] RetainerItemsWords = { "Entrust or withdraw items" };
@@ -72,12 +78,12 @@ public static class ErrandTable
     public static readonly string[] RetainerInventory = { "InventoryRetainer", "InventoryRetainerLarge" };
 
     /// <summary>
-    /// The item menu's entry that takes a stack from the retainer to your bags, matched by its words: the
-    /// whole stack ("Retrieve" for one, "Retrieve All" for a stack is the guess; never "Retrieve
-    /// Quantity"). [Guess] Confirm with: a recording of right-clicking a furnishing in a retainer's bags
-    /// and taking it.
+    /// The item menu's entry that takes a stack from the retainer to your bags, matched by its words
+    /// (never "Retrieve Quantity"). [Recording 2: the menu reads "Retrieve from Retainer | Have Retainer
+    /// Sell Items | Dye | Search for Item | …", and [i:0, i:0, u:0] chose it.] How the plugin opens the
+    /// menu (the game's own item menu for that slot) is still a guess.
     /// </summary>
-    public static readonly string[] RetrieveWords = { "Retrieve All", "Retrieve" };
+    public static readonly string[] RetrieveWords = { "Retrieve from Retainer", "Retrieve All", "Retrieve" };
 
     /// <summary>The words of an entry that must never be chosen for a retrieve (it asks how many).</summary>
     public static readonly string[] RetrieveQuantityWords = { "Quantity" };
@@ -91,10 +97,12 @@ public static class ErrandTable
     public const string ItemSearchResult = "ItemSearchResult";
 
     /// <summary>
-    /// Buys the listing in row <c>index</c> of the listings shown (the board then asks yes/no). [Guess: (2, index)]
-    /// Confirm with: a recording of buying one listing by hand, with the listings open.
+    /// Buys the listing in row <c>index</c> of the listings shown; the board then asks "Purchase 1
+    /// hedge-trimmed flower bed for 22,107 gil (1,052 fee included)?" (OK / Cancel). [Recording 2:
+    /// [i:2, i:0] for the first listing.] The search before it (not done by the plugin) was
+    /// ItemSearch [i:9, empty, empty, s:"hedge", s:"hedge", …], then [i:5, i:8] for the ninth result.
     /// </summary>
-    public static readonly UiCall ListingBuy = new(ItemSearchResult, "i:2 i:{index}", false, "Guess", Verified: false);
+    public static readonly UiCall ListingBuy = new(ItemSearchResult, "i:2 i:{index}", true, "Recording 2");
 
     // ---------- the house ----------
 
@@ -104,6 +112,9 @@ public static class ErrandTable
     /// it can't find it.
     /// </summary>
     public static readonly string[] EntranceWords = { "Entrance" };
+
+    /// <summary>The door's question, answered yes only when it starts so. [Recording 2: "Enter the estate hall?"; going out, "Leave the estate hall?"]</summary>
+    public static readonly string[] EnterWords = { "Enter" };
 
     // ---------- objects by name ----------
 

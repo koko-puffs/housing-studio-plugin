@@ -5,10 +5,11 @@ namespace HousingStudio.Automation;
 
 /// <summary>
 /// The game's fixtures windows, as "Set them for me" (Settings → Experimental) uses them: every name,
-/// container and word in one place, with where each came from. None of it has been seen working from
-/// the plugin: a recording of setting one fixture by hand (Settings → Something not working? →
-/// Start recording, then Housing → Interior Fixtures, put a wall in its slot, apply it) shows what
-/// to put right here.
+/// container and word in one place, with where each came from. Recording 2 (setting one fixture by
+/// hand, inside) showed the menu's entry (Housing → Remodel Interior, [i:2]), the window's apply and
+/// its yes/no. How a fixture goes in its slot from the plugin is still a guess: the game's own way
+/// was HousingEditInterior [i:2, u:0, empty, empty, u:1] (a slot clicked), then ContextIconMenu
+/// [i:0, i:0, u:51218, u:0, empty] (a fixture chosen from the icons), which isn't decoded yet.
 ///
 /// Sources:
 /// <list type="bullet">
@@ -23,15 +24,15 @@ namespace HousingStudio.Automation;
 /// is checked against those two first); a fixture is put in its slot as dragging it there would
 /// (the game's own item move, from the bag to the edit container's slot); the slots' order is the
 /// game's own order of the parts (<see cref="Core.FixtureJobs"/>), checked against what's set.</item>
+/// <item>[Recording 2] Seen sent by the game, by hand.</item>
 /// </list>
-/// Pressing the window's apply button is left to you until a recording shows its click.
 /// </summary>
 public static class FixtureTable
 {
-    /// <summary>Housing → Interior Fixtures. [ClientStructs]</summary>
+    /// <summary>Housing → Remodel Interior. [ClientStructs; Recording 2]</summary>
     public const string InteriorWindow = "HousingEditInterior";
 
-    /// <summary>Housing → Exterior Fixtures (on your plot). [ClientStructs]</summary>
+    /// <summary>Housing → Remodel Exterior (on your plot). [ClientStructs]</summary>
     public const string ExteriorWindow = "HousingEditExterior";
 
     /// <summary>What the interior window shows and edits (InventoryType.HousingInteriorAppearanceEdit). [ClientStructs]</summary>
@@ -41,13 +42,17 @@ public static class FixtureTable
     public const int ExteriorEdit = 2011;
 
     /// <summary>
-    /// The window's apply button: not known, so you press it (the run waits, and checks the game's own
-    /// tables for the fixtures). A recording of applying a fixture gives its values; set them here.
+    /// The window's apply button; the game then asks "Proceed with fixture changes?" (<see cref="ApplyWords"/>),
+    /// and once it's answered, the window closes and the Housing menu comes back. [Recording 2:
+    /// HousingEditInterior [i:0, empty, empty, empty, empty]]
     /// </summary>
-    public static readonly Core.UiCall? InteriorApply = null;
+    public static readonly Core.UiCall? InteriorApply = new(InteriorWindow, "i:0 empty empty empty empty", true, "Recording 2");
 
-    /// <inheritdoc cref="InteriorApply"/>
-    public static readonly Core.UiCall? ExteriorApply = null;
+    /// <summary>The same for the outside's window. [Guess: as the inside's]</summary>
+    public static readonly Core.UiCall? ExteriorApply = new(ExteriorWindow, "i:0 empty empty empty empty", true, "Guess: as the inside's", Verified: false);
+
+    /// <summary>The apply's question, answered yes only when it reads so. [Recording 2: "Proceed with fixture changes?"]</summary>
+    public static readonly string[] ApplyWords = { "Proceed with fixture changes" };
 
     /// <summary>
     /// Whether every step above has been seen working. While not, a run that sets fixtures goes step
@@ -55,13 +60,13 @@ public static class FixtureTable
     /// </summary>
     public static readonly bool Verified = false;
 
-    /// <summary>The Housing menu's entry for the inside's fixtures, by client language. [Guess: the game's English words; others unconfirmed]</summary>
+    /// <summary>The Housing menu's entry for the inside's fixtures, by client language. [Recording 2: "Remodel Interior", the third entry; the other languages' are guesses]</summary>
     public static IReadOnlyList<string> InteriorMenuWords(ClientLanguage language) => language switch
     {
         ClientLanguage.Japanese => new[] { "内装", "内装変更" },
         ClientLanguage.German => new[] { "Innenausstattung", "Innen" },
         ClientLanguage.French => new[] { "intérieur", "Aménagement intérieur" },
-        _ => new[] { "Interior Fixtures", "Fixtures" },
+        _ => new[] { "Remodel Interior", "Interior Fixtures", "Fixtures" },
     };
 
     /// <summary>The Housing menu's entry for the outside's fixtures, by client language. [Guess]</summary>
@@ -70,12 +75,12 @@ public static class FixtureTable
         ClientLanguage.Japanese => new[] { "外装", "外装変更" },
         ClientLanguage.German => new[] { "Außenausstattung", "Außen" },
         ClientLanguage.French => new[] { "extérieur", "Aménagement extérieur" },
-        _ => new[] { "Exterior Fixtures", "Fixtures" },
+        _ => new[] { "Remodel Exterior", "Exterior Fixtures", "Fixtures" },
     };
 
     /// <summary>
-    /// Choose the Housing menu's n-th entry: Indoor Furnishings is [i:0] and Furnishing Color [i:1]
-    /// [Recording 1], so the fixtures entries are taken to be their place in the menu. [Guess]
+    /// Choose the Housing menu's n-th entry: Indoor Furnishings is [i:0], Furnishing Color [i:1]
+    /// [Recording 1] and Remodel Interior [i:2] [Recording 2].
     /// </summary>
-    public static readonly Core.UiCall MenuEntry = new(UiTable.HousingMenu, "i:{entry}", true, "Recording 1's [i:0] and [i:1], by place", Verified: false);
+    public static readonly Core.UiCall MenuEntry = new(UiTable.HousingMenu, "i:{entry}", true, "Recordings 1 and 2");
 }

@@ -705,7 +705,6 @@ public sealed class ErrandRunner : IDisposable
             {
                 Label = $"Choose {r.Name} ({ErrandTable.RetainerPick.Describe()})",
                 IsAction = true,
-                Key = Guess,
                 Run = () =>
                 {
                     var row = ErrandGame.RetainerRow(r.RetainerId);
@@ -936,7 +935,6 @@ public sealed class ErrandRunner : IDisposable
             {
                 Label = $"Buy {Name(item.ItemId)} from {v.NpcName} ({ErrandTable.ShopBuy.Describe()})",
                 IsAction = true,
-                Key = Guess,
                 Run = () =>
                 {
                     if (bought >= item.Count) return Finished();
@@ -971,12 +969,12 @@ public sealed class ErrandRunner : IDisposable
                 {
                     if (GameUi.YesNoText() is { } question && now == before)
                     {
-                        // Only a question about this purchase is answered yes (it names the item).
-                        var itemName = Name(item.ItemId);
-                        if (itemName.Length == 0 || !question.Contains(itemName, StringComparison.OrdinalIgnoreCase))
+                        // Only a question about this purchase is answered yes: it names its price ("Purchase 1
+                        // riviera table for 2,000 gil?"; the item's name in it may be a plural or "lump of …").
+                        if (!MarketRule.QuestionMatches(question, v.Price, n, (long)v.Price * n))
                         {
                             GameUi.Close(UiTable.YesNo);
-                            return StepOutcome.Halt($"The shop asked \"{question}\", which doesn't name {(itemName.Length == 0 ? "the item" : itemName)}: nothing was bought.");
+                            return StepOutcome.Halt($"The shop asked \"{question}\", which isn't {n} × {Name(item.ItemId)} for {(long)v.Price * n:N0} gil: nothing was bought.");
                         }
                         queue.InsertNext(new[] { Yes(question), Bought() });
                         return StepOutcome.Done;
@@ -997,12 +995,11 @@ public sealed class ErrandRunner : IDisposable
         return Once();
     }
 
-    /// <summary>Answers the game's yes/no with yes (a purchase, going in): a click not yet seen working here.</summary>
+    /// <summary>Answers the game's yes/no (OK) for a purchase checked above. [Recording 2: SelectYesno [i:0]]</summary>
     private static Step Yes(string question) => new()
     {
         Label = $"Answer yes to \"{question}\"",
         IsAction = true,
-        Key = Guess,
         Run = () => GameUi.Fire(UiTable.YesNoYes) ? StepOutcome.Done : StepOutcome.Halt("The yes/no closed."),
     };
 
@@ -1060,7 +1057,6 @@ public sealed class ErrandRunner : IDisposable
             {
                 Label = $"Buy a listing of {name} ({ErrandTable.ListingBuy.Describe()})",
                 IsAction = true,
-                Key = Guess,
                 Run = () =>
                 {
                     if (bought >= wanted) return Finished();
@@ -1097,7 +1093,6 @@ public sealed class ErrandRunner : IDisposable
             {
                 Label = $"Answer yes (buy {name})",
                 IsAction = true,
-                Key = Guess,
                 Run = () =>
                 {
                     // Only the listing chosen: the question must name its price (another row clicked, or
@@ -1229,8 +1224,14 @@ public sealed class ErrandRunner : IDisposable
             {
                 Label = "Answer yes (go in)",
                 IsAction = true,
-                Key = Guess,
-                Run = () => Inside() || GameUi.YesNoText() == null || GameUi.Fire(UiTable.YesNoYes) ? StepOutcome.Done : StepOutcome.Halt("The yes/no closed."),
+                Run = () =>
+                {
+                    if (Inside() || GameUi.YesNoText() is not { } question) return StepOutcome.Done;
+                    // Only the door's own question ("Enter the estate hall?").
+                    if (!ErrandTable.EnterWords.Any(w => question.TrimStart().StartsWith(w, StringComparison.OrdinalIgnoreCase)))
+                        return StepOutcome.Halt($"The game asked \"{question}\", not to go in: left for you.");
+                    return GameUi.Fire(UiTable.YesNoYes) ? StepOutcome.Done : StepOutcome.Halt("The yes/no closed.");
+                },
             });
             steps.Add(Arriving(WaitFor("Inside your home", Inside, TimeSpan.FromSeconds(30), "Didn't get inside your home.")));
         }

@@ -85,8 +85,8 @@ public sealed partial class MainWindow
             if (left > 0)
             {
                 Frame.BeginBottom("done-bottom");
-                var menus = layout.InteriorFixtures.Count > 0 && layout.ExteriorFixtures.Count > 0 ? "Interior Fixtures and Exterior Fixtures"
-                    : layout.ExteriorFixtures.Count > 0 ? "Exterior Fixtures" : "Interior Fixtures";
+                var menus = layout.InteriorFixtures.Count > 0 && layout.ExteriorFixtures.Count > 0 ? "Remodel Interior and Remodel Exterior"
+                    : layout.ExteriorFixtures.Count > 0 ? "Remodel Exterior" : "Remodel Interior";
                 Txt.Note(Plugin.FixtureRun.Enabled
                     ? $"{left} fixtures still to do: Set them for me in Ready's fixtures, or from Housing → {menus}."
                     : $"Fixtures aren't set by the plugin: {left} still to do from Housing → {menus}.", center: true);

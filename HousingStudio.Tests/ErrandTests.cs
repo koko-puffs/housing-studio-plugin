@@ -258,3 +258,24 @@ public class MarketQuestionTests
         Assert.Equal(new long[] { 12, 5 }, MarketRule.Numbers("12, 5"));
     }
 }
+
+public class RecordedQuestionTests
+{
+    // The game's own questions, from a recording of buying by hand.
+    [Fact]
+    public void TheShopsQuestionsAsTheGameAsks()
+    {
+        Assert.True(MarketRule.QuestionMatches("Purchase 1 lump of beeswax for 14 gil?", 14, 1, 14));
+        Assert.True(MarketRule.QuestionMatches("Purchase 1 riviera table for 2,000 gil?", 2000, 1, 2000));
+        Assert.False(MarketRule.QuestionMatches("Purchase 1 riviera table for 2,000 gil?", 1500, 1, 1500));
+    }
+
+    [Fact]
+    public void TheBoardsQuestionAsTheGameAsks()
+    {
+        // 21,055 for one, 1,052 fee: 22,107 in all.
+        const string q = "Purchase 1 hedge-trimmed flower bed for 22,107 gil (1,052 fee included)?";
+        Assert.True(MarketRule.QuestionMatches(q, 21055, 1, MarketRule.Cost(21055, 1, 1052)));
+        Assert.False(MarketRule.QuestionMatches(q, 30000, 1, MarketRule.Cost(30000, 1, 1500)));
+    }
+}
