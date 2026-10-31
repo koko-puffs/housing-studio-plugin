@@ -169,7 +169,7 @@ public sealed partial class MainWindow
     // Get, before setting out.
 
     /// <summary>The Get screen's words for one estimate, made again only when the plan changes.</summary>
-    private sealed class GetWords
+    private sealed class GetScreenWords
     {
         public ErrandPlan? Plan;
         public Plan? From;
@@ -185,9 +185,9 @@ public sealed partial class MainWindow
         public List<LeftRow> Left = new();
     }
 
-    private readonly GetWords getScreen = new();
+    private readonly GetScreenWords getScreen = new();
 
-    private GetWords GetScreen(ErrandPlan plan, string title)
+    private GetScreenWords GetScreen(ErrandPlan plan, string title)
     {
         var g = getScreen;
         var p = session.Plan;
@@ -725,7 +725,7 @@ public sealed partial class MainWindow
         var fw = Kit.Width;
         const string stop = "Stop";
         var pauseLabel = paused ? "Resume" : "Pause";
-        var bw = Kit.ButtonWidth(pauseLabel, BtnSize.Lg, Icon.Pause);
+        var bw = Kit.ButtonWidth(pauseLabel, BtnSize.Lg, Icon.Pause, paused ? Btn.Primary : Btn.Glass);
         var sw = Kit.ButtonWidth(stop, BtnSize.Lg, Icon.Square, Btn.Danger);
         if (paused)
         {
