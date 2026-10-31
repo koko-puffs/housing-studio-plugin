@@ -276,7 +276,7 @@ public sealed partial class MainWindow
     private const string ReadyPlace = "PLACE";
 
     /// <summary>The Place stage's words and cells for what Start does (made again only when the counts change).</summary>
-    private (int Moves, int Places, int Dyes, int InPlace, string Big, string? Aside, (int, string)[] Cells) placeWords =
+    private (int Moves, int Places, int Dyes, int InPlace, string Big, string? Aside, (int, string)[] Cells) placeStage =
         (-1, 0, 0, 0, string.Empty, null, Array.Empty<(int, string)>());
 
     /// <summary>Place: what Start does (to move, to place, to dye), what's already in place, and Keep / Clear out / Swap.</summary>
@@ -292,9 +292,9 @@ public sealed partial class MainWindow
             Kit.EndStage();
             return;
         }
-        var p = placeWords;
+        var p = placeStage;
         if (p.Moves != s.Moves.Count || p.Places != s.Places || p.Dyes != s.Dyes || p.InPlace != s.InPlace)
-            p = placeWords = (s.Moves.Count, s.Places, s.Dyes, s.InPlace, ReadyWords.PlaceBig(s.Moves.Count + s.Places, s.Dyes),
+            p = placeStage = (s.Moves.Count, s.Places, s.Dyes, s.InPlace, ReadyWords.PlaceBig(s.Moves.Count + s.Places, s.Dyes),
                 s.InPlace > 0 ? $"{s.InPlace} already in place" : null,
                 new[] { (s.Moves.Count, "to move"), (s.Places, "to place"), (s.Dyes, "to dye") });
         Kit.StageHead(ReadyPlace, p.Big, p.Aside);

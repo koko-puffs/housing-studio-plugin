@@ -29,7 +29,9 @@ tried in the game, such as **Get everything for me**, which fetches what's missi
 1. Open a design: drop it on the window, or use **Choose a file**.
 2. Go into your house (or onto your plot for the garden). You need permission to decorate.
 3. Open Housing → **Indoor Furnishings** (or Outdoor).
-4. Press **Start placing**, or **Preview first** to see what it will do without touching anything.
+4. Ready shows what to get, what Start does and the fixtures left, in three steps. Press the brass
+   button (**Start placing**, or whatever it says it will do), or **Preview** to see what it will do
+   without touching anything.
 
 If something goes wrong, Settings → **Something not working?** has a step-by-step mode and a
 recorder whose output you can send along with your report.
