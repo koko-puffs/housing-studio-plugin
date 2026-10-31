@@ -337,6 +337,8 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         DryRun = dryRun;
         Rehearsal = rehearse;
         rehearsalHeld = null;
+        standIns.Clear();
+        dyesTriedOnStandIn.Clear();
         index = -1;
         dyesPlanned = !dyes;
         failuresInARow = 0;
@@ -2611,7 +2613,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         if (!storeModeUsed) return;
         storeModeUsed = false;
         // (Stopped by a zone change or logout: the editor may be half torn down, so it's let be.)
-        if (StillInStartHome() && HousingEditor.Mode == EditorMode.Store && GameUi.Fire(UiTable.LayoutRotate)) log.Info("Back to Rotate (out of Store mode).");
+        if (StillInStartHome() && HousingEditor.Mode is EditorMode.Store or EditorMode.ToBags && GameUi.Fire(UiTable.LayoutRotate)) log.Info("Back to Rotate (out of Store mode).");
     }
 
     private void Finish()

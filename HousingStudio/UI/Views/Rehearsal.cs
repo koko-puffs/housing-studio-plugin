@@ -84,10 +84,17 @@ public sealed partial class MainWindow
         }
         var keep = g.Mode == ReadyMode.Swap && g.Clear != null ? KeepAsName() : null;
         var title = session.Title;
+        // Missing pieces, and the errands not rehearsed: the report says why (as the line under the button).
+        var notGetting = ShopPlan().IsEmpty ? null
+            : g.NotGetting != null ? $"Getting wasn't rehearsed: {g.NotGetting}"
+            : !config.GetFirst ? "Getting wasn't rehearsed: \"Get them for me first\" is off."
+            : !Errands.Enabled ? "Getting wasn't rehearsed: the errands are off (Settings → Beta)."
+            : null;
         vm.Starting(entries);
         OnFramework(() =>
         {
             Rehearsals.Report.Begin(title, DateTime.Now);
+            if (notGetting != null) Rehearsals.Report.Note(notGetting);
             runner.Rehearse(entries, g.Clear, keep);
             if (runner.Active)
             {
@@ -165,6 +172,11 @@ public sealed partial class MainWindow
         Txt.Note(report.Teleports > 0
             ? $"Nothing was committed. {(report.Teleports == 1 ? "1 teleport" : $"{report.Teleports} teleports")} were made: their fees are the only gil spent."
             : "Nothing was committed: nothing placed, moved, stored, dyed, bought or set.");
+        foreach (var n in report.Notes)
+        {
+            Kit.Gap(4);
+            Txt.Note(n);
+        }
         Kit.EndPanel();
 
         Kit.Gap(18);

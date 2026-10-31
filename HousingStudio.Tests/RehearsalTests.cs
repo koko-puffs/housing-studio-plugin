@@ -9,6 +9,19 @@ namespace HousingStudio.Tests;
 public class RehearsalReportTests
 {
     [Fact]
+    public void ANoteSaysWhatWasLeftOut()
+    {
+        var r = new RehearsalReport();
+        r.Begin("Room", new System.DateTime(2026, 10, 31, 22, 45, 0));
+        r.Note("Getting wasn't rehearsed: the errands are off (Settings → Beta).");
+        r.Note("Getting wasn't rehearsed: the errands are off (Settings → Beta).");
+        Assert.Single(r.Notes);
+        Assert.Contains("Getting wasn't rehearsed", r.Text());
+        r.Begin("Room", System.DateTime.Now);
+        Assert.Empty(r.Notes);
+    }
+
+    [Fact]
     public void EmptyReportSaysNothing()
     {
         var r = new RehearsalReport();

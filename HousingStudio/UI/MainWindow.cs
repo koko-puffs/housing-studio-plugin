@@ -347,8 +347,11 @@ public sealed partial class MainWindow : Window
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(S(28)));
         ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, S(Palette.Radius2Xl));
         ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 1f);
-        ImGui.PushStyleColor(ImGuiCol.PopupBg, Palette.GlassSolid);
-        ImGui.PushStyleColor(ImGuiCol.Border, Palette.Line);
+        // Its card and the dim behind it are drawn here, not by ImGui: ImGui's own dim takes the colour
+        // the game's style has when the frame is drawn (a pale wash over the whole screen), and the
+        // card was see-through, so the wash showed through it.
+        ImGui.PushStyleColor(ImGuiCol.PopupBg, Vector4.Zero);
+        ImGui.PushStyleColor(ImGuiCol.Border, Vector4.Zero);
         var open = ImGui.BeginPopupModal(id, ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoSavedSettings);
         ImGui.PopStyleColor(2);
         ImGui.PopStyleVar(3);
@@ -357,6 +360,7 @@ public sealed partial class MainWindow : Window
             confirm = null;
             return;
         }
+        DrawConfirmBackdrop();
 
         var c = confirm;
         var at = ImGui.GetCursorScreenPos();
@@ -387,6 +391,24 @@ public sealed partial class MainWindow : Window
             ImGui.CloseCurrentPopup();
         }
         ImGui.EndPopup();
+    }
+
+    /// <summary>
+    /// Behind the ask: a dark scrim over the whole screen (above ImGui's pale one), then the card,
+    /// solid, with its edge. Drawn first in the ask's own window, so its words and buttons sit on top.
+    /// </summary>
+    private static void DrawConfirmBackdrop()
+    {
+        var dl = ImGui.GetWindowDrawList();
+        var vp = ImGui.GetMainViewport();
+        dl.PushClipRect(vp.Pos, vp.Pos + vp.Size, false);
+        dl.AddRectFilled(vp.Pos, vp.Pos + vp.Size, Palette.U32(Palette.WithAlpha(Palette.Ink, 0.62f)));
+        dl.PopClipRect();
+        var pos = ImGui.GetWindowPos();
+        var size = ImGui.GetWindowSize();
+        var r = S(Palette.Radius2Xl);
+        dl.AddRectFilled(pos, pos + size, Palette.U32(Palette.Over(Palette.Float, Palette.Ink)), r);
+        dl.AddRect(pos, pos + size, Palette.U32(Palette.Line), r);
     }
 
     // ---------------------------------------------------------------------------------------------

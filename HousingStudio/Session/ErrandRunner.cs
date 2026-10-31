@@ -242,7 +242,9 @@ public sealed partial class ErrandRunner : IDisposable
         var mine = ErrandGame.HomeHere(ctx);
         if (mine == null || session.Plan == null) return "Go inside your home: what's missing is worked out there.";
         if (!ctx.HasPermission) return "You can only place furniture in a home you may decorate.";
-        if (!mine.Owned && config.ErrandsHome < 0) return "The game doesn't say this home is yours: choose which home it is below.";
+        if (!mine.Owned && config.ErrandsHome < 0) return mine.Chamber
+            ? "These chambers aren't in your company's house as the game has it: choose which home \"go home\" is in Settings → Getting → Home is."
+            : "The game doesn't say this home is yours: choose which home it is in Settings → Getting → Home is.";
         var world = ErrandGame.CurrentWorld();
         if (world.Length == 0 || world != ErrandGame.HomeWorld()) return "Go back to your home world first.";
         if (!Nav.Installed) return "vnavmesh isn't installed (or is turned off).";
@@ -1437,8 +1439,14 @@ public sealed partial class ErrandRunner : IDisposable
                         return GameUi.Fire(UiTable.YesNoYes) ? StepOutcome.Done : StepOutcome.Halt("The yes/no closed.");
                 },
             });
-            steps.Add(Arriving(WaitFor("Inside your home", Inside, TimeSpan.FromSeconds(30), "Didn't get inside your home.")));
+            steps.Add(Arriving(home is { Chamber: true }
+                ? WaitFor("Inside the house", () => Inside() || ErrandGame.InHouseOf(home), TimeSpan.FromSeconds(30), "Didn't get inside the house.")
+                : WaitFor("Inside your home", Inside, TimeSpan.FromSeconds(30), "Didn't get inside your home.")));
         }
+        // Private chambers: the door goes into the house's hall; up to the room is yours to walk (its
+        // menu, "Move to your private chambers", hasn't been recorded from the plugin).
+        if (home is { Chamber: true })
+            steps.Add(Arriving(You("Go up to your private chambers (the hall's door to them, then \"Move to your private chambers\")", Inside)));
         steps.AddRange(ReadAgainSteps());
         return steps;
     }

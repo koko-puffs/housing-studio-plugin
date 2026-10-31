@@ -87,11 +87,24 @@ public sealed class RehearsalReport
 
     public IReadOnlyList<RehearsalIssue> Issues => issues;
 
+    private readonly List<string> notes = new();
+
+    /// <summary>What the rehearsal left out, and why ("Getting wasn't rehearsed: …").</summary>
+    public IReadOnlyList<string> Notes => notes;
+
+    /// <summary>Notes something the rehearsal left out (said under the counts).</summary>
+    public void Note(string line)
+    {
+        if (!string.IsNullOrWhiteSpace(line) && !notes.Contains(line)) notes.Add(line);
+        Version++;
+    }
+
     /// <summary>A new rehearsal: everything counted so far is forgotten.</summary>
     public void Begin(string title, DateTime at)
     {
         counts.Clear();
         issues.Clear();
+        notes.Clear();
         BuyGil = 0;
         DyesOncePlaced = 0;
         QuestionsMatched = QuestionsNotMatched = 0;
@@ -199,6 +212,7 @@ public sealed class RehearsalReport
         sb.AppendLine(CountsLine());
         if (QuestionsLine() is { } q) sb.AppendLine(q);
         if (Teleports > 0) sb.AppendLine(Teleports == 1 ? "1 teleport (its fee is the only gil spent)." : $"{Teleports} teleports (their fees are the only gil spent).");
+        foreach (var n in notes) sb.AppendLine(n);
         sb.AppendLine();
         if (issues.Count == 0) sb.AppendLine("What didn't work: nothing.");
         else

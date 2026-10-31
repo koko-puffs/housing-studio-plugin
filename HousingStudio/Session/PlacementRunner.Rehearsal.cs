@@ -12,13 +12,13 @@ namespace HousingStudio.Session;
 /// A rehearsal (Ready's Preview → Rehearse the run): the same plan, order, windows, clicks and waits
 /// as a real run, with every commit point done up to the moment before it and then backed out:
 /// <list type="bullet">
-/// <item>a move: picked up and let go where it is (<see cref="UiTable.LetGo"/>: pressing Move sets
-/// a held piece down where the editor has it, so it's never shifted while held), and checked unmoved;</item>
+/// <item>a move: picked up and let go as it is (<see cref="UiTable.LetGo"/>; never shifted while
+/// held), and checked unmoved;</item>
 /// <item>a storeroom piece: its row found and picked, the game's preview shown at its spot, "Place"
 /// found in the menu, and the menu closed instead (the preview goes with it);</item>
 /// <item>a bag piece: its menu opened, "Store" (or "Place") found, and the menu closed;</item>
-/// <item>clear out: the editor put in Store mode, and the piece not picked (in Store mode, the pick
-/// itself may store it);</item>
+/// <item>clear out: the editor put in its storeroom mode, and the piece not picked (in that mode the
+/// pick itself stores it);</item>
 /// <item>a dye: the dye window opened on the piece and the dye chosen, then closed without Dye;</item>
 /// <item>pieces placed by hand: not waited for.</item>
 /// </list>
@@ -83,7 +83,62 @@ public sealed unsafe partial class PlacementRunner
     {
         job.Note = $"Rehearsed: would {words}.";
         log.Info($"  Would {words} (a rehearsal: not done).");
-        Rehearsals.Report.Would(ActOf(job));
+        // A stand-in's dye is a try of the dye path, counted once as the piece it stands in for.
+        if (!standIns.Contains(job)) Rehearsals.Report.Would(ActOf(job));
+    }
+
+    /// <summary>Stand-in dye jobs (a placed piece the dye path is tried on, for one that isn't placed).</summary>
+    private readonly HashSet<RunJob> standIns = new();
+
+    /// <summary>The dyes this rehearsal has tried on a stand-in already (each dye once).</summary>
+    private readonly HashSet<byte> dyesTriedOnStandIn = new();
+
+    /// <summary>
+    /// A dye for a piece not placed yet (a rehearsal places nothing): counted, and, the first time a
+    /// rehearsal comes to each dye, the dye path tried on a stand-in, a placed piece that takes a dye
+    /// (Furnishing Color, the piece picked, the dye window, the dye found and chosen, then closed
+    /// without Dye and the stand-in checked to have kept its own). Without a stand-in, only counted.
+    /// </summary>
+    private (List<Step>, List<Step>) RehearseDyeOncePlaced(RunJob job)
+    {
+        var name = Name(job);
+        var stain = job.Target.Stain;
+        var dye = data.DyeName(stain);
+        Rehearsals.Report.WouldDyeOncePlaced();
+        LivePiece? standIn = null;
+        if (!dyesTriedOnStandIn.Contains(stain) && ReadLive() is { } live)
+            standIn = live.Values
+                .Where(p => p.Instance != 0 && p.Stain != stain && data.Dyeable(p.ItemId))
+                .OrderByDescending(p => p.Stain != 0) // one that's dyed already surely takes a dye
+                .Select(p => (LivePiece?)p)
+                .FirstOrDefault();
+        if (standIn is not { } s)
+        {
+            var why = dyesTriedOnStandIn.Contains(stain) ? $"{dye} was tried on a stand-in already" : "nothing placed here takes a dye to try it on";
+            return (new List<Step>
+            {
+                Step.Act($"Would dye {name} {dye} once placed (it isn't placed in a rehearsal; {why})", () =>
+                {
+                    job.Note = $"Rehearsed: would dye it once placed (not tried on it: it isn't placed; {why}).";
+                    return StepOutcome.Done;
+                }),
+            }, new List<Step>());
+        }
+        dyesTriedOnStandIn.Add(stain);
+        var stand = new RunJob { Kind = JobKind.Dye, Target = job.Target with { ItemId = s.ItemId, Key = s.Key }, Key = s.Key };
+        standIns.Add(stand);
+        var standName = data.ItemName(s.ItemId);
+        var steps = new List<Step>
+        {
+            Step.Act($"Try {dye} on {standName} instead ({name} isn't placed in a rehearsal): every dye step but Dye", () =>
+            {
+                job.Note = $"Rehearsed: would dye it once placed; {dye} was tried on {standName} (a stand-in), every step but Dye.";
+                log.Info($"  {name} isn't placed in a rehearsal: {dye} is tried on {standName} (slot {s.Key}), placed here, and the window is closed without Dye.");
+                return StepOutcome.Done;
+            }),
+        };
+        steps.AddRange(DyeSteps(stand));
+        return (steps, DyeCleanup());
     }
 
     /// <summary>The steps of a piece in a rehearsal: as <see cref="Script"/>, backed out at each commit point.</summary>
@@ -92,15 +147,7 @@ public sealed unsafe partial class PlacementRunner
         JobKind.Move => (MoveSteps(job, job.Key!.Value), RehearsalHeldCleanup()),
         JobKind.PlaceFromStoreroom when side == Side.Interior && config.StoreroomAutomatic => (StoreroomSteps(job), MenuCleanup().Concat(RehearsalHeldCleanup()).ToList()),
         JobKind.PlaceFromBags when config.BagsAutomatic => (RehearseBag(job), MenuCleanup().Concat(RehearsalHeldCleanup()).ToList()),
-        JobKind.Dye when job.Key == null => (new List<Step>
-        {
-            Step.Act($"Would dye {Name(job)} {data.DyeName(job.Target.Stain)} once placed (it isn't placed in a rehearsal, so it's not tried)", () =>
-            {
-                job.Note = "Rehearsed: would dye it once placed (not tried: it isn't placed).";
-                Rehearsals.Report.WouldDyeOncePlaced();
-                return StepOutcome.Done;
-            }),
-        }, new List<Step>()),
+        JobKind.Dye when job.Key == null => RehearseDyeOncePlaced(job),
         JobKind.Dye => (DyeSteps(job), DyeCleanup()),
         JobKind.Store => (RehearseStore(job), new List<Step>()),
         _ => (new List<Step>
@@ -114,12 +161,10 @@ public sealed unsafe partial class PlacementRunner
     };
 
     /// <summary>
-    /// A move's commit point: the piece is picked up as a real move does, and let go where it is with
-    /// <see cref="UiTable.LetGo"/>. It isn't shifted to its spot while held: pressing Move while
-    /// holding a piece sets it down where the editor has it (0.7.1's rehearsal showed it: an Icebox shown
-    /// at its spot, its old spot written back, and let go ended up away from where it was), so a rehearsal holding
-    /// it unmoved sets it down where it already was. Its spot and turn are checked after; if the editor
-    /// still holds it, you press Esc.
+    /// A move's commit point: the piece is picked up as a real move does, and let go as it is with
+    /// <see cref="UiTable.LetGo"/>. It isn't shifted to its spot while held (0.7.1 shifted it and wrote
+    /// its old spot back first, and its check read an Icebox away from where it was after). Its spot and
+    /// turn are checked after; if the editor still holds it, you press Esc.
     /// </summary>
     private List<Step> RehearseHold(RunJob job, int key, nint instance)
     {

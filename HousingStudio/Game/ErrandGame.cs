@@ -21,7 +21,8 @@ namespace HousingStudio.Game;
 /// <param name="WardTerritory">The ward's territory (outside), from the house's own id.</param>
 /// <param name="Ward">The ward's index (0-based), as the game counts it.</param>
 /// <param name="Plot">The plot (1-based), or null for an apartment.</param>
-public sealed record HomeRef(uint Territory, ulong HouseId, uint WardTerritory, int Ward, int? Plot, string? District, HomeKind Kind, bool Owned);
+/// <param name="Chamber">Private chambers in a free company's house: "go home" takes you to the house, and you go up to the room.</param>
+public sealed record HomeRef(uint Territory, ulong HouseId, uint WardTerritory, int Ward, int? Plot, string? District, HomeKind Kind, bool Owned, bool Chamber = false);
 
 /// <summary>
 /// What the errand runner reads and does in the game beyond windows: your bags and gil, stack sizes,
@@ -147,9 +148,17 @@ public static unsafe class ErrandGame
         var id = hm->IndoorTerritory->HouseId;
         var kind = id.IsApartment ? HomeKind.Apartment : HomeKind.House;
         var owned = false;
+        // Private chambers: a room in a house (not an apartment, not the workshop).
+        var chamber = !id.IsApartment && !id.IsWorkshop && id.RoomNumber > 0;
         try
         {
-            if (HousingManager.GetOwnedHouseId(EstateType.PersonalEstate, -1).Id == id.Id) owned = true;
+            if (chamber)
+            {
+                // Chambers you may decorate in your company's house: "go home" is the company's house, then up to the room.
+                var fc = HousingManager.GetOwnedHouseId(EstateType.FreeCompanyEstate, -1);
+                if (fc.Id != 0 && fc.WardIndex == id.WardIndex && fc.PlotIndex == id.PlotIndex && ctx.HasPermission) (kind, owned) = (HomeKind.CompanyHouse, true);
+            }
+            else if (HousingManager.GetOwnedHouseId(EstateType.PersonalEstate, -1).Id == id.Id) owned = true;
             else if (HousingManager.GetOwnedHouseId(EstateType.FreeCompanyEstate, -1).Id == id.Id) (kind, owned) = (HomeKind.CompanyHouse, true);
             else if (HousingManager.GetOwnedHouseId(EstateType.ApartmentRoom, -1).Id == id.Id) (kind, owned) = (HomeKind.Apartment, true);
         }
@@ -158,11 +167,20 @@ public static unsafe class ErrandGame
             Services.Log.Debug(ex, "Couldn't read which home is yours");
         }
         int? plot = id.IsApartment ? null : id.PlotIndex + 1;
-        return new HomeRef(ctx.TerritoryId, ctx.HouseId, HousingManager.GetOriginalHouseTerritoryTypeId(), id.WardIndex, plot, ctx.District, kind, owned);
+        return new HomeRef(ctx.TerritoryId, ctx.HouseId, HousingManager.GetOriginalHouseTerritoryTypeId(), id.WardIndex, plot, ctx.District, kind, owned, chamber);
     }
 
     /// <summary>Inside that home now.</summary>
     public static bool InsideHome(HomeRef home, HousingContext ctx) => ctx.Kind == PlaceKind.Interior && ctx.HouseId == home.HouseId;
+
+    /// <summary>In the hall of the house a chamber is in (its ward and plot, not a room).</summary>
+    public static bool InHouseOf(HomeRef home)
+    {
+        var hm = HousingManager.Instance();
+        if (hm == null || hm->IndoorTerritory == null) return false;
+        var id = hm->IndoorTerritory->HouseId;
+        return !id.IsApartment && id.RoomNumber == 0 && id.WardIndex == home.Ward && id.PlotIndex + 1 == home.Plot;
+    }
 
     /// <summary>Out in that home's ward (where its teleport lands you).</summary>
     public static bool InHomeWard(HomeRef home)

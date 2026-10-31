@@ -295,15 +295,15 @@ same scripts with every commit point backed out, in `Session/PlacementRunner.Reh
 `ErrandRunner.Rehearsal.cs` and `FixtureRunner.Rehearsal.cs`:
 - **Moves**: `MoveSteps` as usual; at "Picked up?" `RehearseHold` replaces `SetDownSteps`: the held
   piece isn't shifted, and `UiTable.LetGo` (`HousingLayout ← [i:0]`, the Move button) lets go of it.
-  The Move button sets a held piece down where the editor has it: 0.7.0–0.7.1 set the transform to the
-  spot, wrote the old one back and let go, and the piece ended up away from where it was (writing the
-  layout instance back didn't reach whatever the editor sets it down from). Still held → you press Esc.
+  By hand, Move while holding drops what was changed, as Esc does. 0.7.0–0.7.1 set the transform to
+  the spot and wrote the old one back before letting go, and the check found a piece away from where it
+  was; nothing is shifted now. Still held → you press Esc.
   Its stored spot and turn (`FurnitureReader.Stored`) are checked against what they were.
 - **Storeroom**: `StoreroomAttempt` up to the preview, then `RehearsePlace`: `AimPreview` at the spot,
   "Place" found in the menu, `MenuCancel`, and a check that the menu closed and nothing was placed (the
   game keeps the row's preview, as the editor's active item, until another row is picked: recorded).
 - **Bags**: `RehearseBag`: the item's menu, "Store" (or "Place") found, `MenuCancel`.
-- **Clear out**: `RehearseStore`: Store mode pressed, the piece not picked (Store mode's pick may store it).
+- **Clear out**: `RehearseStore`: the storeroom button ([i:3]) pressed, the piece not picked (that mode's pick stores it).
   With a storeroom short of room, the pieces it has no room for are listed last (`ClearOutSplit`), as a run does.
 - **Dyes**: `DyeSteps` up to `DyePick`, then `RehearseDyeEnd`: `DyeClose` (and `DyeConfirmNo` if it
   asks), the stain checked unchanged; dyes of pieces not placed are only counted.
@@ -322,9 +322,24 @@ The guard (`Core/Rehearsal.cs`): `GameUi.Fire` refuses what `RehearsalRules.Comm
 and what didn't work go in `Rehearsals.Report`. Care, backups, swaps, place anywhere and fixture
 ticks are skipped for a rehearsal.
 
-**The let-go** (`HousingLayout ← [i:0]` while holding) is a set-down where the editor has the piece,
-not a cancel: a recording of an unshifted piece showed mode Move, nothing held, the piece where it
-was; 0.7.1's rehearsal of a shifted one (old transform written back) left it moved.
+**The let-go** (`HousingLayout ← [i:0]` while holding): by hand, a piece turned while held and then
+Move (or Esc) went back as it was. A recording of an unshifted piece showed mode Move, nothing held,
+the piece where it was. 0.7.1's rehearsal of a shifted one (old transform written back first) read
+the piece away from where it was after; why isn't known, so a rehearsal never shifts what it holds.
+
+**The bar's put-away buttons** (0.7.2's chamber recording): `HousingLayout ← [i:2]` is "Place selected
+object in your inventory" (mode 3, `EditorMode.ToBags`, `UiTable.LayoutToBags`); `[i:3]` is "Place
+selected item into your storeroom" (mode 6, `EditorMode.Store`, `UiTable.LayoutStore`). Until 0.7.3
+`LayoutStore` was [i:2].
+
+**A rehearsal's dye stand-in**: `RehearseDyeOncePlaced` (a dye job with no slot): the first time per
+dye, a live piece with `GameData.Dyeable` (the Item row's `DyeCount`), not in that dye, dyed ones
+first, gets `DyeSteps` as a stand-in `RunJob` (in `standIns`: its `Would` isn't counted again).
+
+**Chambers for the errands**: `ErrandGame.HomeHere` marks a room in a house (`RoomNumber > 0`, not an
+apartment or the workshop) as `HomeRef.Chamber`, yours (`CompanyHouse`) when the company's estate has
+its ward and plot and you may decorate. `EnterSteps` then waits for the house's hall
+(`ErrandGame.InHouseOf`) and asks you to go up to the chambers.
 
 **Clear out and the storeroom's room**: `InventoryReader.StoreroomRoom(side)` (the loaded pages' `Size`
 less the occupied slots), `ClearOutSplit.Split` at the start, `PutOffClearOut` before each first store

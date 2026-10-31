@@ -8,10 +8,12 @@ public enum EditorMode
     None = 0,
     Move = 1,
     Rotate = 2,
-    Store = 3,
+    /// <summary>The bar's "Place selected object in your inventory" (HousingLayout [i:2]): a piece picked goes to your bags.</summary>
+    ToBags = 3,
     Place = 4,
     Dye = 5,
-    Remove = 6,
+    /// <summary>The bar's "Place selected item into your storeroom" (HousingLayout [i:3]): a piece picked goes to the storeroom.</summary>
+    Store = 6,
 }
 
 /// <summary>One click on the way to another editor mode.</summary>
@@ -99,7 +101,7 @@ public static class ModeRoute
     };
 
     /// <summary>A layout mode: one of the modes Indoor Furnishings' editor bar has.</summary>
-    public static bool IsLayout(EditorMode mode) => mode is EditorMode.Move or EditorMode.Rotate or EditorMode.Store or EditorMode.Remove;
+    public static bool IsLayout(EditorMode mode) => mode is EditorMode.Move or EditorMode.Rotate or EditorMode.Store or EditorMode.ToBags;
 
     /// <summary>
     /// Has the click gone through, by the mode the editor is in now? Indoor Furnishings has once the

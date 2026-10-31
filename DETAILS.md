@@ -8,12 +8,26 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.7.2. Placing works in the game; the newer features haven't all been tried in it yet.**
-> 0.7.2: a rehearsal's move no longer moves anything. Pressing Move while the editor holds a piece
-> turned out to set it down where the editor has it, not to cancel: 0.7.1 showed the piece at its spot,
-> wrote its old spot back and let go, and an Icebox ended up away from where it was. Now the piece is
-> picked up and let go without being shifted, so it's set down where it already was, and its spot and
-> turn are checked after. **Clear out with a full storeroom**: the storeroom's room is read before
+> **Status: 0.7.3. Placing works in the game; the newer features haven't all been tried in it yet.**
+> 0.7.3, from a rehearsal and recordings in a company chamber: **the storeroom button was the wrong
+> one.** The editor's bar is Move [i:0], Rotate [i:1], "Place selected object in your inventory"
+> [i:2] and "Place selected item into your storeroom" [i:3]; the plugin pressed [i:2], so Clear out
+> and Put them back would have sent pieces to your bags. It presses [i:3] now (`UiTable.LayoutStore`;
+> the bags' one is `LayoutToBags`), and the editor's modes are named to match (3 to bags, 6 to the
+> storeroom). **A rehearsal's dyes for pieces not placed yet** are tried on a stand-in: the first time
+> it comes to each dye, a piece placed here that takes a dye gets every dye step (Furnishing Color, the
+> piece picked, the dye window, the dye found and chosen) but Dye, and is checked to keep its own.
+> **Private chambers** in your company's house count as your home for the errands ("go home" is the
+> company's house; at its hall you walk up to your chambers, as that menu hasn't been recorded), and
+> Settings → Getting has **Home is**, for a home the game doesn't say is yours. A rehearsal that
+> leaves the getting out says why, in its report. **The ask** ("Clear out first?") draws its own dark
+> backdrop and a solid card: ImGui's dim took the game style's pale colour, over the whole screen and
+> through the card. The let-go: pressing Move while holding a piece, by hand, drops what was changed,
+> as Esc does (so 0.7.2's "it sets it down" was wrong); 0.7.2's rehearsal never shifts what it holds in
+> any case.
+> 0.7.2: a rehearsal's move no longer shifts the piece it holds (0.7.1 showed it at its spot and wrote
+> its old spot back before letting go, and the check after found an Icebox away from where it was).
+> It's picked up and let go as it is, and its spot and turn are checked after. **Clear out with a full storeroom**: the storeroom's room is read before
 > starting (its pages' slots less those in use); the pieces it has room for are put away first and the
 > rest once the design is placed (each piece placed from the storeroom makes room for one), found again
 > by item and spot. The ask before starting says so. A piece the game refuses puts the rest off too,
@@ -618,12 +632,12 @@ run.
 
 | | A real run | A rehearsal |
 | --- | --- | --- |
-| Move a placed piece | picks it up, sets its spot, sets it down | picks it up and lets go of it where it is by pressing the editor's **Move** button (`UiTable.LetGo`), never the set-down, and never shifting it while held: pressing Move while holding a piece sets it down where the editor has it (0.7.1 showed it at its spot, wrote its old spot back and let go, and the piece ended up away from where it was), so unshifted it's set down where it already was. If the editor still holds it, you're asked to press Esc. Then it checks the piece's spot and turn are as they were. |
+| Move a placed piece | picks it up, sets its spot, sets it down | picks it up and lets go of it as it is by pressing the editor's **Move** button (`UiTable.LetGo`), never the set-down, and never shifting it while held. By hand, Move while holding drops what was changed, as Esc does; 0.7.1 shifted the held piece and wrote its old spot back first, and its check found a piece away from where it was, so nothing is shifted now. If the editor still holds it, you're asked to press Esc. Then it checks the piece's spot and turn are as they were. |
 | Place from the storeroom | finds and picks the row, the preview shows, Place | the same up to the preview, which is moved to the piece's spot for a moment; "Place" is found in the row's menu (its words checked), then the menu is closed (as a run closes a row that isn't the piece); the game keeps the row's preview shown (as the editor's active item) until another row is picked, so only the menu closing is waited for, and a preview left at the end isn't a piece held; it checks nothing was placed. |
 | Place from your bags | the item's menu → Store, then from the storeroom (or Place, then set down) | the item's menu opened, "Store" (or "Place") found, the menu closed. |
 | Placed by hand | waits for you | doesn't wait: noted. |
-| Clear out | Store mode, the piece picked | Store mode pressed; the piece isn't picked (in Store mode the pick itself may put it away; whether the game asks first isn't known). |
-| Dye | the dye window, the dye chosen, Dye, yes | the dye window opened on the piece and the dye chosen, then closed without Dye (a "dye it?" question is answered no); it checks the dye didn't change. Pieces not placed yet are counted ("once placed"), not tried. |
+| Clear out | the storeroom button, the piece picked | the storeroom button ([i:3]) pressed; the piece isn't picked (in that mode the pick itself puts it away). |
+| Dye | the dye window, the dye chosen, Dye, yes | the dye window opened on the piece and the dye chosen, then closed without Dye (a "dye it?" question is answered no); it checks the dye didn't change. Pieces not placed yet are counted ("once placed"); the first time it comes to each dye, it's tried on a **stand-in** (a placed piece that takes a dye, one dyed already first), every step but Dye. With no stand-in, only counted. |
 | A vendor's purchase | the purchase, its question checked, yes | the purchase sent, the game's question read and checked against the price (`MarketRule.QuestionMatches`: whether it matched is in the report), then Cancel; it checks nothing came to your bags and no gil went. |
 | The market board | search, listings, the listing, its question, yes | the same up to the question, checked, then Cancel. |
 | A retainer | the bell, the retainer, their bags, the item's menu, Retrieve | the same up to the menu, "Retrieve from Retainer" found, the menu closed. |

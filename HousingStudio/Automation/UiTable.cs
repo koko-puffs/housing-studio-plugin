@@ -74,20 +74,29 @@ public static class UiTable
     public static readonly UiCall LayoutRotate = new(LayoutBar, "i:1", true, "Recording 1");
 
     /// <summary>
-    /// The editor's Store button ("Place selected item into your storeroom"): in Store mode, the piece
-    /// picked goes to the storeroom. [0.3.3's recording: HousingLayout [i:2], then mode Store]
+    /// The editor's storeroom button ("Place selected item into your storeroom"): in its mode (6), the
+    /// piece picked goes to the storeroom. [0.7.2's recording in a chamber: HousingLayout [i:3], mode 6,
+    /// a piece picked left the room and the storeroom had it. Until 0.7.3 the plugin pressed [i:2],
+    /// which is the bags' button: Clear out and Put them back sent pieces to your bags]
     /// </summary>
-    public static readonly UiCall LayoutStore = new(LayoutBar, "i:2", true, "0.3.3 recording");
+    public static readonly UiCall LayoutStore = new(LayoutBar, "i:3", true, "0.7.2's chamber recording: [i:3] → mode 6, the piece went to the storeroom");
+
+    /// <summary>
+    /// The editor's bags button ("Place selected object in your inventory"): in its mode (3), the piece
+    /// picked goes to your bags. [0.7.2's chamber recording: HousingLayout [i:2], mode 3, a piece picked
+    /// was back in the bags, placed from them again after]
+    /// </summary>
+    public static readonly UiCall LayoutToBags = new(LayoutBar, "i:2", true, "0.7.2's chamber recording: [i:2] → mode 3, the piece went to the bags");
 
     /// <summary>
     /// A rehearsal's let-go: the editor holds a placed piece (picked up in Rotate, not shifted), and
-    /// pressing Move changes the mode and sets the piece down where the editor has it: not a cancel.
-    /// [Recording 3: an unshifted piece, HousingLayout [i:0] while holding it in Rotate: the mode went to
-    /// Move, the editor held nothing, and the piece was where it was. 0.7.1's rehearsal: a piece shown at
-    /// its spot, its old spot written back, then let go, ended up away from where it was (it seems the editor
-    /// keeps its own copy of where the held piece is): so a rehearsal never shifts what it holds]
+    /// pressing Move changes the mode and drops it. [Recording 3: an unshifted piece, HousingLayout
+    /// [i:0] while holding it in Rotate: the mode went to Move, the editor held nothing, the piece was
+    /// where it was. By hand (0.7.2): a piece turned while held, then Move, went back as it was, as with
+    /// Esc. 0.7.1's rehearsal shifted the held piece and wrote its old spot back first, and its check read
+    /// the piece away from where it was after: so a rehearsal never shifts what it holds]
     /// </summary>
-    public static readonly UiCall LetGo = new(LayoutBar, "i:0", true, "Recording 3 and 0.7.1's rehearsal: Move while holding a piece in Rotate sets it down where the editor has it (an unshifted piece stays where it was)");
+    public static readonly UiCall LetGo = new(LayoutBar, "i:0", true, "Recording 3, and by hand in 0.7.2: Move while holding a piece drops what was changed, as Esc does");
 
     /// <summary>Close the editor (back to the Housing menu). [Recording 1]</summary>
     public static readonly UiCall LayoutClose = new(LayoutBar, "i:-2", false, "Recording 1");
@@ -227,7 +236,7 @@ public static class UiTable
 
     public static IEnumerable<UiCall> All() => new[]
     {
-        MenuFurnishings, MenuDye, MenuClose, LayoutMove, LayoutRotate, LayoutStore, LayoutClose, ListClose, DyeListClose, ListStoreroomTab, ListSelect,
+        MenuFurnishings, MenuDye, MenuClose, LayoutMove, LayoutRotate, LayoutStore, LayoutToBags, LayoutClose, ListClose, DyeListClose, ListStoreroomTab, ListSelect,
         DyeListSelect, DyeListMenu,
         MenuChoose, MenuCancel, YesNoYes, DyeShade, DyePick, DyeApply, DyeClose, DyeConfirmYes, DyeConfirmNo, LetGo,
     };

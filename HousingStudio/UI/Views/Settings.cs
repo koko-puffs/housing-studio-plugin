@@ -6,6 +6,7 @@ using System.Text;
 using Dalamud.Bindings.ImGui;
 using HousingStudio.Automation;
 using HousingStudio.Core;
+using HousingStudio.Game;
 using HousingStudio.UI.Model;
 using static HousingStudio.UI.Theme;
 
@@ -416,6 +417,19 @@ public sealed partial class MainWindow
             config.ErrandsSpareSlots = Math.Clamp(spare + d, 0, 20);
             config.Save();
         }
+        // Which home "go home" is: here too, as the errands can't open their screen while it's unknown.
+        var here = ErrandGame.HomeHere(session.Context);
+        var homeNow = config.ErrandsHome is >= 0 and <= 2 ? config.ErrandsHome : here != null ? (int)here.Kind : 0;
+        SetRow(i++, "Home is", here is { Owned: true } && config.ErrandsHome < 0 ? "As the game says for this home" : "Where \"go home\" takes you (Lifestream)",
+            Kit.SegmentedWidth(HomeLabels), S(40), p =>
+            {
+                var picked = Kit.Segmented("##settings-errand-home", p, HomeLabels, homeNow, 0, Kit.Width - S(40));
+                if (picked != homeNow)
+                {
+                    config.ErrandsHome = picked;
+                    config.Save();
+                }
+            }, below: true);
         DrawAccountRow(i++);
         DrawGameLinkRows(i);
         Kit.EndPanel();

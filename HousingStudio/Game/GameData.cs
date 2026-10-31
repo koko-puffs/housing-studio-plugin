@@ -13,6 +13,7 @@ public sealed class GameData
     private const uint WallMountedCategory = 79;
 
     private readonly Dictionary<uint, (string Name, uint Icon, uint UiCategory, ListSortKey Sort)> items = new();
+    private readonly HashSet<uint> dyeable = new();
     private readonly Dictionary<uint, uint> indoorFurnitureToItem = new();
     private readonly Dictionary<uint, uint> yardObjectToItem = new();
     private readonly Dictionary<byte, DyeColor> dyesById = new();
@@ -37,6 +38,7 @@ public sealed class GameData
                 // Experimental sheet names it): Furnishing 8230 … 42000, Table 2000 … 4230 in a user's list.
                 var sort = new ListSortKey(ui?.OrderMajor ?? 0, ui?.OrderMinor ?? 0, item.Unknown4, id);
                 items[id] = (item.Name.ExtractText(), item.Icon, item.ItemUICategory.RowId, sort);
+                if (item.DyeCount > 0) dyeable.Add(id);
             }
 
         var dyes = new List<DyeColor>();
@@ -59,6 +61,9 @@ public sealed class GameData
 
     /// <summary>Where the item sorts in the furnishing list's Storeroom tab (<see cref="ListSortKey"/>).</summary>
     public ListSortKey SortKey(uint itemId) => items.TryGetValue(itemId, out var i) ? i.Sort : new ListSortKey(int.MaxValue, 0, 0, itemId);
+
+    /// <summary>The game lets this furnishing be dyed (its Item row has a dye channel).</summary>
+    public bool Dyeable(uint itemId) => dyeable.Contains(itemId);
 
     public uint ItemIcon(uint itemId) => items.TryGetValue(itemId, out var i) ? i.Icon : 0;
 
