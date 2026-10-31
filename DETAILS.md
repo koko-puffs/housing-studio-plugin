@@ -8,7 +8,16 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.5.2. Placing works in the game; the new features below haven't been tried in it yet.**
+> **Status: 0.6.0. Placing works in the game; the newer features haven't all been tried in it yet.**
+> 0.6.0: a tidier window, from the flow mock-up (docs/mockups/flow.html). Ready is three steps,
+> **Get**, **Place** and **Finish**, with one brass button whose words say what it does ("Get 12,
+> then place", "Clear out 14, then place", "Swap and place"); the warnings and the item limit are
+> chips that open a line of detail; Carry on is a one-line banner; Clear out and Swap are one choice
+> (Keep what's here / Clear out / Swap). Start has a **This house** card (how full, Save, Send to
+> my builds, Check for changes). Done has one undo card and a fixtures card. Settings has tabs
+> (Placing, Getting, Beta, Help), one line a setting. The errands' screens show the route trip by
+> trip and a journey line while they go. New: get things first from Ready, and set the fixtures
+> after placing (both Beta).
 > 0.5.2: the errands click through NPCs' and retainers' words themselves, and search the market
 > board for each item (its name typed in, its row found in the results and opened, checked to be
 > that item's listings before anything is bought). Whatever doesn't work is asked of you, as before.
