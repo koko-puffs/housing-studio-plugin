@@ -39,7 +39,7 @@ public class SiteLinkTests
     [InlineData("Large", "Minimalist", "h1i3")]
     [InlineData("Small", "Minimalist II", "h2i1")]
     [InlineData("Apartment", "Minimalist", "s1i4")]
-    [InlineData(null, null, "s1i2")]
+    [InlineData(null, null, "s1i1")]
     [InlineData("Medium", "Unknown district", "s1i2")]
     public void GivesTheSitesCodeForAHome(string? size, string? style, string code) =>
         Assert.Equal(code, SiteLink.HouseCode(size, style));

@@ -58,17 +58,18 @@ public static class SiteLink
     /// <summary>
     /// The site's code for a home, as its builds keep it ("s1i2": a medium house in Mist): the
     /// style from a file's District line ("Mist", "The Lavender Beds", "Minimalist II"), the size
-    /// from its houseSize. What it can't tell is Mist, and a medium house; Minimalist apartments
-    /// don't exist, so one is a Mist apartment (as the site's <c>houseCode</c>).
+    /// from its houseSize. What it can't tell is Mist, and a small house (as the file then says);
+    /// Minimalist apartments don't exist, so one is a Mist apartment (as the site's <c>houseCode</c>).
     /// </summary>
     public static string HouseCode(string? houseSize, string? style)
     {
         var n = (houseSize ?? string.Empty).ToLowerInvariant() switch
         {
-            "small" => 1,
+            "medium" => 2,
             "large" => 3,
             var h when h.Contains("apartment") || h.Contains("room") || h.Contains("chamber") => 4,
-            _ => 2,
+            // Small, and a size it can't tell (the file says Small then: LayoutWriter).
+            _ => 1,
         };
         var s = (style ?? string.Empty).Trim().ToLowerInvariant();
         var code = s.StartsWith("minimal", StringComparison.Ordinal)

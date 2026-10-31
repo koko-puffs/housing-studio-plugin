@@ -177,7 +177,8 @@ public sealed partial class MainWindow
         if (style == "Unknown district") style = null;
         var home = ctx.Side == Side.Garden ? "garden" : HomeWord(ctx.HouseSize);
         var what = style == null ? char.ToUpperInvariant(home[0]) + home[1..] : $"{style} {home}";
-        return $"{what}, {DateTime.Now:d MMM yyyy}";
+        // In English whatever the PC's language (the theme's fonts, and the site, are).
+        return $"{what}, {DateTime.Now.ToString("d MMM yyyy", System.Globalization.CultureInfo.InvariantCulture)}";
     }
 
     private static string HomeWord(string? size) => size switch
