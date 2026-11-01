@@ -8,7 +8,20 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.9.8. Placing works in the game; the newer features haven't all been tried in it yet.**
+> **Status: 0.9.9. Placing works in the game; the newer features haven't all been tried in it yet.**
+> 0.9.9: **a deep look for bugs.** The dye window is closed once, not twice (a close sent while the
+> last was still going could send No to a confirmation the run had just said Yes to; No now goes only to
+> a question nobody has answered for 5 s), and the red-cross check reads the right row for every dye.
+> A dye missed from the window's list once is tried again before it counts as one you don't have. The
+> check pass holds pieces to 0.01 yalm and 0.01 radian as it says (it allowed 0.05 before), and only
+> rechecks what this run placed, not what it dyed or stored. Pieces tried again at the end no longer
+> count towards stopping a run. The storeroom's size is only learnt from the game saying it's full, not
+> from any refusal. Clear out with nowhere to put a piece leaves it rather than failing on it, and
+> clearing a house that isn't the one you're in, or before the layout is read, doesn't start. Errands:
+> one market listing is never planned for two items, HQ listings aren't counted as stacking onto NQ,
+> NPCs that can't be targeted aren't picked, and a target that doesn't take within 5 s doesn't stop the
+> errand. The fixtures' "proceed?" question gets one Yes, not two; a slot kept from an earlier run that
+> now holds another part is forgotten; and a fixture left out doesn't count when the rest are checked.
 > 0.9.8: **the dye crash, without ReMakePlace too.** Every crash since 0.9.1 came on the Yes to the dye
 > confirmation, and 0.9.0 never crashed: 0.9.1 had cut the waits in the dye window (Dye could go in
 > 0.1 s after the pick, before the window had finished its preview). The dye window's timings are 0.9.0's

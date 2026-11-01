@@ -59,6 +59,12 @@ public sealed class RunJob
     /// </summary>
     public bool StoredAhead { get; set; }
 
+    /// <summary>
+    /// A check-pass move (0.9.9): "already in place" only within the design match's own 0.01 yalm / 0.01
+    /// rad, not the 0.05 a set-down counts as landed within (or it would never be moved).
+    /// </summary>
+    public bool Strict { get; init; }
+
     /// <summary>When work on it started and ended (for the time left).</summary>
     public DateTime? StartedAt { get; set; }
     public DateTime? EndedAt { get; set; }

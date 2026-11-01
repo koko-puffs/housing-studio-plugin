@@ -251,7 +251,7 @@ public sealed partial class ErrandRunner
                     unit = l.UnitPrice;
                     quantity = l.Quantity;
                     if (gil < cost) WouldStop(where, $"Not enough gil: {cost:N0} for this listing, and you have {gil:N0}.");
-                    if (ErrandGame.FreeSlots() < ErrandPlanner.NewSlots(ErrandGame.NqCount(item.ItemId), l.Quantity, ErrandGame.StackSize(item.ItemId)))
+                    if (ErrandGame.FreeSlots() < ErrandPlanner.NewSlots(l.Hq ? 0 : ErrandGame.NqCount(item.ItemId), l.Quantity, ErrandGame.StackSize(item.ItemId)))
                         WouldStop(where, $"Your bags are full ({ErrandGame.FreeSlots()} free slots).");
                     before = ErrandGame.BagCount(item.ItemId);
                     gilBefore = gil;

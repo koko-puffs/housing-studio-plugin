@@ -362,6 +362,8 @@ public sealed partial class ErrandRunner : IDisposable
         Rehearsal = rehearse;
         rehearsalFailures = 0;
         emptyBoards.Clear();
+        vendorArrived = null;
+        boardArrived = null;
         boardWhy.Clear();
         // Nothing of a run before (a stop mid-way could leave its last plan's ending or segments).
         finishPending = false;
@@ -2009,7 +2011,7 @@ public sealed partial class ErrandRunner : IDisposable
                             firstWhy ??= why;
                             continue;
                         }
-                        if (ErrandGame.FreeSlots() < ErrandPlanner.NewSlots(ErrandGame.NqCount(item.ItemId), l.Quantity, ErrandGame.StackSize(item.ItemId)))
+                        if (ErrandGame.FreeSlots() < ErrandPlanner.NewSlots(l.Hq ? 0 : ErrandGame.NqCount(item.ItemId), l.Quantity, ErrandGame.StackSize(item.ItemId)))
                         {
                             // Too big for your bags: a smaller listing may still fit.
                             firstWhy ??= $"your bags have {ErrandGame.FreeSlots()} free slots";

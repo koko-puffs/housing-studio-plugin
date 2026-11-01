@@ -327,7 +327,9 @@ usual. A second Yes to an answered question is what crashed the game.
 
 **After a run** (0.9.7, `PlacementRunner.CheckPass`): what's placed is read again and matched against
 the design (the matcher's 0.01 yalm and 0.01 rad; a set-down counts as landed within 0.05 yalm and
-0.03 rad), and the run's pieces a little off their spot are moved again, two passes at most. A piece
+0.03 rad), and the run's pieces a little off their spot are moved again, two passes at most. Since
+0.9.9 the check pass's own moves only count as landed within 0.01 yalm and 0.01 rad (`RunJob.Strict`),
+and it only rechecks pieces this run placed or moved. A piece
 the game wouldn't set at its spot, or refused when picked, is tried once more at the end
 (`TryAgainLater`), not counted as a failure in a row.
 

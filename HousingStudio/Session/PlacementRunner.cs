@@ -348,7 +348,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             jobs.Clear();
             clearOutReplan = true;
         }
-        if (jobs.Count == 0 && dyesExpected == 0 && toPutAway.Count == 0 && !storeroomFirst)
+        if (jobs.Count == 0 && dyesExpected == 0 && toPutAway.Count == 0 && !storeroomFirst && !clearOutReplan)
         {
             StopReason = "Nothing to do: every piece shown is in place, in its dye (or missing).";
             log.Info(StopReason);
@@ -513,6 +513,8 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             .Select(p => new PlacedPiece(p.Job.Key!.Value, p.Job.Target.ItemId, p.Job.Target.Position, p.Job.Target.Yaw, p.Job.Target.Stain))
             .ToList();
         log.Info($"Trying again: {again.Count + putAgain.Count} piece{(again.Count + putAgain.Count == 1 ? "" : "s")}.");
+        // Where the last run put pieces away (a clear out to your bags is tried again to your bags).
+        NextPutAwayTo = putAwayTo;
         Start(false, again, forceDyes: true, putAway: putAgain);
     }
 
@@ -784,7 +786,9 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 if (job.Kind == JobKind.Dye && job.Problem == ProblemKind.DyeMissing) NoteDyeOut(job.Target.Stain);
                 log.Warn($"{Name(job)}: {queue.Message}");
                 if (Rehearsal) Rehearsals.Report.Issue(Name(job), queue.Message ?? "Didn't work.", TroubleOf(queue.Message));
-                if (!knownOut) failuresInARow++;
+                // A piece's second go (or a check-pass move) failing isn't a sign of trouble either: those come
+                // together at the end, and three of them stopped the run before its dyes (0.9.9).
+                if (!knownOut && !triedAgainLater.Contains(job)) failuresInARow++;
                 if (failuresInARow >= Math.Max(1, config.MaxFailuresInARow))
                 {
                     Stop($"{failuresInARow} pieces in a row didn't work, so something's wrong. The activity log says what each step saw.");
@@ -1131,7 +1135,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             return StepOutcome.Skip("It's no longer where the plan saw it (moved, stored, or the list changed).", ProblemKind.NotFound);
         if (piece.ItemId != job.Target.ItemId)
             return StepOutcome.Halt($"The furniture list changed under the plan (slot {key} is now {data.ItemName(piece.ItemId)}). Load the plan again and start over.");
-        if (Landed(key, job.Target))
+        if (Landed(key, job.Target, job.Strict))
         {
             job.Note ??= "Already in place.";
             queue.FinishAfterThis();
@@ -1393,7 +1397,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             var stored = InventoryReader.StoreroomOccupied(side).Count;
             if ((placedBefore >= 0 && count > placedBefore) || (storedBefore >= 0 && stored < storedBefore))
                 return StepOutcome.Skip($"It looks placed ({placedBefore} → {count} pieces placed, {storedBefore} → {stored} in the storeroom) but couldn't be told apart, "
-                                        + "so it isn't moved to its spot; check it, or run again to move it.", ProblemKind.DidNotLand);
+                                        + "so it isn't moved to its spot; check it, or run again to move it.", ProblemKind.Other);
             // A slow server: 4 s more for the counts before a second try, which could place a second copy.
             if (lastToast == null && queue.Elapsed < TimeSpan.FromSeconds(4)) return StepOutcome.Waiting;
             if (attempt == 0)
@@ -1719,9 +1723,12 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                         var offset = list == null ? null : ListWindows.Align(rows.Names, list.Rows);
                         var before = NamedUpTo();
                         if (list != null && offset != null && offset.Value + list.Rows.Count > before)
-                        {
                             rows.LearnNames(offset.Value, list.Rows);
-                            log.Info($"  After scrolling, the list holds rows {offset}–{offset + list.Rows.Count - 1}: names now known up to row {NamedUpTo() - 1} of {rows.Count}.");
+                        // Names known further than before: carry on. Rows that came back blank say nothing
+                        // new, and reading again would go round for ever (0.9.9).
+                        if (NamedUpTo() > before)
+                        {
+                            log.Info($"  After scrolling, the list holds rows {offset}–{offset + list!.Rows.Count - 1}: names now known up to row {NamedUpTo() - 1} of {rows.Count}.");
                         }
                         else
                         {
@@ -2297,8 +2304,8 @@ public sealed unsafe partial class PlacementRunner : IDisposable
     private int StoredCount(uint itemId) => InventoryReader.StoreroomOccupied(side).Count(o => o.ItemId == itemId);
 
     /// <summary>How many of this item your bags hold.</summary>
-    private int BagCount(uint itemId) =>
-        InventoryReader.Read(data, side, out _).Where(s => s.Source == StockSource.Inventory && s.ItemId == itemId).Sum(s => Math.Max(1, s.Quantity));
+    /// <summary>How many of an item your bags hold (the bags alone: read every frame while a store is waited for).</summary>
+    private static int BagCount(uint itemId) => ErrandGame.BagCount(itemId);
 
     /// <summary>
     /// Placing from the bag item's menu: Place, the editor holds the piece, it's aimed and set down
@@ -2477,8 +2484,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                         {
                             Step.Act($"Close the dye window: {UiTable.DyeClose.Describe()}", () =>
                             {
-                                if (GameUi.IsOpen(UiTable.DyeConfirm)) GameUi.Fire(UiTable.DyeConfirmNo);
-                                else if (GameUi.IsOpen(UiTable.DyeWindow)) GameUi.Fire(UiTable.DyeClose);
+                                CloseDyeWindows();
                                 return StepOutcome.Done;
                             }),
                         });
@@ -2629,8 +2635,8 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     var rows = Menus.DyeListCount(GameUi.TextValues(UiTable.DyeWindow), UiTable.DyeListFirstValue);
                     if (row[0] < 0 || row[0] >= rows)
                     {
-                        // Not in the list: none to use. The other pieces needing it are skipped at once.
-                        if (dyesOut.Add(job.Target.Stain)) log.Warn($"Out of {dye}, it seems (not in the dye window's list): the other pieces needing it are skipped this run.");
+                        // Not in the list: none to use, it seems (twice in the run, and the other pieces needing
+                        // it are skipped: one misread list isn't enough, 0.9.9).
                         return StepOutcome.Skip($"Out of {dye}: it isn't in the dye window's list. Get some and Try again.", ProblemKind.DyeMissing);
                     }
                     var values = UiCallValues.Of(("row", row[0]), ("stain", job.Target.Stain));
@@ -2648,7 +2654,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 Label = $"The dye window can use {dye}",
                 Run = () =>
                 {
-                    switch (DyeWindowRefuses(slot))
+                    switch (DyeWindowRefuses(row[0]))
                     {
                         case "button":
                             return StepOutcome.Skip($"The dye window's Dye button is greyed out for {dye} (none of it to use, or this piece can't take it).", ProblemKind.DyeMissing);
@@ -2677,6 +2683,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                         // "auto-confirm dye"); a second Yes from here crashed the game (0.9.7): 0.8 s for it first.
                         if (remakePlaceLoaded && now - confirmSeen.Value < TimeSpan.FromMilliseconds(800)) return StepOutcome.Waiting;
                         log.Info($"  The game asks: {string.Join(" ", GameUi.TextValues(UiTable.DyeConfirm).Values.Where(v => v.Length > 0).Take(4))}");
+                        yesSentAt = now;
                         GameUi.Fire(UiTable.DyeConfirmYes);
                         asked[0] = true;
                         return StepOutcome.Done;
@@ -2715,7 +2722,11 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 IsAction = true,
                 Run = () =>
                 {
-                    if (GameUi.IsOpen(UiTable.DyeWindow)) GameUi.Fire(UiTable.DyeClose);
+                    if (GameUi.IsOpen(UiTable.DyeWindow))
+                    {
+                        dyeCloseAgainAt = DateTime.UtcNow;
+                        GameUi.Fire(UiTable.DyeClose);
+                    }
                     return StepOutcome.Done;
                 },
             },
@@ -2815,16 +2826,17 @@ public sealed unsafe partial class PlacementRunner : IDisposable
     /// is greyed out (nine-grid node 1/64/68/3 tinted 0xFFFFFFB2), "cross" when the dye's own red cross shows
     /// (image node 1/22/34/(dye's place)/2/4); null when it can (or a node isn't there to read).
     /// </summary>
-    private static unsafe string? DyeWindowRefuses((byte Shade, byte SubOrder)? slot)
+    private static unsafe string? DyeWindowRefuses(int row)
     {
         var addon = GameUi.Ready(UiTable.DyeWindow);
         if (addon == null) return null;
         var button = GameUi.NodeByIdChain(addon->RootNode, 1, 64, 68, 3);
         if (button != null && button->Color.RGBA == 0xFFFFFFB2) return "button";
-        if (slot is { SubOrder: > 0 } s)
+        // The cross of the row picked (RemakePlace/plugin's node for the place it picks: the same index it
+        // sends, as this sends the row read from the list).
+        if (row >= 0)
         {
-            var place = s.SubOrder - 1;
-            var cross = GameUi.NodeByIdChain(addon->RootNode, 1, 22, 34, place == 0 ? 2u : 21000u + (uint)place, 2, 4);
+            var cross = GameUi.NodeByIdChain(addon->RootNode, 1, 22, 34, row == 0 ? 2u : 21000u + (uint)row, 2, 4);
             if (GameUi.NodeShown(cross)) return "cross";
         }
         return null;
@@ -2833,15 +2845,32 @@ public sealed unsafe partial class PlacementRunner : IDisposable
     /// <summary>Closes the dye window (or answers No) again while waiting for it to close; never true.</summary>
     private bool CloseDyeWindowAgain()
     {
-        var now = DateTime.UtcNow;
-        if (now - dyeCloseAgainAt < TimeSpan.FromSeconds(1.5)) return false;
-        dyeCloseAgainAt = now;
-        if (GameUi.IsOpen(UiTable.DyeConfirm)) GameUi.Fire(UiTable.DyeConfirmNo);
-        else if (GameUi.IsOpen(UiTable.DyeWindow)) GameUi.Fire(UiTable.DyeClose);
+        if (DateTime.UtcNow - dyeCloseAgainAt < TimeSpan.FromSeconds(1.5)) return false;
+        CloseDyeWindows();
         return false;
     }
 
+    /// <summary>
+    /// No to the dye confirmation if it's up, else the dye window's close. Noted, so the "again" above
+    /// waits 1.5 s from any close, not only its own (0.9.9: a close and its "again" went out in the same
+    /// frame, twice to the same question); and never No to a question Yes was sent to in the last 5 s
+    /// (a second answer to an answered question is what crashed the game).
+    /// </summary>
+    private void CloseDyeWindows()
+    {
+        var now = DateTime.UtcNow;
+        dyeCloseAgainAt = now;
+        if (GameUi.IsOpen(UiTable.DyeConfirm))
+        {
+            if (now - yesSentAt > TimeSpan.FromSeconds(5)) GameUi.Fire(UiTable.DyeConfirmNo);
+        }
+        else if (GameUi.IsOpen(UiTable.DyeWindow)) GameUi.Fire(UiTable.DyeClose);
+    }
+
     private DateTime dyeCloseAgainAt;
+
+    /// <summary>When Yes was last sent to the dye confirmation.</summary>
+    private DateTime yesSentAt;
 
     /// <summary>A click inside a dye job: if the window has gone, only this piece is skipped.</summary>
     private static StepOutcome FireOrSkip(UiCall call, IReadOnlyDictionary<string, long>? blanks = null) =>
@@ -3216,8 +3245,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             {
                 // No first, then the window once the question has gone (closing it under the question
                 // may leave the question up).
-                if (GameUi.IsOpen(UiTable.DyeConfirm)) GameUi.Fire(UiTable.DyeConfirmNo);
-                else if (GameUi.IsOpen(UiTable.DyeWindow)) GameUi.Fire(UiTable.DyeClose);
+                CloseDyeWindows();
                 if (GameUi.IsOpen(UiTable.ContextMenu)) GameUi.Fire(UiTable.MenuCancel);
                 return StepOutcome.Done;
             },
@@ -3452,10 +3480,14 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                         // chambers: 8 pages of 50, a size of 150), or the same words for a second piece in a
                         // row: the storeroom is full whatever its pages say. Its size here is kept, and the
                         // rest go to your bags (0.9.0 put each off three times, round and round).
-                        if (said && !toBags && room is > 0 && StoreroomFullSaid(lastToast!, job))
+                        var roomRead = room;
+                        if (said && !toBags && room is > 0 && StoreroomFullSaid(lastToast!, job, out var inWords))
                         {
-                            var size = InventoryReader.LearnFull(side);
-                            log.Warn($"  The storeroom is full{(size != null ? $" at {size} pieces (its pages showed more): kept as its size in this home" : string.Empty)}.");
+                            // Kept for the home only when the game's own words said so; the same words three
+                            // times (another client's) count for this run only (0.9.9: something standing on
+                            // three pieces would have been saved as the storeroom's size).
+                            var size = inWords ? InventoryReader.LearnFull(side) : null;
+                            log.Warn($"  The storeroom is full{(size != null ? $" at {size} pieces (its pages showed more): kept as its size in this home" : " (for this run)")}.");
                             room = 0;
                         }
                         // The game refused this piece while the storeroom has room: something stands on it
@@ -3471,7 +3503,8 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                             return StepOutcome.Skip($"It wasn't put away (the game said \"{lastToast}\"). If something stands on it, take that off first; then Try again.", ProblemKind.Other);
                         if (said || room is <= 0)
                         {
-                            if (!toBags) refusedAtRoom = room;
+                            // (The room as read: "refused at this room" holds until it changes.)
+                            if (!toBags) refusedAtRoom = roomRead;
                             // The storeroom said no: your bags instead, while they have room.
                             if (!toBags && BagsTakeIt)
                             {
@@ -3500,11 +3533,11 @@ public sealed unsafe partial class PlacementRunner : IDisposable
     /// Do the game's words say the storeroom is full: its English words, or (another language) the same
     /// words for a third different piece in a row, words that aren't the ones for something standing on it.
     /// </summary>
-    private bool StoreroomFullSaid(string said, RunJob job)
+    private bool StoreroomFullSaid(string said, RunJob job, out bool inWords)
     {
-        if (said.Contains("storeroom", StringComparison.OrdinalIgnoreCase)
-            && (said.Contains("space", StringComparison.OrdinalIgnoreCase) || said.Contains("full", StringComparison.OrdinalIgnoreCase)))
-            return true;
+        inWords = said.Contains("storeroom", StringComparison.OrdinalIgnoreCase)
+                  && (said.Contains("space", StringComparison.OrdinalIgnoreCase) || said.Contains("full", StringComparison.OrdinalIgnoreCase));
+        if (inWords) return true;
         if (said.Contains("placed on", StringComparison.OrdinalIgnoreCase)) return false;
         storeRefusals = storeRefusals.Said == said && storeRefusals.Item != job.Target.ItemId
             ? (said, job.Target.ItemId, storeRefusals.Count + 1)
@@ -3587,7 +3620,9 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         session.Refresh(HousingContext.Read(Plugin.Plots));
         liveThisFrame = null;
         if (session.Plan == null || session.PlanSide != side) return false;
-        var wanted = entries.Select(e => (e.Target.Key, e.Target.ItemId)).ToHashSet();
+        // The pieces this run did (not those you skipped, or that failed: they're under Needs you).
+        var wanted = jobs.Where(j => j.Outcome == JobOutcome.Done && j.Kind != JobKind.Dye && j.Kind != JobKind.Store)
+            .Select(j => (j.Target.Key, j.Target.ItemId)).ToHashSet();
         var off = session.Plan.Entries.Where(e => e.State == PieceState.Move && wanted.Contains((e.Target.Key, e.Target.ItemId))).ToList();
         if (off.Count == 0)
         {
@@ -3595,7 +3630,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             checkPasses = CheckPassesMost;
             return false;
         }
-        var moves = RunSequence.Build(off);
+        var moves = RunSequence.Build(off).Select(m => new RunJob { Kind = m.Kind, Target = m.Target, Entry = m.Entry, Key = m.Key, Strict = true }).ToList();
         foreach (var m in moves) triedAgainLater.Add(m);
         jobs.AddRange(moves);
         jobsVersion++;
@@ -3688,11 +3723,16 @@ public sealed unsafe partial class PlacementRunner : IDisposable
     private static StepOutcome Fire(UiCall call, IReadOnlyDictionary<string, long>? blanks = null) =>
         GameUi.Fire(call, blanks) ? StepOutcome.Done : StepOutcome.Halt($"{call.Addon} isn't open.");
 
-    private bool Landed(int key, Target target)
+    private bool Landed(int key, Target target, bool strict = false)
     {
         var stored = FurnitureReader.Stored(side == Side.Garden, key);
-        return stored is { } s && Vector3.Distance(s.Position, target.Position) <= LandedDistance && Transforms.AngleDiff(s.Yaw, target.Yaw) <= LandedYaw;
+        return stored is { } s && Vector3.Distance(s.Position, target.Position) <= (strict ? StrictDistance : LandedDistance)
+               && Transforms.AngleDiff(s.Yaw, target.Yaw) <= (strict ? StrictYaw : LandedYaw);
     }
+
+    /// <summary>The design match's own tolerance (MatchOptions): what the check pass holds pieces to.</summary>
+    private const float StrictDistance = 0.01f;
+    private const float StrictYaw = 0.01f;
 
     private byte StainOf(int key) => FurnitureReader.StoredStain(side == Side.Garden, key) ?? 0;
 

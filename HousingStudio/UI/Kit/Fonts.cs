@@ -58,10 +58,10 @@ public sealed class Fonts : IDisposable
     {
         (Face.Sans, 15), (Face.Sans, 14), (Face.Sans, 13), (Face.Sans, 12),
         (Face.SansMedium, 15), (Face.SansMedium, 14), (Face.SansMedium, 13),
-        (Face.SansSemibold, 15), (Face.SansSemibold, 14),
+        (Face.SansSemibold, 15), (Face.SansSemibold, 14), (Face.SansSemibold, 13),
         (Face.Mono, 13), (Face.Mono, 12), (Face.Mono, 11), (Face.Mono, 10),
         (Face.Serif, 56), (Face.Serif, 32), (Face.Serif, 28), (Face.Serif, 26), (Face.Serif, 22),
-        (Face.SerifItalic, 32),
+        (Face.SerifItalic, 32), (Face.SerifItalic, 26),
     };
 
     private readonly Dictionary<(Face, int), IFontHandle> handles = new();

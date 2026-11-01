@@ -267,6 +267,15 @@ public sealed unsafe partial class PlacementRunner
     {
         var live = ReadLive();
         if (live == null || clearOutLater.Count == 0) return; // kept for when it can be read
+        // Still no room anywhere they may go: they're left placed, and said so (0.9.9: each was tried, and
+        // three refusals in a row stopped the run before its check).
+        var nowhere = putAwayTo == PutAwayTo.Bags ? ErrandGame.FreeSlots() <= 0 : StoreroomRefuses() && !BagsTakeIt;
+        if (nowhere)
+        {
+            log.Warn($"The {Words(clearOutLater.Count)} left to clear out still have no room ({PutAwayWords} full): left placed. Make room and clear out again.");
+            clearOutLater = new List<PlacedPiece>();
+            return;
+        }
         var waiting = clearOutLater;
         clearOutLater = new List<PlacedPiece>();
         var used = new HashSet<int>();

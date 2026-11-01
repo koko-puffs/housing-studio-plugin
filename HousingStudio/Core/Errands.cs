@@ -287,6 +287,9 @@ public static class ErrandPlanner
         var left = new List<ErrandLeft>();
         var units = new List<Unit>();
         long marketSoFar = 0;
+        // Listings already planned (0.9.9): a line bought on the board in place of its vendor, and the
+        // board's own line for the rest of the same thing, would otherwise both plan the same listings.
+        var used = new HashSet<MarketListing>(ReferenceEqualityComparer.Instance);
         foreach (var line in shop.Lines)
         {
             if (line.Count <= 0) continue;
@@ -302,7 +305,7 @@ public static class ErrandPlanner
                     if (offer == null)
                     {
                         // On the board instead, when it's listed there (0.9.4).
-                        if (OnBoard(line)) marketSoFar = MarketUnits(FromBoard(line), o, stack, units, left, marketSoFar);
+                        if (OnBoard(line)) marketSoFar = MarketUnits(FromBoard(line), o, stack, units, left, marketSoFar, used);
                         else left.Add(new ErrandLeft(line.Need, line.Count, LeftReason.NoVendorReachable));
                         break;
                     }
@@ -315,7 +318,7 @@ public static class ErrandPlanner
                     // A currency vendor: walked to like a vendor, so it has to be reachable as one.
                     if (!o.Reachable(line.Exchange.Vendor))
                     {
-                        if (OnBoard(line)) marketSoFar = MarketUnits(FromBoard(line), o, stack, units, left, marketSoFar);
+                        if (OnBoard(line)) marketSoFar = MarketUnits(FromBoard(line), o, stack, units, left, marketSoFar, used);
                         else left.Add(new ErrandLeft(line.Need, line.Count, LeftReason.NoVendorReachable));
                         break;
                     }
@@ -324,10 +327,10 @@ public static class ErrandPlanner
                         { Vendor = ev, Exchange = line.Exchange });
                     break;
                 case SourceKind.Market when line.Market != null:
-                    marketSoFar = MarketUnits(line, o, stack, units, left, marketSoFar);
+                    marketSoFar = MarketUnits(line, o, stack, units, left, marketSoFar, used);
                     break;
                 case SourceKind.Craft or SourceKind.Unknown when OnBoard(line):
-                    marketSoFar = MarketUnits(FromBoard(line), o, stack, units, left, marketSoFar);
+                    marketSoFar = MarketUnits(FromBoard(line), o, stack, units, left, marketSoFar, used);
                     break;
                 case SourceKind.Craft or SourceKind.Unknown when line.Exchangeable != null:
                     left.Add(new ErrandLeft(line.Need, line.Count, LeftReason.Currency) { Exchange = line.Exchangeable });
@@ -361,6 +364,9 @@ public static class ErrandPlanner
             for (var i = 0; i < ordered.Count; i++)
             {
                 var u = ordered[i];
+                // Not a retainer's (its whole stack is taken, whatever the count) nor a high-quality
+                // listing (it doesn't stack onto normal ones): those take their own slots (0.9.9).
+                if (u.Kind == StopKind.Retainer || u.Listing is { Hq: true }) continue;
                 if (!room.TryGetValue(u.Need.ItemId, out var r)) r = StackRoom(o.Held(u.Need.ItemId), u.Stack);
                 var t = Math.Min(r, u.Bought);
                 if (t > 0) ordered[i] = u with { TopUp = t };
@@ -390,15 +396,18 @@ public static class ErrandPlanner
     /// A market line's listings, on the worlds allowed, each as a unit while the ceiling allows it. The
     /// cost is worked out again from the allowed listings when some are left out (another world's).
     /// </summary>
-    private static long MarketUnits(ShoppingLine line, ErrandOptions o, int stack, List<Unit> units, List<ErrandLeft> left, long soFar)
+    private static long MarketUnits(ShoppingLine line, ErrandOptions o, int stack, List<Unit> units, List<ErrandLeft> left, long soFar, HashSet<MarketListing> used)
     {
+        // The listings no other line planned already.
         var quote = line.Market!;
+        var taken = quote.Listings.Any(used.Contains);
+        if (taken) quote = quote with { Listings = quote.Listings.Where(l => !used.Contains(l)).ToList() };
         IReadOnlyList<MarketListing> chosen;
         var shortBy = 0;
         // Listings Universalis had lately first: older ones have often gone by the time the board is read.
         var fresh = quote.Listings.Where(l => l.SeenAt == null || o.Now - l.SeenAt.Value <= MarketListing.TrustedFor).ToList();
         var stale = fresh.Count < quote.Listings.Count;
-        if (o.WorldAllowed == null && o.ListingAllowed == null && line.MarketCost != null && !stale)
+        if (o.WorldAllowed == null && o.ListingAllowed == null && line.MarketCost != null && !stale && !taken)
         {
             chosen = line.MarketCost.Listings;
         }
@@ -431,6 +440,7 @@ public static class ErrandPlanner
             soFar += cost;
             wanted -= count;
             units.Add(new Unit(StopKind.Market, $"m:{l.World}", 2, line.Need, count, l.Quantity, stack, cost, false) { World = l.World, Listing = l });
+            used.Add(l);
         }
         if (over > 0) left.Add(new ErrandLeft(line.Need, over, LeftReason.OverCeiling));
         return soFar;

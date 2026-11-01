@@ -378,7 +378,8 @@ public static unsafe class ErrandGame
         var bestD = within;
         foreach (var o in Services.Objects)
         {
-            if (o == null || o.ObjectKind != ObjectKind.EventNpc || o.BaseId != npcId) continue;
+            // (Only one that can be targeted and talked to: an NPC can have a copy that can't, 0.9.9.)
+            if (o == null || o.ObjectKind != ObjectKind.EventNpc || o.BaseId != npcId || !o.IsTargetable) continue;
             var d = Vector3.Distance(o.Position, me);
             if (d <= bestD)
             {
@@ -411,13 +412,18 @@ public static unsafe class ErrandGame
     {
         var now = DateTime.UtcNow;
         var current = Services.Targets.Target;
+        // Targeted a moment ago: the moment first.
+        if (targeting.Address == o.Address && now - targeting.At < targeting.Wait) return true;
         if (current == null || current.Address != o.Address)
         {
+            // Tried already and it didn't take (an object the game won't target): used anyway, rather than
+            // waiting on it until the step times out (0.9.9).
+            if (targeting.Address == o.Address && now - targeting.At < TimeSpan.FromSeconds(5)) return false;
             Services.Targets.Target = o;
             targeting = (o.Address, now, TimeSpan.FromMilliseconds(Random.Shared.Next(180, 420)));
             return true;
         }
-        return targeting.Address == o.Address && now - targeting.At < targeting.Wait;
+        return false;
     }
 
     /// <summary>Talks to (or uses) an object, as pressing on it does (the game's TargetSystem.InteractWithObject); it's your target then.</summary>

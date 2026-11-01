@@ -105,7 +105,19 @@ public sealed partial class MainWindow : Window
         {
             var actions = later.ToArray();
             later.Clear();
-            foreach (var a in actions) a();
+            // Each on its own: one that throws doesn't drop the rest, nor escape the window (0.9.9).
+            foreach (var a in actions)
+            {
+                try
+                {
+                    a();
+                }
+                catch (Exception ex)
+                {
+                    Services.Log.Error(ex, "Housing Studio action failed");
+                    Notify("That didn't work (see /xllog)");
+                }
+            }
         }
     }
 
@@ -218,10 +230,11 @@ public sealed partial class MainWindow : Window
     /// </param>
     /// <param name="onStarted">Runs once the run has started (the Done view goes then, not when it can't start).</param>
     /// <param name="keepAs">A swap: the name its backup is kept under.</param>
-    private void StartRun(bool dryRun, List<PlanEntry>? entries, IReadOnlyList<PlacedPiece>? clearOut, Action? onStarted = null, string? keepAs = null)
+    private void StartRun(bool dryRun, List<PlanEntry>? entries, IReadOnlyList<PlacedPiece>? clearOut, Action? onStarted = null, string? keepAs = null, Action? onNotStarted = null)
     {
         entries ??= Filtered().ToList();
         vm.Starting(entries);
+        if (!dryRun) ClearHomeAgain();
         OnFramework(() =>
         {
             runner.Start(dryRun, entries, clearOut, keepAs);
@@ -231,6 +244,7 @@ public sealed partial class MainWindow : Window
                 return;
             }
             vm.NotStarted();
+            onNotStarted?.Invoke();
             if (runner.StopReason != null) Notify(runner.StopReason);
         });
     }
@@ -280,6 +294,9 @@ public sealed partial class MainWindow : Window
             config.AddRecent(path);
             vm.Dismiss();
             sub = Sub.None;
+            // A question or the errands' screen up for the design before isn't for this one (0.9.9).
+            confirm = null;
+            errandsOpen = false;
             Notify($"Loaded {session.Title}");
             OnFramework(() => session.Refresh(HousingContext.Read(Plugin.Plots)));
         }

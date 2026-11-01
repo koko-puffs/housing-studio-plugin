@@ -214,6 +214,15 @@ public sealed partial class MainWindow
         confirmPick = 0;
     }
 
+    /// <summary>The Clear out this house design (its id) and where its pieces go, for Carry on.</summary>
+    private (string? For, PutAwayTo To) clearHomeTo;
+
+    /// <summary>Before a run of the design: where a Clear out this house sent its pieces, again.</summary>
+    private void ClearHomeAgain()
+    {
+        if (clearHomeTo.For != null && clearHomeTo.For == DesignId) runner.NextPutAwayTo = clearHomeTo.To;
+    }
+
     private void ClearHome(Side side, PutAwayTo to)
     {
         if (runner.Active || Plugin.FixtureRun.Active || Plugin.Errands.Active)
@@ -221,20 +230,39 @@ public sealed partial class MainWindow
             Notify("Wait until the other run is done");
             return;
         }
-        var ctx = session.Context;
+        // Still what was asked about (0.9.9): no design loaded since (an open from the site, say), and the
+        // same side (not walked out to the garden with the question up).
+        var ctx = HousingContext.Read(Plugin.Plots);
+        if (session.Layout != null || ctx.Side != side)
+        {
+            Notify("Things changed since you asked: press Clear out again");
+            return;
+        }
         var district = ctx.District != null ? Districts.Display(ctx.District) : null;
         var plot = side == Side.Garden ? ctx.Plot : FixtureReader.PlotOfInterior();
         session.LoadEmpty($"Clear out · {SwapNames.Home(side, ctx.HouseSize, district, plot)}", ctx.HouseSize, ctx.District);
-        session.Refresh(HousingContext.Read(Plugin.Plots));
+        try
+        {
+            session.Refresh(ctx);
+        }
+        catch (Exception ex)
+        {
+            Services.Log.Error(ex, "Couldn't read the home to clear it out");
+        }
         var pieces = session.Plan?.Extras;
         if (pieces is not { Count: > 0 })
         {
             Notify(session.Plan == null ? session.Warnings.FirstOrDefault() ?? "What's placed couldn't be read" : "Nothing is placed here");
+            // The empty design isn't left loaded (Ready showed a design that isn't there).
+            session.Unload();
             return;
         }
         vm.Dismiss();
+        // Clear out, for this design: Carry on clears out the rest (to the same place).
+        Mode = ReadyMode.ClearOut;
+        clearHomeTo = (DesignId, to);
         runner.NextPutAwayTo = to;
-        StartRun(false, new List<PlanEntry>(), pieces.ToList());
+        StartRun(false, new List<PlanEntry>(), pieces.ToList(), onNotStarted: () => session.Unload());
     }
 
     /// <summary>How many more pieces the storeroom of the side being placed takes (asked once, when Start is pressed).</summary>

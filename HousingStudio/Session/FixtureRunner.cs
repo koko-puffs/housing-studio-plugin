@@ -429,7 +429,9 @@ public sealed unsafe partial class FixtureRunner
             // 0.9.1: the slots seen holding what's set, and those kept from earlier runs (what's seen now wins).
             var seen = FixtureJobs.SlotsSeen(held, current);
             known = seen.Concat(FixtureJobs.KeptSlots(config.FixtureSlots, side)
-                .Where(k => !seen.Any(x => FixtureJobs.Norm(x.Level) == FixtureJobs.Norm(k.Level) && FixtureJobs.Norm(x.Type) == FixtureJobs.Norm(k.Type)))).ToList();
+                .Where(k => !seen.Any(x => FixtureJobs.Norm(x.Level) == FixtureJobs.Norm(k.Level) && FixtureJobs.Norm(x.Type) == FixtureJobs.Norm(k.Type)))
+                // 0.9.9: a kept slot that's now seen holding another part is out of date.
+                .Where(k => !seen.Any(x => x.Slot == k.Slot))).ToList();
             log.Info($"  Slots known: {(known.Count == 0 ? "none" : string.Join(", ", known.Select(k => $"{k.Level.ToLowerInvariant()} {k.Type.ToLowerInvariant()} → {k.Slot}")))}.");
             slotsTrusted = WorkOutSlots();
             log.Info(slotsTrusted
@@ -513,6 +515,8 @@ public sealed unsafe partial class FixtureRunner
     {
         var apply = side == Side.Interior ? FixtureTable.InteriorApply : FixtureTable.ExteriorApply;
         var steps = new List<Step>();
+        // When the run last said yes: the wait below doesn't say it again within a second (0.9.9).
+        var saidYesAt = DateTime.MinValue;
         if (apply != null)
         {
             steps.Add(Step.Act($"Apply: {apply.Describe()}", () =>
@@ -534,11 +538,12 @@ public sealed unsafe partial class FixtureRunner
                     if (GameUi.YesNoText() is not { } question) return StepOutcome.Done;
                     if (!FixtureTable.ApplyWords.Any(w => question.Contains(w, StringComparison.OrdinalIgnoreCase)))
                         return StepOutcome.Halt($"The game asked \"{question}\", not to proceed with the fixtures: left for you.");
-                    return GameUi.Fire(UiTable.YesNoYes) ? StepOutcome.Done : StepOutcome.Halt("The yes/no closed.");
+                    if (!GameUi.Fire(UiTable.YesNoYes)) return StepOutcome.Halt("The yes/no closed.");
+                    saidYesAt = DateTime.UtcNow;
+                    return StepOutcome.Done;
                 },
             });
         }
-        var saidYesAt = DateTime.MinValue;
         steps.Add(new Step
         {
             Label = apply != null ? "The fixtures are set" : $"You: apply the fixtures in the {MenuName} window (and say yes if it asks)",
@@ -669,7 +674,7 @@ public sealed unsafe partial class FixtureRunner
     {
         held ??= ContainerItems();
         if (held == null) return false;
-        var wanted = containerBefore.GetValueOrDefault(task.Fixture.ItemId) + toSet.TakeWhile(t => t != task).Count(t => t.Fixture.ItemId == task.Fixture.ItemId) + 1;
+        var wanted = containerBefore.GetValueOrDefault(task.Fixture.ItemId) + toSet.TakeWhile(t => t != task).Count(t => !dropped.Contains(t) && t.Fixture.ItemId == task.Fixture.ItemId) + 1;
         return held.Values.Count(i => i == task.Fixture.ItemId) >= wanted;
     }
 

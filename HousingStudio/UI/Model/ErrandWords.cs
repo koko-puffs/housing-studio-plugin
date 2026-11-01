@@ -229,12 +229,22 @@ public static class ErrandWords
         foreach (var item in plan.Stops(StopKind.Market).SelectMany(s => s.Items))
             bought[item.Need] = bought.GetValueOrDefault(item.Need) + item.Count;
         long market = 0;
-        foreach (var line in shop.Lines)
+        // The board's own lines first; what the trips buy beyond them is a vendor's (or a currency's) out of
+        // reach, bought on the board instead (0.9.4), at the board's estimate. (0.9.9: a currency line bought
+        // at its vendor was counted at the board's prices too.)
+        foreach (var line in shop.Lines.Where(l => l.Source == SourceKind.Market && l.Count > 0))
         {
-            if (line.Count <= 0 || !bought.TryGetValue(line.Need, out var n)) continue;
-            if (line.Source == SourceKind.Market) market += line.Gil * Math.Min(n, line.Count) / line.Count;
-            // A vendor's (or a currency's) out of reach, bought on the board instead (0.9.4): the board's estimate.
-            else if (line.Source != SourceKind.Retainer && line.Board is { Listings.Count: > 0 } board) market += board.CostFor(Math.Min(n, line.Count)).Gil;
+            if (!bought.TryGetValue(line.Need, out var n) || n <= 0) continue;
+            var k = Math.Min(n, line.Count);
+            market += line.Gil * k / line.Count;
+            bought[line.Need] = n - k;
+        }
+        foreach (var line in shop.Lines.Where(l => l.Source is not (SourceKind.Market or SourceKind.Retainer) && l.Count > 0))
+        {
+            if (!bought.TryGetValue(line.Need, out var n) || n <= 0 || line.Board is not { Listings.Count: > 0 } board) continue;
+            var k = Math.Min(n, line.Count);
+            market += board.CostFor(k).Gil;
+            bought[line.Need] = n - k;
         }
         return plan.VendorGil + market;
     }
