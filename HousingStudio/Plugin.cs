@@ -201,6 +201,16 @@ public sealed class Plugin : IDalamudPlugin
         try
         {
             ctx = HousingContext.Read(Plots);
+        }
+        catch (Exception ex)
+        {
+            // Where you are couldn't be read: the runs stop, to be safe, and the rest still ticks (as elsewhere).
+            Throttled(ex, "Housing Studio: reading where you are failed");
+            ctx = HousingContext.None;
+            StopEverything("Something went wrong reading where you are; stopped to be safe.");
+        }
+        try
+        {
             runner.Update();
             runner.Tick(ctx);
             Errands.Tick(ctx);
@@ -210,11 +220,7 @@ public sealed class Plugin : IDalamudPlugin
         {
             // The runs themselves (or reading where you are): stopped, to be safe.
             Throttled(ex, "Housing Studio update failed");
-            Safely(() => runner.Stop("Something went wrong reading the game; stopped to be safe."));
-            Safely(() => FixtureRun.Stop("Something went wrong reading the game; stopped to be safe."));
-            Safely(() => Errands.Stop("Something went wrong reading the game; stopped to be safe."));
-            Safely(anywhere.Disable);
-            return;
+            StopEverything("Something went wrong reading the game; stopped to be safe.");
         }
         // The rest each on its own: one failing (every frame, say) no longer stops every run, and its
         // error is logged at most every 10 s.
@@ -232,6 +238,14 @@ public sealed class Plugin : IDalamudPlugin
     }
 
     private DateTime updateFailedAt = DateTime.MinValue;
+
+    private void StopEverything(string reason)
+    {
+        Safely(() => runner.Stop(reason));
+        Safely(() => FixtureRun.Stop(reason));
+        Safely(() => Errands.Stop(reason));
+        Safely(anywhere.Disable);
+    }
 
     private void Ticked(Action tick, string what)
     {
@@ -254,16 +268,19 @@ public sealed class Plugin : IDalamudPlugin
 
     private void OnTerritoryChanged(uint territory)
     {
-        runner.Stop("You changed zones.");
-        FixtureRun.Stop("You changed zones.");
+        // Each on its own: one throwing mustn't leave another going (or the placement check off).
+        Safely(() => runner.Stop("You changed zones."));
+        Safely(() => FixtureRun.Stop("You changed zones."));
+        Safely(anywhere.Disable);
         nextRefresh = DateTime.UtcNow;
     }
 
     private void OnLogout(int type, int code)
     {
-        runner.Stop("You logged out.");
-        FixtureRun.Stop("You logged out.");
-        Errands.Stop("You logged out.");
+        Safely(() => runner.Stop("You logged out."));
+        Safely(() => FixtureRun.Stop("You logged out."));
+        Safely(() => Errands.Stop("You logged out."));
+        Safely(anywhere.Disable);
         Safely(link.LoggedOut);
     }
 

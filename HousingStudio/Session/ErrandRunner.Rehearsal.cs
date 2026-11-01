@@ -110,7 +110,8 @@ public sealed partial class ErrandRunner
         var then = board ? "say no and stop"
             : MarketRule.AskedCost(question, quantity) is { } asked && Spent + asked <= agreedGil ? $"buy it at {asked:N0} gil, still within the {agreedGil:N0} agreed"
             : "say no, and leave it";
-        var matched = MarketRule.QuestionMatches(question, unit, quantity, cost);
+        // The board's as a real run checks it (its whole cost and quantity, 0.8.5).
+        var matched = board ? MarketRule.BoardQuestionMatches(question, quantity, cost, (long)unit * quantity) : MarketRule.QuestionMatches(question, unit, quantity, cost);
         Rehearsals.Report.Question(matched);
         log.Info($"  The game asks: \"{question}\": {(matched ? "it names the price planned" : $"it doesn't name {quantity} for {cost:N0} gil (a real run would {then})")} → Cancel (a rehearsal never says yes).");
         // A vendor's other price that a real run would pay (within the gil agreed) isn't a failure: a note,

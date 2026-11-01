@@ -441,8 +441,17 @@ public sealed partial class MainWindow
         }
         var bw = MathF.Min(fw, Kit.ButtonWidth(button, BtnSize.Lg, Icon.Play, Btn.Primary));
         if (Kit.Button("##errands-start", row, button, Btn.Primary, BtnSize.Lg, Icon.Play, bw, blocked != null,
-                blocked ?? (rehearse ? "Sets out now on the trips shown: nothing is bought or taken, teleports are real." : "Sets out now: no question after this. It spends no more than this in all, and stops at anything it didn't expect.")))
-            SetOut(plan, clear, keep, rehearse);
+                blocked ?? (rehearse ? "Sets out now on the trips shown: nothing is bought or taken, teleports are real." : (clear is { Count: > 0 } ? "Asks about the clear out first, then sets out: no question after that." : "Sets out now: no question after this.") + " It spends no more than this in all, and stops at anything it didn't expect.")))
+        {
+            // A clear out (or swap) after the errands puts pieces away: asked, as Ready asks.
+            if (!rehearse && clear is { Count: > 0 } toClear)
+                Ask(mode == ReadyMode.Swap ? "Get, then swap?" : "Get, then clear out?",
+                    $"Once everything's got, the {Words.Count(toClear.Count, "piece")} in your home that {(toClear.Count == 1 ? "isn't" : "aren't")} in this design {(toClear.Count == 1 ? "goes" : "go")} to the storeroom, then the design is placed"
+                    + (mode == ReadyMode.Swap ? $" (what's placed now is kept as “{keep}”: Swap back puts it all back)." : ".")
+                    + ReadyWords.StoreroomRoomNote(toClear.Count, StoreroomRoomHere()),
+                    "Set out", "Not now", () => SetOut(plan, ChosenClearOut(), SwapKeepAs, rehearse));
+            else SetOut(plan, clear, keep, rehearse);
+        }
         const string hint1 = "You can stop at any time.";
         var hint2 = rehearse ? "Nothing is bought or taken." : "Nothing is bought above the price shown.";
         var hints = hint1 + " " + hint2;
@@ -916,6 +925,18 @@ public sealed partial class MainWindow
         else
         {
             Txt.Note("It carries on by itself once that's done.");
+            // Placing's piece waiting for you: it can be left for now, as in Running (not only Stop).
+            if (placing && runner.Current != null)
+            {
+                Kit.Gap(10);
+                var row = Kit.At;
+                const string skip = "Skip this piece";
+                var sw = Kit.ButtonWidth(skip, BtnSize.Md, null, Btn.Quiet);
+                if (Kit.Button("##errand-skip", new Vector2(row.X + Kit.Width - sw, row.Y), skip, Btn.Quiet, BtnSize.Md, null, 0, false,
+                        "Leaves this piece for now (it's listed at the end) and goes on to the next."))
+                    OnFramework(runner.SkipCurrent);
+                Kit.Reserve(row, Kit.Width, S(40));
+            }
         }
         Kit.EndPanel();
     }

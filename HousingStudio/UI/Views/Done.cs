@@ -309,7 +309,8 @@ public sealed partial class MainWindow
         }
         else if (stopped)
         {
-            var blocked = runner.CanStart(false);
+            // A stopped putting-back: Carry on (the design alone) would leave what it was putting away out.
+            var blocked = runner.WasPuttingBack ? "This was putting things back: start Put them back (or Swap back) again to finish it." : runner.CanStart(false);
             if (Kit.Button("##carry-on", at, "Carry on", Btn.Primary, BtnSize.Lg, Icon.Play, primaryW, blocked != null, blocked ?? "Starts again with what's still to do."))
             {
                 // It clears out again only when the run stopped was clearing out (what you confirmed then).

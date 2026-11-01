@@ -176,7 +176,11 @@ public sealed partial class MainWindow
             $"The {Words.Count(clear.Count, "piece")} in your home that {(clear.Count == 1 ? "isn't" : "aren't")} in this design {(clear.Count == 1 ? "goes" : "go")} to the storeroom first, then the design is placed."
             + ReadyWords.StoreroomRoomNote(clear.Count, StoreroomRoomHere())
             + (config.BackupBeforePlacing ? " A backup of what's placed is saved before." : " No backup is saved first (Settings)."),
-            "Start placing", "Not now", () => StartRun(false, entries, ChosenClearOut(), ArmFixturesAfterPlacing));
+            "Start placing", "Not now", () =>
+            {
+                // The plan may have changed while the question was open: what's to do now.
+                if (session.Layout != null) StartRun(false, Filtered().ToList(), ChosenClearOut(), ArmFixturesAfterPlacing);
+            });
     }
 
     /// <summary>How many more pieces the storeroom of the side being placed takes (asked once, when Start is pressed).</summary>

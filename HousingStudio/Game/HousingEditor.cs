@@ -50,6 +50,7 @@ public sealed unsafe class HousingEditor
             select = (delegate* unmanaged<nint, nint, void>)s;
             place = (delegate* unmanaged<nint, nint, void>)p;
             Ready = true;
+            stateTrusted = true;
         }
         catch (Exception ex)
         {
@@ -58,11 +59,19 @@ public sealed unsafe class HousingEditor
         }
     }
 
-    /// <summary>The editor's state, or 0 when the furnishing editor isn't open.</summary>
+    /// <summary>
+    /// Whether the state's offsets are taken as current: only once both functions' patterns were found
+    /// (a game patch that moves them likely moves the state too, and reading through a stale offset
+    /// would crash the game in any home, every frame).
+    /// </summary>
+    private static bool stateTrusted;
+
+    /// <summary>The editor's state, or 0 when the furnishing editor isn't open (or its offsets aren't trusted).</summary>
     private static nint State
     {
         get
         {
+            if (!stateTrusted) return 0;
             var world = LayoutWorld.Instance();
             return world == null ? 0 : *(nint*)((byte*)world + EditorStateOffset);
         }

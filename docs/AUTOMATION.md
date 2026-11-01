@@ -470,6 +470,21 @@ or the window closed by the game with the dye in place; then the window is close
 for the dye (4 s), skipping as `DyeFailed` after a Yes, else `DyeMissing`. `SayStillHeld` ignores
 Furnishing Color's active item (the piece selected for dyeing, not held).
 
+**0.8.5**: `DyeShownCheck` between the pick and Dye: `HousingEditor.ActiveItem` must be the piece and its
+stored dye the target (the window's preview); after 1 s still its own dye → Dye anyway (no preview seen),
+another dye → `Skip(DyeFailed)`. The already-dyed test is in "Pick" (window closed, item checked). The
+confirm step skips (`DyeMissing`) unless Yes was pressed or the game closed the window with the dye in
+place; "The confirmation closes" skips after 4 s; `DyeHeld` settles 1 s and never gives up while the
+reading is right; `FireOrSkip` for the dye window's clicks; `DyeCleanup` says no, then closes the window,
+and waits (`CloseDyeWindowAgain` every 1.5 s). Pick-up and store pick skip when `HousingEditor.Mode` isn't
+Rotate/Move (Store); `HeldCleanup` fires `UiTable.LetGo` for a placed piece (`editor.Place` only without
+the bar); `StoreCleanup` closes a yes/no left up; "Check placed" waits 4 s for the counts (8 s limit,
+SkipJob). `MarketRule.BoardQuestionMatches` (largest number = cost ±1 or cost without tax; the quantity
+in it when over 1) and `MarketRule.NamesItem` (each name word's first four letters) in ErrandRunner; the
+board's buy step closes a yes/no left up; "comes to your bags" waits while the gil has gone, and
+`GilLate` (1.5 s) for the gil after the item. `HousingEditor.State` reads only once both patterns were
+found. `Plugin.OnUpdate` reads the context in its own try (`StopEverything` on failure).
+
 **0.7.13**: `ErrandPlanner.Pack` cuts each stop's units (by `Key`) into pieces that fit a trip, then
 packs the pieces biggest first into the first trip with room (first-fit decreasing); a trip keeps the
 plan's order. `NeedKind.Fixture`: `Shopping.FixturesToGet` (the plugin sets it to `FixtureRun.Plan()`'s

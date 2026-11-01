@@ -89,9 +89,13 @@ public sealed partial class MainWindow
         var bx = at.X + w - buttonsW;
         if (Kit.Button("##pieces", new Vector2(bx, at.Y), piecesLabel, Btn.Glass, BtnSize.Md, Icon.List)) sub = Sub.Pieces;
         SettingsButton(new Vector2(bx + piecesW + S(8), at.Y));
-        if (Kit.IconButton("##close", new Vector2(bx + piecesW + S(8) + S(48), at.Y), Icon.X, "Close this design"))
+        // Not while the fixtures go (closing the design would stop them, with no question).
+        var fixturesGoing = Plugin.FixtureRun.Active;
+        if (Kit.IconButton("##close", new Vector2(bx + piecesW + S(8) + S(48), at.Y), Icon.X,
+                fixturesGoing ? "Stop the fixtures first" : "Close this design", disabled: fixturesGoing))
             Later(() =>
             {
+                if (Plugin.FixtureRun.Active) return;
                 session.Unload();
                 vm.Dismiss();
             });
@@ -578,10 +582,13 @@ public sealed partial class MainWindow
             errandsRehearse = false;
             errandsOpen = true;
             // The errands' screen offers placing what you have instead, as this button would have.
+            // Worked out when pressed: the plan (or the design) may have changed since this button.
             placeInstead = () =>
             {
-                if (g.Mode == ReadyMode.Swap && g.Clear != null) AskSwap(KeepAsName(), g.Clear.Count);
-                else StartFromReady(entries);
+                if (session.Layout == null) return;
+                var now = ReadyGo();
+                if (now.Mode == ReadyMode.Swap && now.Clear != null) AskSwap(KeepAsName(), now.Clear.Count);
+                else StartFromReady(Filtered().ToList());
             };
         }
         else if (g.Mode == ReadyMode.Swap && g.Clear != null) AskSwap(KeepAsName(), g.Clear.Count);

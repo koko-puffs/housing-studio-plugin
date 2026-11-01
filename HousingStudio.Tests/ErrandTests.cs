@@ -537,6 +537,32 @@ public class MarketQuestionTests
     }
 
     [Fact]
+    public void TheBoardsQuestionMustNameTheListingsWholeCostAndQuantity()
+    {
+        // The game's own words (0.8.2's rehearsal): 1 at 6,885, 7,229 with its 344 fee.
+        Assert.True(MarketRule.BoardQuestionMatches("Purchase 1 Cieldalaes planter for 7,229 gil (344 fee included)?", 1, 7229, 6885));
+        Assert.True(MarketRule.BoardQuestionMatches("Purchase 1 Cieldalaes planter for 7,230 gil (345 fee included)?", 1, 7229, 6885));
+        Assert.True(MarketRule.BoardQuestionMatches("Purchase 3 wooden lofts for 3,150 gil (150 fee included)?", 3, 3150, 3000));
+        // Another row: 20 at 500 when 1 at 500 (525) was chosen; its fee equals the price chosen.
+        Assert.False(MarketRule.BoardQuestionMatches("Purchase 20 stools for 10,500 gil (500 fee included)?", 1, 525, 500));
+        // The right total but another quantity.
+        Assert.False(MarketRule.BoardQuestionMatches("Purchase 5 wooden lofts for 3,150 gil (150 fee included)?", 3, 3150, 3000));
+        Assert.False(MarketRule.BoardQuestionMatches("Leave the estate?", 1, 525, 500));
+        Assert.False(MarketRule.BoardQuestionMatches(null, 1, 525, 500));
+    }
+
+    [Fact]
+    public void AShopsQuestionNamesTheItemInAnyNumber()
+    {
+        Assert.True(MarketRule.NamesItem("Purchase 1 stage panel for 4,000 gil?", "Stage Panel"));
+        Assert.True(MarketRule.NamesItem("Purchase 3 riviera tables for 6,000 gil?", "Riviera Table"));
+        Assert.True(MarketRule.NamesItem("Purchase 1 Sil'dihn side table for 2,000 gil?", "Sil'dihn Side Table"));
+        Assert.False(MarketRule.NamesItem("Purchase 1 riviera chair for 2,000 gil?", "Riviera Table"));
+        Assert.False(MarketRule.NamesItem(null, "Stage Panel"));
+        Assert.False(MarketRule.NamesItem("Purchase 1 stage panel for 4,000 gil?", " "));
+    }
+
+    [Fact]
     public void NumbersAreReadWithTheirGrouping()
     {
         Assert.Equal(new long[] { 1234567, 3 }, MarketRule.Numbers("1,234,567 gil for 3."));

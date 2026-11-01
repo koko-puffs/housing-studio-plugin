@@ -8,7 +8,34 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.8.4. Placing works in the game; the newer features haven't all been tried in it yet.**
+> **Status: 0.8.5. Placing works in the game; the newer features haven't all been tried in it yet.**
+> 0.8.5, a scan before a real run. **Dyeing** never presses Dye unless the window shows the dye chosen on
+> this piece (its preview, read in the piece's dye; when no preview shows, Dye is pressed and the dye
+> checked after, as before): another dye, or the window on another piece, skips the piece instead of
+> using a dye on it. "Already in its dye" is decided once the window is closed and the piece is known;
+> the dye counts only after Yes (or the game closing the window itself) and once it has held for a
+> second with the window closed; a piece's dye trouble skips that piece, not the run, and the clean-up
+> says no and waits for the windows to close. **Placing**: a pick-up or a put-away checks the editor's
+> mode at that moment (a pause or Continue let you change it, and a pick in Store mode would have put
+> a piece away); a piece the run let go of badly goes back where it was (the bar's Move, as Esc) rather
+> than being set down again where the game may just have refused it; a just-placed piece's object is
+> waited for (2.5 s); the storeroom waits 4 s more for a slow placement before its second try (which
+> could place a second copy); a store that ends badly says no to its question; a storeroom row's or a
+> bag item's menu that doesn't open skips that piece, not the run. **Errands**: the board's "buy this?"
+> must name the chosen listing's whole cost and quantity (a fee or a price for one equal to the chosen
+> listing's no longer passes); a late question is said no to before the next listing; a purchase whose
+> gil has gone is waited for, never followed by another listing; the gil a purchase took is waited for
+> (1.5 s) so it's always counted; a listing too big for your bags is passed over, not the run stopped;
+> a shop's other price is said yes to only for a question naming the item; the retainer's and shops'
+> waits are longer (lag no longer stops the errands). **The window**: "Place what I have" and "Clear out
+> first?" start what's to do when pressed, not what was when the button was drawn; the errands ask before
+> a clear out or swap after them; a placing piece waiting for you during the errands can be skipped;
+> Carry on isn't offered after a stopped Put them back (it would leave what it was putting away out);
+> the design can't be closed or replaced while the fixtures or the errands go. **Stability**: zone
+> changes and logout stop each run on its own (one failing no longer leaves another going, or the
+> placement check off); a failure to read where you are no longer freezes the rest of the plugin; the
+> editor's state is read only when its functions were found (after a patch that moves them, the plugin
+> says so rather than reading stale offsets).
 > 0.8.4, from the Mist house's second rehearsal. **Dyeing**: while the dye window is open the game
 > shows its preview in the piece's own dye (the dye chosen, or a shade's first dye when the shade is
 > switched), and puts it back when the window closes. The rehearsal read the preview as the piece's

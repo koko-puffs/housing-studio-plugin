@@ -476,10 +476,22 @@ public sealed partial class ErrandRunner : IDisposable
 
     private static string Words(int n, string word) => n == 1 ? $"1 {word}" : $"{n} {word}s";
 
+    private DateTime? vendorArrived;
+    private DateTime? boardArrived;
+
+    /// <summary>True while the gil hasn't gone yet, for up to 1.5 s from the first time it's asked.</summary>
+    private static bool GilLate(ref DateTime? since)
+    {
+        var now = DateTime.UtcNow;
+        since ??= now;
+        return now - since.Value < TimeSpan.FromSeconds(1.5);
+    }
+
     /// <summary>Closes every window the errands open, as their own close buttons do.</summary>
     private static void CloseWindows()
     {
-        foreach (var name in new[] { UiTable.ContextMenu, ErrandTable.Shop, ErrandTable.ExchangeDialog, ErrandTable.ExchangeCurrency, ErrandTable.ExchangeItem,
+        // A purchase's question first: said no to (closed), never left up under what comes next.
+        foreach (var name in new[] { UiTable.YesNo, UiTable.ContextMenu, ErrandTable.Shop, ErrandTable.ExchangeDialog, ErrandTable.ExchangeCurrency, ErrandTable.ExchangeItem,
                      ErrandTable.ItemSearchResult, ErrandTable.ItemSearch, ErrandTable.SelectIconString })
             GameUi.Close(name);
         foreach (var name in ErrandTable.RetainerInventory) GameUi.Close(name);
@@ -1265,7 +1277,7 @@ public sealed partial class ErrandRunner : IDisposable
                     return ErrandGame.OpenRetainerItemMenu(slot.Container, slot.Slot) ? StepOutcome.Done : StepOutcome.Halt("Couldn't open the item's menu.");
                 },
             },
-            Step.Wait("The item's menu opens", () => GameUi.IsOpen(UiTable.ContextMenu), TimeSpan.FromSeconds(3)),
+            Step.Wait("The item's menu opens", () => GameUi.IsOpen(UiTable.ContextMenu), TimeSpan.FromSeconds(8)),
             new Step
             {
                 Label = $"Choose \"{ErrandTable.RetrieveWords[^1]}\" (the whole stack)",
@@ -1301,7 +1313,7 @@ public sealed partial class ErrandRunner : IDisposable
                     if (taken < item.Count) queue.InsertNext(Once());
                     return StepOutcome.Done;
                 },
-                Timeout = TimeSpan.FromSeconds(6),
+                Timeout = TimeSpan.FromSeconds(12),
                 TimeoutMessage = $"{Name(item.ItemId)} didn't come to your bags.",
             },
         };
@@ -1572,8 +1584,11 @@ public sealed partial class ErrandRunner : IDisposable
                             // gil?" with 1,000 planned): yes when the whole run still stays within the gil you
                             // agreed to (and you have it), else no, and this item is left.
                             var askedNow = MarketRule.AskedCost(question, n);
-                            if (askedNow is { } askedSum && askedSum > 0 && askedSum % n == 0) LearnPrice(item.ItemId, (uint)(askedSum / n), v.Price);
-                            if (askedNow is { } asked && Spent + asked <= agreedGil && ErrandGame.Gil() >= asked)
+                            // Only a question about this item (a row miscounted would buy another one).
+                            var aboutIt = MarketRule.NamesItem(question, Name(item.ItemId));
+                            if (!aboutIt) log.Info($"  The shop's question doesn't name {Name(item.ItemId)}: \"{question}\".");
+                            if (aboutIt && askedNow is { } askedSum && askedSum > 0 && askedSum % n == 0) LearnPrice(item.ItemId, (uint)(askedSum / n), v.Price);
+                            if (aboutIt && askedNow is { } asked && Spent + asked <= agreedGil && ErrandGame.Gil() >= asked)
                             {
                                 log.Info($"  The shop asks {asked:N0} gil for {n} × {Name(item.ItemId)}, not the {(long)v.Price * n:N0} planned: still within the {agreedGil:N0} gil you agreed to, so yes.");
                                 allowed = asked;
@@ -1581,7 +1596,7 @@ public sealed partial class ErrandRunner : IDisposable
                                 return StepOutcome.Done;
                             }
                             GameUi.Close(UiTable.YesNo);
-                            log.Warn($"  The shop asked \"{question}\", not {n} × {Name(item.ItemId)} for {(long)v.Price * n:N0} gil as planned ({v.NpcName}, NPC {v.NpcId}, shop {v.ShopId}), and it would go past the {agreedGil:N0} gil you agreed to: said no, and {Name(item.ItemId)} is left for you.");
+                            log.Warn($"  The shop asked \"{question}\", not {n} × {Name(item.ItemId)} for {(long)v.Price * n:N0} gil as planned ({v.NpcName}, NPC {v.NpcId}, shop {v.ShopId}), and {(aboutIt ? $"it would go past the {agreedGil:N0} gil you agreed to" : "the question isn't about it")}: said no, and {Name(item.ItemId)} is left for you.");
                             return Finished();
                         }
                         allowed = (long)v.Price * n;
@@ -1590,6 +1605,9 @@ public sealed partial class ErrandRunner : IDisposable
                     }
                     return StepOutcome.Waiting;
                 }
+                // The gil may go a frame or two after the item comes: waited for (1.5 s), so it's counted.
+                if (ErrandGame.Gil() >= gilBefore && GilLate(ref vendorArrived)) return StepOutcome.Waiting;
+                vendorArrived = null;
                 var spent = Math.Max(0, gilBefore - ErrandGame.Gil());
                 VendorSpent += spent;
                 Count(item.ItemId, now - before);
@@ -1598,7 +1616,7 @@ public sealed partial class ErrandRunner : IDisposable
                 if (bought < item.Count) queue.InsertNext(Once());
                 return StepOutcome.Done;
             },
-            Timeout = TimeSpan.FromSeconds(6),
+            Timeout = TimeSpan.FromSeconds(12),
             TimeoutMessage = $"{Name(item.ItemId)} didn't come to your bags.",
         };
         return Once();
@@ -1866,6 +1884,12 @@ public sealed partial class ErrandRunner : IDisposable
                 Run = () =>
                 {
                     if (bought >= wanted) return Finished();
+                    // A late question from the last listing (it came after it was given up on): no, first.
+                    if (GameUi.YesNoText() != null)
+                    {
+                        GameUi.Close(UiTable.YesNo);
+                        return StepOutcome.Waiting;
+                    }
                     if (BoardListings.Open(item.ItemId) is not { } listings)
                         return GameUi.IsOpen(ErrandTable.ItemSearchResult) ? StepOutcome.Waiting : StepOutcome.Halt($"{name}'s listings closed.");
                     gone = false;
@@ -1882,7 +1906,11 @@ public sealed partial class ErrandRunner : IDisposable
                             continue;
                         }
                         if (ErrandGame.FreeSlots() < ErrandPlanner.Stacks(l.Quantity, ErrandGame.StackSize(item.ItemId)))
-                            return StepOutcome.Halt($"Your bags are full ({ErrandGame.FreeSlots()} free slots).");
+                        {
+                            // Too big for your bags: a smaller listing may still fit.
+                            firstWhy ??= $"your bags have {ErrandGame.FreeSlots()} free slots";
+                            continue;
+                        }
                         cost = MarketRule.Cost(l.UnitPrice, l.Quantity, l.TotalTax);
                         unit = l.UnitPrice;
                         quantity = l.Quantity;
@@ -1924,7 +1952,7 @@ public sealed partial class ErrandRunner : IDisposable
                     // another question, is said no to and stops the errands).
                     if (gone) return StepOutcome.Done;
                     var question = GameUi.YesNoText();
-                    if (!MarketRule.QuestionMatches(question, unit, quantity, cost))
+                    if (!MarketRule.BoardQuestionMatches(question, quantity, cost, (long)unit * quantity))
                     {
                         // Another listing's question (the list moved under the click): no, and the next.
                         GameUi.Close(UiTable.YesNo);
@@ -1942,6 +1970,9 @@ public sealed partial class ErrandRunner : IDisposable
                     {
                         var came = ErrandGame.BagCount(item.ItemId);
                         if (came <= before && DateTime.UtcNow - confirmFrom() < TimeSpan.FromSeconds(10)) return StepOutcome.Waiting;
+                        // The gil has gone: it's bought and on its way (a slow server). Never another
+                        // listing meanwhile; the step's own limit stops the errands if it never comes.
+                        if (came <= before && ErrandGame.Gil() < gilBefore) return StepOutcome.Waiting;
                         if (came <= before && Missed("it didn't come to your bags (sold to someone else first?)").Status != StepStatus.Done) return Finished();
                     }
                     if (gone)
@@ -1954,6 +1985,9 @@ public sealed partial class ErrandRunner : IDisposable
                         }
                         return StepOutcome.Done;
                     }
+                    // The gil may go a frame or two after the item comes: waited for (1.5 s), so it's counted.
+                    if (ErrandGame.Gil() >= gilBefore && GilLate(ref boardArrived)) return StepOutcome.Waiting;
+                    boardArrived = null;
                     var now = ErrandGame.BagCount(item.ItemId);
                     BoardListings.Gone(listing);
                     var spent = Math.Max(0, gilBefore - ErrandGame.Gil());

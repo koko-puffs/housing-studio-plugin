@@ -259,6 +259,12 @@ public sealed partial class MainWindow : Window
             Notify("Stop placing first");
             return;
         }
+        // Loading another design would stop these with no question.
+        if (Plugin.FixtureRun.Active || Plugin.Errands.Active)
+        {
+            Notify(Plugin.FixtureRun.Active ? "Stop the fixtures first" : "Stop the errands first");
+            return;
+        }
         if (session.Load(path))
         {
             config.AddRecent(path);

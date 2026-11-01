@@ -322,6 +322,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         dyesExpected = dyes ? DyeCounts.ToApply(entries) : 0;
         var dyedInDesign = DyeCounts.Dyed(entries);
         toPutAway = putAway?.ToList() ?? new List<PlacedPiece>();
+        WasPuttingBack = toPutAway.Count > 0;
         storeModeUsed = false;
         putAwayPlanned = toPutAway.Count == 0;
         if (jobs.Count == 0 && dyesExpected == 0 && toPutAway.Count == 0)
@@ -422,6 +423,12 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         State = RunState.Running;
         StatusText = "Starting…";
     }
+
+    /// <summary>
+    /// The last run put pieces back (Put them back, Swap back, or trying those again): Carry on, which
+    /// starts on the design alone, wouldn't put away what's left, so Done doesn't offer it then.
+    /// </summary>
+    public bool WasPuttingBack { get; private set; }
 
     /// <summary>Starts a run on the pieces that didn't work last time (as they stand now: moved or placed ones then only need their dye).</summary>
     public void RetryProblems()
@@ -567,9 +574,10 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         StatusText = reason;
         if (Rehearsal && !reason.StartsWith("Stopped by you", StringComparison.Ordinal))
             Rehearsals.Report.Issue("The rehearsal", $"Stopped: {reason}", reason.StartsWith("Timed out", StringComparison.Ordinal) ? RehearsalTrouble.TimedOut : RehearsalTrouble.Failed);
-        LeaveStoreMode();
+        // The game's placement check back first: whatever follows may throw.
         anywhereForOne = false;
         anywhere.Disable();
+        LeaveStoreMode();
         SaveRows(force: true);
         LogRows();
         if (!DryRun) foreach (var line in timings.Summary()) log.Info(line);
@@ -812,7 +820,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         JobKind.PlaceFromStoreroom when side == Side.Interior && config.StoreroomAutomatic => (StoreroomSteps(job), MenuCleanup().Concat(HeldCleanup()).ToList()),
         JobKind.PlaceFromBags when config.BagsAutomatic => (BagSteps(job), MenuCleanup().Concat(HeldCleanup()).ToList()),
         JobKind.Dye => (DyeSteps(job), DyeCleanup()),
-        JobKind.Store => (StoreSteps(job), new List<Step>()),
+        JobKind.Store => (StoreSteps(job), StoreCleanup().Concat(HeldCleanup()).ToList()),
         _ => (ByHandSteps(job), HeldCleanup()),
     };
 
@@ -837,6 +845,27 @@ public sealed unsafe partial class PlacementRunner : IDisposable
     /// can't be let go of from here, so you're told (Esc puts it back), else the next piece would
     /// wait 30 s for the editor and stop.
     /// </summary>
+    /// <summary>
+    /// A store that ended badly: its "put it away?" question, if still up, is said no to (closed), so a
+    /// later Yes (the next store's, or a storeroom placement's) doesn't put it away untracked.
+    /// </summary>
+    private List<Step> StoreCleanup() => new()
+    {
+        new Step
+        {
+            Label = "Say no to a question left up",
+            Run = () =>
+            {
+                if (StillInStartHome() && GameUi.YesNoText() is { } q)
+                {
+                    log.Info($"  Closing the game's question left up: \"{q}\" (no).");
+                    GameUi.Close(UiTable.YesNo);
+                }
+                return StepOutcome.Done;
+            },
+        },
+    };
+
     private List<Step> HeldCleanup() => new()
     {
         new Step
@@ -852,11 +881,19 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 var mode = HousingEditor.Mode;
                 if (mode == EditorMode.Rotate || mode == EditorMode.Move)
                 {
-                    // Only a placed piece it holds is set down: after a storeroom row the game keeps that
+                    // Only a placed piece it holds is let go of: after a storeroom row the game keeps that
                     // row's preview as the active item, and setting it down would place it, untracked.
                     liveThisFrame = null;
                     var placed = ReadLive()?.Values.Any(p => p.Instance == held) == true;
-                    if (placed && editor.Place(held)) log.Info("  Set down the piece the editor was holding, where it is now.");
+                    // Let go of where it was (the bar's Move while holding, as Esc: 0.7.2, and every
+                    // rehearsal since), not set down where the run had put it: the game may just have
+                    // refused that spot, and would again (0.8.5). Set down only when the bar isn't there.
+                    if (placed && GameUi.IsOpen(UiTable.LetGo.Addon))
+                    {
+                        editorMayCloseUntil = DateTime.UtcNow + ModeSwitchGrace;
+                        if (GameUi.Fire(UiTable.LetGo)) log.Info("  Let go of the piece the editor was holding (back where it was).");
+                    }
+                    else if (placed && editor.Place(held)) log.Info("  Set down the piece the editor was holding, where it is now.");
                 }
                 else if (mode == EditorMode.Place)
                 {
@@ -905,10 +942,19 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                         queue.FinishAfterThis();
                         return StepOutcome.Done;
                     }
-                    if (piece.Instance == 0) return StepOutcome.Skip("The game hasn't loaded it (walk closer to it).", ProblemKind.NotLoaded);
+                    if (piece.Instance == 0)
+                    {
+                        // Just put down: its object may come a moment after its slot (waited for, 2.5 s).
+                        if (justPlaced && queue.Elapsed < TimeSpan.FromSeconds(2.5)) return StepOutcome.Waiting;
+                        return StepOutcome.Skip("The game hasn't loaded it (walk closer to it).", ProblemKind.NotLoaded);
+                    }
                     // The piece's object as the furniture list has it now (not one remembered from before: the
                     // game may make a new one once a placement goes through).
                     instance = piece.Instance;
+                    // The pick in another mode would do that mode's thing (Store or bags: put it away). The
+                    // mode is checked here too, not only before: a pause or Continue lets you change it.
+                    if (HousingEditor.Mode is not (EditorMode.Rotate or EditorMode.Move))
+                        return StepOutcome.Skip($"The editor was in {ModeWord(HousingEditor.Mode)} when it came to picking it up, so it wasn't picked (nothing changed). Try again moves it.", ProblemKind.Other);
                     if (justPlaced || attempt > 0)
                         log.Info($"  Picking up 0x{instance:X} (slot {key}); held before: {(HousingEditor.ActiveItem == 0 ? "nothing" : $"0x{HousingEditor.ActiveItem:X}")}.");
                     return editor.Select(instance) ? StepOutcome.Done : StepOutcome.Halt("Couldn't pick the piece up (the editor closed?).");
@@ -1167,6 +1213,9 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         steps.Add(new Step
         {
             Label = $"Check {name} was placed",
+            Timeout = TimeSpan.FromSeconds(8),
+            OnTimeout = StepStatus.SkipJob,
+            TimeoutProblem = ProblemKind.DidNotLand,
             Run = () =>
         {
             if (placed) return StepOutcome.Done;
@@ -1177,6 +1226,8 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             if ((placedBefore >= 0 && count > placedBefore) || (storedBefore >= 0 && stored < storedBefore))
                 return StepOutcome.Skip($"It looks placed ({placedBefore} → {count} pieces placed, {storedBefore} → {stored} in the storeroom) but couldn't be told apart, "
                                         + "so it isn't moved to its spot; check it, or run again to move it.", ProblemKind.DidNotLand);
+            // A slow server: 4 s more for the counts before a second try, which could place a second copy.
+            if (lastToast == null && queue.Elapsed < TimeSpan.FromSeconds(4)) return StepOutcome.Waiting;
             if (attempt == 0)
             {
                 log.Warn($"  The game didn't place it ({placedBefore} → {count} pieces placed).{toast} Trying once more.");
@@ -1670,6 +1721,8 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 Label = "Its menu opens",
                 Key = "menu opens",
                 Timeout = WindowWait,
+                OnTimeout = StepStatus.SkipJob, // this piece only; the menu's clean-up closes what opened
+                TimeoutMessage = "The storeroom row's menu didn't open.",
                 Run = () => GameUi.IsOpen(UiTable.ContextMenu) && InventoryReader.StoreroomSelection() != null ? StepOutcome.Done : StepOutcome.Waiting,
             },
             new Step
@@ -1678,7 +1731,9 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 Key = "check row",
                 Run = () =>
                 {
-                    var (container, slot) = InventoryReader.StoreroomSelection()!.Value;
+                    if (InventoryReader.StoreroomSelection() is not { } picked)
+                        return StepOutcome.Skip("The storeroom's selection went before it could be read.", ProblemKind.Other);
+                    var (container, slot) = picked;
                     var occupied = Occupied();
                     var held = occupied.FirstOrDefault(o => o.Container == container && o.Slot == slot);
                     var seen = new StoreroomRow(container, slot, held.ItemId, held.Stain);
@@ -1715,7 +1770,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     if (GameUi.IsOpen(UiTable.ContextMenu)) GameUi.Fire(UiTable.MenuCancel);
                     var after = new List<Step>
                     {
-                        Step.Wait("Its menu closes", () => !GameUi.IsOpen(UiTable.ContextMenu), WindowWait),
+                        Step.Wait("Its menu closes", () => !GameUi.IsOpen(UiTable.ContextMenu), WindowWait, StepStatus.SkipJob),
                     };
                     if (expected && !sameItem)
                     {
@@ -1765,7 +1820,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 log.Info($"  {name}: container {slot.Container}, slot {slot.Slot}; menu opened from window id {GameUi.BagWindowId()}. {inBagsBefore} in your bags, {storedBefore} in the storeroom.");
                 return HousingActions.OpenBagItemMenu(slot.Container, slot.Slot) ? StepOutcome.Done : StepOutcome.Halt("Couldn't open the item's menu.");
             }),
-            Step.Wait("Its menu opens", () => GameUi.IsOpen(UiTable.ContextMenu), WindowWait),
+            Step.Wait("Its menu opens", () => GameUi.IsOpen(UiTable.ContextMenu), WindowWait, StepStatus.SkipJob),
             new Step
             {
                 Label = $"Choose \"{storeWords.FirstOrDefault()}\" in the item's menu (to send it to the storeroom)",
@@ -1887,7 +1942,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 if (slot == null) return StepOutcome.Skip("It's not in your bags any more.", ProblemKind.NotFound);
                 return HousingActions.OpenBagItemMenu(slot.Container, slot.Slot) ? StepOutcome.Done : StepOutcome.Halt("Couldn't open the item's menu.");
             }),
-            Step.Wait("Its menu opens", () => GameUi.IsOpen(UiTable.ContextMenu), WindowWait),
+            Step.Wait("Its menu opens", () => GameUi.IsOpen(UiTable.ContextMenu), WindowWait, StepStatus.SkipJob),
             ChoosePlace("the item's menu"),
             AnswerYesNo(),
         };
@@ -2020,8 +2075,19 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         return new List<Step>
         {
             EnsureMode(EditorMode.Dye),
-            Step.Act($"Check {name} still needs {dye}", () =>
+            Step.Act($"Close the dye window if it's open: {UiTable.DyeClose.Describe()}", () =>
             {
+                if (GameUi.IsOpen(UiTable.DyeConfirm)) GameUi.Fire(UiTable.DyeConfirmNo);
+                else if (GameUi.IsOpen(UiTable.DyeWindow)) GameUi.Fire(UiTable.DyeClose);
+                return StepOutcome.Done;
+            }),
+            Step.Wait("The dye window is closed", () => !GameUi.IsOpen(UiTable.DyeConfirm) && !GameUi.IsOpen(UiTable.DyeWindow) || CloseDyeWindowAgain(), WindowWait, StepStatus.SkipJob),
+            Step.Act($"Pick {name}", () =>
+            {
+                var live = ReadLive();
+                if (live == null || !live.TryGetValue(key, out var piece) || piece.ItemId != job.Target.ItemId)
+                    return StepOutcome.Skip("It's no longer where the plan saw it.", ProblemKind.NotFound);
+                // The window is closed: its own dye, no preview (0.8.4 read this before closing it).
                 stainBefore[0] = StainOf(key);
                 if (stainBefore[0] == job.Target.Stain)
                 {
@@ -2029,25 +2095,11 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     queue.FinishAfterThis();
                     return StepOutcome.Done;
                 }
+                if (piece.Instance == 0) return StepOutcome.Skip("The game hasn't loaded it (walk closer to it).", ProblemKind.NotLoaded);
                 if (HousingActions.DyesOwned(data, job.Target.Stain) <= 0)
                     log.Info($"  None of {dye}'s own dye items in your bags; trying anyway (the window may use another dye, as it used Standard Spectrum Dye in the recordings).");
-                return StepOutcome.Done;
-            }),
-            Step.Act($"Close the dye window if it's open: {UiTable.DyeClose.Describe()}", () =>
-            {
-                if (GameUi.IsOpen(UiTable.DyeWindow)) GameUi.Fire(UiTable.DyeClose);
-                return StepOutcome.Done;
-            }),
-            Step.Wait("The dye window is closed", () => !GameUi.IsOpen(UiTable.DyeWindow), WindowWait),
-            Step.Act($"Pick {name}", () =>
-            {
-                var live = ReadLive();
-                if (live == null || !live.TryGetValue(key, out var piece) || piece.ItemId != job.Target.ItemId)
-                    return StepOutcome.Skip("It's no longer where the plan saw it.", ProblemKind.NotFound);
-                if (piece.Instance == 0) return StepOutcome.Skip("The game hasn't loaded it (walk closer to it).", ProblemKind.NotLoaded);
                 instance = piece.Instance;
-                stainBefore[0] = StainOf(key); // the window is closed: its own dye, no preview
-                return editor.Select(instance) ? StepOutcome.Done : StepOutcome.Halt("Couldn't pick the piece.");
+                return editor.Select(instance) ? StepOutcome.Done : StepOutcome.Skip("Couldn't pick the piece.", ProblemKind.DyeFailed);
             }),
             new Step
             {
@@ -2063,7 +2115,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 queue.InsertNext(DyeListSteps(job, instance));
                 return StepOutcome.Done;
             }),
-            Step.Wait($"The dye window ({UiTable.DyeWindow}) is open", () => GameUi.IsOpen(UiTable.DyeWindow), WindowWait),
+            Step.Wait($"The dye window ({UiTable.DyeWindow}) is open", () => GameUi.IsOpen(UiTable.DyeWindow), WindowWait, StepStatus.SkipJob),
             Step.Act($"Find {dye} in the dye window's list", () =>
             {
                 var r = Menus.DyeRow(GameUi.TextValues(UiTable.DyeWindow), dye, UiTable.DyeListFirstValue);
@@ -2097,9 +2149,10 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 var values = UiCallValues.Of(("row", row[0]), ("stain", job.Target.Stain));
                 log.Info($"  → {UiTable.DyePick.Describe(values)}");
                 if (Rehearsal) queue.InsertNext(RehearseDyeEnd(job, key, stainBefore[0]));
-                return Fire(UiTable.DyePick, values);
+                return FireOrSkip(UiTable.DyePick, values);
             }),
-            Step.Act($"Press Dye: {UiTable.DyeApply.Describe()}", () => Fire(UiTable.DyeApply)),
+            DyeShownCheck(job, key, () => instance, () => stainBefore[0]),
+            Step.Act($"Press Dye: {UiTable.DyeApply.Describe()}", () => FireOrSkip(UiTable.DyeApply)),
             new Step
             {
                 Label = $"Confirm: {UiTable.DyeConfirmYes.Describe()}",
@@ -2118,9 +2171,19 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     return !GameUi.IsOpen(UiTable.DyeWindow) && StainOf(key) == job.Target.Stain ? StepOutcome.Done : StepOutcome.Waiting;
                 },
                 Timeout = WindowWait,
-                OnTimeout = StepStatus.Done, // checked once the window is closed
+                OnTimeout = StepStatus.SkipJob,
+                TimeoutProblem = ProblemKind.DyeMissing,
+                TimeoutMessage = $"The dye confirmation didn't appear after Dye. The Dye button may be greyed out (no {dye} to use, or this piece can't take it).",
             },
-            Step.Wait("The confirmation closes", () => !GameUi.IsOpen(UiTable.DyeConfirm), TimeSpan.FromSeconds(3), StepStatus.Done),
+            new Step
+            {
+                Label = "The confirmation closes",
+                Run = () => GameUi.IsOpen(UiTable.DyeConfirm) ? StepOutcome.Waiting : StepOutcome.Done,
+                Timeout = TimeSpan.FromSeconds(4),
+                OnTimeout = StepStatus.SkipJob, // its clean-up answers No
+                TimeoutProblem = ProblemKind.DyeFailed,
+                TimeoutMessage = "The dye confirmation didn't close after Yes.",
+            },
             Step.Act("Close the dye window", () =>
             {
                 if (GameUi.IsOpen(UiTable.DyeWindow)) GameUi.Fire(UiTable.DyeClose);
@@ -2131,9 +2194,9 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             {
                 job.Note ??= $"Dyed {dye}.";
                 return StepOutcome.Done;
-            }, () => asked[0]
-                ? StepOutcome.Skip($"Its dye didn't change to {dye} (it reads {DyeWord(StainOf(key))}).", ProblemKind.DyeFailed)
-                : StepOutcome.Skip($"The dye confirmation didn't appear and the dye didn't change. The Dye button may be greyed out (no {dye} to use, or this piece can't take it).", ProblemKind.DyeMissing)),
+            }, () => GameUi.IsOpen(UiTable.DyeWindow)
+                ? StepOutcome.Skip($"The dye window didn't close after Yes, so its dye couldn't be checked (it reads {DyeWord(StainOf(key))}).", ProblemKind.DyeFailed)
+                : StepOutcome.Skip($"Its dye didn't change to {dye} (it reads {DyeWord(StainOf(key))}).", ProblemKind.DyeFailed)),
         };
     }
 
@@ -2163,12 +2226,69 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     if (now - since.Value >= DyeSettle) return done();
                 }
                 else since = null;
-                return now - from.Value >= wait ? late() : StepOutcome.Waiting;
+                // Right and settling: let it settle (the queue's own timeout still bounds it).
+                return since == null && now - from.Value >= wait ? late() : StepOutcome.Waiting;
             },
         };
     }
 
-    private static readonly TimeSpan DyeSettle = TimeSpan.FromMilliseconds(500);
+    private static readonly TimeSpan DyeSettle = TimeSpan.FromMilliseconds(1000);
+
+    /// <summary>
+    /// Before Dye is pressed: the window must be on this piece and, once its preview shows, show the dye
+    /// chosen. While the window is open the game shows its preview in the piece's dye (0.8.2's rehearsal):
+    /// another dye there means the pick chose another dye (or row), and Dye isn't pressed. When no
+    /// preview shows at all (its own dye still reads), Dye is pressed as before 0.8.5, and the dye is
+    /// checked after.
+    /// </summary>
+    private Step DyeShownCheck(RunJob job, int key, Func<nint> instance, Func<byte> before)
+    {
+        var name = Name(job);
+        var dye = data.DyeName(job.Target.Stain);
+        DateTime? from = null;
+        return new Step
+        {
+            Label = $"The dye window shows {dye} on {name}",
+            Delay = Speed.Wait(250),
+            Timeout = TimeSpan.FromSeconds(3),
+            OnTimeout = StepStatus.SkipJob,
+            TimeoutProblem = ProblemKind.DyeFailed,
+            Run = () =>
+            {
+                var now = DateTime.UtcNow;
+                from ??= now;
+                var active = HousingEditor.ActiveItem;
+                if (active != 0 && active != instance())
+                    return StepOutcome.Skip($"The dye window is on another piece (0x{active:X}, not 0x{instance():X}): Dye wasn't pressed.", ProblemKind.DyeFailed);
+                var shown = StainOf(key);
+                if (shown == job.Target.Stain) return StepOutcome.Done;
+                if (now - from.Value < TimeSpan.FromSeconds(1)) return StepOutcome.Waiting;
+                if (shown == before())
+                {
+                    log.Info($"  The window shows no preview on {name} (its dye still reads {DyeWord(shown)}); pressing Dye, and checking the dye after.");
+                    return StepOutcome.Done;
+                }
+                return StepOutcome.Skip($"The dye window shows {DyeWord(shown)} on it, not {dye} (the pick chose another dye): Dye wasn't pressed.", ProblemKind.DyeFailed);
+            },
+        };
+    }
+
+    /// <summary>Closes the dye window (or answers No) again while waiting for it to close; never true.</summary>
+    private bool CloseDyeWindowAgain()
+    {
+        var now = DateTime.UtcNow;
+        if (now - dyeCloseAgainAt < TimeSpan.FromSeconds(1.5)) return false;
+        dyeCloseAgainAt = now;
+        if (GameUi.IsOpen(UiTable.DyeConfirm)) GameUi.Fire(UiTable.DyeConfirmNo);
+        else if (GameUi.IsOpen(UiTable.DyeWindow)) GameUi.Fire(UiTable.DyeClose);
+        return false;
+    }
+
+    private DateTime dyeCloseAgainAt;
+
+    /// <summary>A click inside a dye job: if the window has gone, only this piece is skipped.</summary>
+    private static StepOutcome FireOrSkip(UiCall call, IReadOnlyDictionary<string, long>? blanks = null) =>
+        GameUi.Fire(call, blanks) ? StepOutcome.Done : StepOutcome.Skip($"{call.Addon} closed before the click.", ProblemKind.DyeFailed);
 
     /// <summary>
     /// Opens the dye window through Furnishing Color's list: rows whose name is the piece's are picked
@@ -2217,7 +2337,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     queue.InsertNext(new[]
                     {
                         Step.Act($"Open its menu: {UiTable.DyeListMenu.Describe(values)}", () => Fire(UiTable.DyeListMenu, values)),
-                        Step.Wait("Its menu opens", () => GameUi.IsOpen(UiTable.ContextMenu), WindowWait),
+                        Step.Wait("Its menu opens", () => GameUi.IsOpen(UiTable.ContextMenu), WindowWait, StepStatus.SkipJob),
                         ChooseEntry(UiTable.PaintLabels(Services.ClientState.ClientLanguage), "Furnishing Color's menu"),
                     });
                     return StepOutcome.Done;
@@ -2520,19 +2640,23 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         },
     };
 
-    private static List<Step> DyeCleanup() => new()
+    private List<Step> DyeCleanup() => new()
     {
         new Step
         {
             Label = "Close the dye windows it opened",
             Run = () =>
             {
+                // No first, then the window once the question has gone (closing it under the question
+                // may leave the question up).
                 if (GameUi.IsOpen(UiTable.DyeConfirm)) GameUi.Fire(UiTable.DyeConfirmNo);
-                if (GameUi.IsOpen(UiTable.DyeWindow)) GameUi.Fire(UiTable.DyeClose);
+                else if (GameUi.IsOpen(UiTable.DyeWindow)) GameUi.Fire(UiTable.DyeClose);
                 if (GameUi.IsOpen(UiTable.ContextMenu)) GameUi.Fire(UiTable.MenuCancel);
                 return StepOutcome.Done;
             },
         },
+        Step.Wait("The dye windows are closed", () => !GameUi.IsOpen(UiTable.DyeConfirm) && !GameUi.IsOpen(UiTable.DyeWindow) || CloseDyeWindowAgain(),
+            TimeSpan.FromSeconds(4), StepStatus.Done),
     };
 
     // ---------------------------------------------------------------------------------------------
@@ -2676,6 +2800,10 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                         return StepOutcome.Skip("It's no longer where it was (moved or put away already).", ProblemKind.NotFound);
                     if (piece.Instance == 0) return StepOutcome.Skip("The game hasn't loaded it (walk closer to it).", ProblemKind.NotLoaded);
                     if (StoreroomRefuses()) return StepOutcome.Skip(StoreroomFullWords, ProblemKind.Other);
+                    // Picked in another mode it would be picked up, not put away (checked here too: a pause
+                    // or Continue lets you change the mode after it was set).
+                    if (HousingEditor.Mode != EditorMode.Store)
+                        return StepOutcome.Skip($"The editor was in {ModeWord(HousingEditor.Mode)}, not Store, when it came to putting it away, so it wasn't picked (nothing changed). Try again puts it away.", ProblemKind.Other);
                     lastToast = null;
                     return editor.Select(piece.Instance) ? StepOutcome.Done : StepOutcome.Halt("Couldn't pick the piece (the editor closed?).");
                 },
@@ -2692,7 +2820,10 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 {
                     if (AnswerYes()) return StepOutcome.Waiting;
                     var live = ReadLive();
-                    if (live == null || live.TryGetValue(key, out var piece) && piece.ItemId == job.Target.ItemId)
+                    // Still placed: the same item where it was (slots may be numbered again after a
+                    // store, and another copy then in this slot isn't this one).
+                    if (live == null || live.TryGetValue(key, out var piece) && piece.ItemId == job.Target.ItemId
+                        && Vector3.Distance(piece.Position, job.Target.Position) <= 0.25f)
                     {
                         // Still placed: the game said something (the storeroom is full?), or 3.5 s went by.
                         var said = lastToast != null && queue.Elapsed > TimeSpan.FromSeconds(1);

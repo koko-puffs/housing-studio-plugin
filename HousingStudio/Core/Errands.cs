@@ -537,6 +537,42 @@ public static class MarketRule
     }
 
     /// <summary>
+    /// The board's question for the listing chosen ("Purchase 1 Cieldalaes planter for 7,229 gil (344 fee
+    /// included)?"): its largest number is the listing's whole cost (with tax, 1 gil of rounding either
+    /// way, or without tax when no fee is shown), and, for more than one, its quantity is in it. A fee or
+    /// a price for one that happens to equal the listing's isn't enough: another row's question
+    /// ("20 … for 10,500 gil (500 fee included)" for a 1 × 500 listing) is said no to.
+    /// </summary>
+    public static bool BoardQuestionMatches(string? question, int quantity, long cost, long costWithoutTax)
+    {
+        if (string.IsNullOrEmpty(question)) return false;
+        var numbers = Numbers(question);
+        if (numbers.Count == 0) return false;
+        var total = numbers.Max();
+        if (Math.Abs(total - cost) > 1 && total != costWithoutTax) return false;
+        numbers.Remove(total);
+        return quantity <= 1 || numbers.Contains(quantity);
+    }
+
+    /// <summary>
+    /// Whether a shop's question is about this item: each word of its name (by its first four letters, so
+    /// "tables" and "Table" agree) is in the question. Used before saying yes to a price other than the
+    /// plan's, where a row miscounted would buy another item.
+    /// </summary>
+    public static bool NamesItem(string? question, string itemName)
+    {
+        if (string.IsNullOrEmpty(question) || string.IsNullOrWhiteSpace(itemName)) return false;
+        var asked = string.Join(' ', Words(question));
+        var words = Words(itemName).Where(w => w.Length >= 3).ToList();
+        if (words.Count == 0) return false;
+        return words.All(w => asked.Contains(w.Length > 4 ? w[..4] : w, StringComparison.Ordinal));
+
+        static IEnumerable<string> Words(string text) =>
+            new string(text.ToLowerInvariant().Select(c => char.IsLetter(c) ? c : ' ').ToArray())
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries);
+    }
+
+    /// <summary>
     /// The gil a shop's question asks for <paramref name="quantity"/> of something ("Purchase 1 stage panel
     /// for 4,000 gil?" → 4,000), or null when it doesn't read so (no quantity in it, or nothing else).
     /// The largest number besides the quantity: the price, in any order the language puts them.
