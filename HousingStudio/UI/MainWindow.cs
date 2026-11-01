@@ -118,6 +118,8 @@ public sealed partial class MainWindow : Window
             if (runner.Active || Plugin.FixtureRun.Active || Plugin.Errands.Active) sub = Sub.None;
             // With a question up, nothing under it reacts (its own window takes the clicks too).
             Kit.Blocked = confirm != null;
+            try
+            {
             if (sub == Sub.Settings && !Plugin.Errands.Active && !Plugin.Errands.ResultWaiting)
             {
                 // Settings over the errands' estimate too (its limits are in Getting); back goes back to it.
@@ -152,9 +154,14 @@ public sealed partial class MainWindow : Window
                         break;
                 }
             }
-            Frame.DrawToast();
-            Kit.Blocked = false;
-            DrawConfirm();
+            }
+            finally
+            {
+                // Even when a view throws, the question is drawn (to be answered) and nothing stays blocked.
+                Frame.DrawToast();
+                Kit.Blocked = false;
+                DrawConfirm();
+            }
         }
 
         // Dragging a file in from outside the game: the drop zone (Start) and the body (Ready) take it.
@@ -460,7 +467,12 @@ public sealed partial class MainWindow : Window
     /// <summary>The header's Settings button.</summary>
     private void SettingsButton(Vector2 pos)
     {
-        if (Kit.IconButton("##settings", pos, Icon.Sliders, "Settings")) sub = Sub.Settings;
+        if (Kit.IconButton("##settings", pos, Icon.Sliders, "Settings"))
+        {
+            // Its tabs (not More options, if a run or a design closed Settings while it was open).
+            moreOpen = false;
+            sub = Sub.Settings;
+        }
     }
 
     /// <summary>

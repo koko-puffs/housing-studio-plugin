@@ -65,7 +65,7 @@ public sealed partial class MainWindow
             var at = pos + new Vector2(0, lh * i);
             var w = Txt.Line(dl, at, text, Face.Serif, px, Palette.Ivory, lineCss);
             if (last && italicText != null && !italicOwnRow)
-                Txt.Line(dl, at + new Vector2(w, 0), italicText, Face.SerifItalic, px, Palette.BrassSoft, lineCss);
+                Txt.Line(dl, at + new Vector2(w, 0), Txt.Fit(italicText, Face.SerifItalic, px, MathF.Max(S(20), maxWidth - w)), Face.SerifItalic, px, Palette.BrassSoft, lineCss);
         }
         if (italicOwnRow) Txt.Line(dl, pos + new Vector2(0, lh * rows.Count), Txt.Fit(italicText!, Face.SerifItalic, px, maxWidth), Face.SerifItalic, px, Palette.BrassSoft, lineCss);
         return height;

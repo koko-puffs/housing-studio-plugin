@@ -214,12 +214,29 @@ public sealed partial class MainWindow
     /// something to say, and on the right what it costs ("free", a shop's fixed price, "≈" the board's
     /// estimate, a currency). Under a place, the place says where, so the row doesn't.
     /// </summary>
+    /// <summary>Rows' second lines, made once per line (not every frame for every row, off screen too), again every 5 s (some say when).</summary>
+    private readonly Dictionary<(ShoppingLine, bool), string?> rowNotes = new();
+    private DateTime rowNotesUntil;
+
+    private string? RowNote(ShoppingLine line, bool underPlace)
+    {
+        var now = DateTime.UtcNow;
+        if (now >= rowNotesUntil || rowNotes.Count > 2000)
+        {
+            rowNotes.Clear();
+            rowNotesUntil = now + TimeSpan.FromSeconds(5);
+        }
+        if (!rowNotes.TryGetValue((line, underPlace), out var note))
+            rowNotes[(line, underPlace)] = note = underPlace ? ShoppingScreen.PlaceRowNote(line) : ShopNote(line);
+        return note;
+    }
+
     private void ShopRow(int index, ShoppingLine line, bool underPlace)
     {
         var at = Kit.At;
         var w = Kit.Width;
         var nameH = Txt.Natural(Face.Sans, 14);
-        var note = underPlace ? ShoppingScreen.PlaceRowNote(line) : ShopNote(line);
+        var note = RowNote(line, underPlace);
         var textH = note != null ? nameH + S(2) + S(19.5f) : nameH;
         var h = S(10) * 2 + MathF.Max(S(34), textH);
         var clipTop = ImGui.GetWindowPos().Y;

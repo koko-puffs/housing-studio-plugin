@@ -15,7 +15,8 @@ public static class DesignNames
     {
         if (string.IsNullOrWhiteSpace(raw)) return string.Empty;
         var words = raw.Replace('_', ' ').Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        return string.Join(' ', words);
+        // A name of underscores alone isn't shown blank.
+        return words.Length == 0 ? "Untitled" : string.Join(' ', words);
     }
 
     /// <summary>

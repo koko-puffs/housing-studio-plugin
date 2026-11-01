@@ -235,6 +235,9 @@ public sealed class ViewModel
         path != null && config.PinnedDesigns.Any(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase));
 
     private List<RecentRow>? backupRows;
+
+    /// <summary>How many backups the folder holds (the list shows the newest 12).</summary>
+    public int BackupsTotal { get; private set; }
     private List<RecentRow>? pinnedRows;
 
     private int refreshedFrame = -1;
@@ -268,7 +271,9 @@ public sealed class ViewModel
         try
         {
             if (Directory.Exists(Backups.Folder))
-                foreach (var f in new DirectoryInfo(Backups.Folder).GetFiles("*.build").OrderByDescending(f => f.LastWriteTime).Take(12))
+                var files = new DirectoryInfo(Backups.Folder).GetFiles("*.build");
+                BackupsTotal = files.Length;
+                foreach (var f in files.OrderByDescending(f => f.LastWriteTime).Take(12))
                     if (!rows.Any(r => string.Equals(r.Path, f.FullName, StringComparison.OrdinalIgnoreCase)))
                         rows.Add((f.FullName, true, f.LastWriteTime));
         }

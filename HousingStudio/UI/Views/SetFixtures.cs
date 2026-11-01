@@ -56,10 +56,6 @@ public sealed partial class MainWindow
             }
             return false;
         }
-        // First seen running: the fixtures it sets, for the panel's "1 of 3" (the run's own list, as it makes it).
-        if (!fixturesWereActive)
-            fixtureProgress.Begin(FixturePlan().Where(t => t.State == FixtureState.ToSet && t.Slot != null)
-                .Select(t => (data.AnyItemName(t.Fixture.ItemId), FixtureSlotWords(t.Fixture))));
         fixturesWereActive = true;
         if (gapBefore > 0) Kit.Gap(gapBefore);
         DrawFixturesRunning(run);
@@ -128,11 +124,29 @@ public sealed partial class MainWindow
     /// run (<see cref="AfterPlacing"/>) and, when it's due, starts setting the fixtures for the design
     /// it was armed for, opening the window (its Continue and Stop are there).
     /// </summary>
+    private bool fixtureRunTicked;
+
     internal void Tick()
     {
         // A run's start and end are noticed with the window closed too (its log starts at the run's
         // start, and Done waits for when it's opened).
         vm.Observe();
+        // The fixtures it sets, for the panel's "1 of 3", taken the tick their run starts (not when the
+        // panel is first drawn: by then some may be set, or it may be another run).
+        var fixturesNow = Plugin.FixtureRun.Active;
+        if (fixturesNow && !fixtureRunTicked)
+        {
+            try
+            {
+                fixtureProgress.Begin(FixturePlan().Where(t => t.State == FixtureState.ToSet && t.Slot != null)
+                    .Select(t => (data.AnyItemName(t.Fixture.ItemId), FixtureSlotWords(t.Fixture))));
+            }
+            catch (Exception ex)
+            {
+                Services.Log.Warning(ex, "Housing Studio couldn't list the fixtures being set");
+            }
+        }
+        fixtureRunTicked = fixturesNow;
         try
         {
             FixturesAfterPlacing();

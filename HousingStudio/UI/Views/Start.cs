@@ -63,6 +63,12 @@ public sealed partial class MainWindow
         }
         backupsDrawn = false;
         DrawThisHouse();
+        if (session.Context.Side == null || !session.Context.HasPermission)
+        {
+            // (The mockup's line: where This house went.)
+            Kit.Gap(14);
+            Txt.Note("This house shows here when you're in a home you may decorate.", Palette.Dim);
+        }
         if (!backupsDrawn && vm.BackupRows().Count > 0)
         {
             Kit.Gap(14);
@@ -507,6 +513,7 @@ public sealed partial class MainWindow
 
     private bool backupsOpen;
     private bool backupsDrawn;
+    private (List<RecentRow>? Rows, string Words) backupsWords = (null, string.Empty);
 
     /// <summary>
     /// "Backups · 3 · newest yesterday" with a chevron; pressed, the backups the runs saved (and homes kept
@@ -525,8 +532,15 @@ public sealed partial class MainWindow
         if (clicked) backupsOpen = !backupsOpen;
         if (hovered) dl.AddRectFilled(at, at + new Vector2(w, h), Palette.U32(Palette.LineFaint), S(Palette.RadiusMd));
         Icons.Draw(dl, Icon.Undo, new Vector2(at.X + S(6), at.Y + (h - S(16)) / 2), S(16), Palette.Ash);
-        var newest = rows[0].Note.Split(" · ").LastOrDefault() ?? string.Empty;
-        var words = $"Backups · {rows.Count}{(newest.Length > 0 ? $" · newest {newest}" : string.Empty)}";
+        if (!ReferenceEquals(backupsWords.Rows, rows))
+        {
+            // The newest by when it was saved (or opened), not the last words of its note (which can be "Not found").
+            var at = rows.Max(r => r.At);
+            var newest = at == DateTime.MinValue ? null : When.Relative(at, DateTime.Now, t => t.ToString("HH:mm"));
+            var total = Math.Max(rows.Count, vm.BackupsTotal);
+            backupsWords = (rows, $"Backups · {total}{(newest != null ? $" · newest {newest}" : string.Empty)}");
+        }
+        var words = backupsWords.Words;
         var textX = at.X + S(6) + S(16) + S(10);
         var chevronX = at.X + w - S(6) - S(16);
         Txt.Line(dl, new Vector2(textX, at.Y + (h - Txt.Natural(Face.Sans, 13)) / 2), Txt.Fit(words, Face.Sans, 13, chevronX - S(8) - textX), Face.Sans, 13, Palette.Text);
@@ -538,8 +552,16 @@ public sealed partial class MainWindow
         {
             var ra = Kit.At;
             var rh = S(40);
-            var (rc, rhov, _) = Kit.Hit($"##backup{i}", ra, new Vector2(w, rh), !row.Exists);
-            if (rc) Open(row.Path);
+            var (rc, rhov, _) = Kit.Hit($"##backup{i}", ra, new Vector2(w, rh));
+            if (rc && row.Exists) Open(row.Path);
+            else if (rc)
+            {
+                // Gone from the disk: pressing it takes it off the list.
+                config.RecentFiles.Remove(row.Path);
+                config.RecentOpened.Remove(row.Path);
+                config.Save();
+            }
+            if (rhov && !row.Exists) Kit.Tooltip("This file isn't there any more. Press to take it off the list.");
             if (rhov) dl.AddRectFilled(ra, ra + new Vector2(w, rh), Palette.U32(Palette.LineFaint), S(Palette.RadiusMd));
             var kindW = Txt.SpacedWidth(row.Kind, Face.Mono, 11, 0.1f);
             var tx = textX;
