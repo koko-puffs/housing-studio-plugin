@@ -66,3 +66,69 @@ public static partial class StepWords
     [GeneratedRegex(@"\s*\([^()]*\)")]
     private static partial Regex Brackets();
 }
+
+/// <summary>Which run the placing screen shows: a real one, a preview (Mark the spots) or a rehearsal.</summary>
+public enum RunKind
+{
+    Placing,
+    Preview,
+    Rehearsal,
+}
+
+/// <summary>
+/// The placing screen's words (0.9.0): the short eyebrow, the big figure's words with Ready's to-do
+/// numbers (<see cref="RunFigure"/>), and the line under the piece in hand. Pure, so it's tested.
+/// </summary>
+public static class PlacingWords
+{
+    /// <summary>"Placing · Solution9Loft", "Previewing · …", "Rehearsal · …": the short name, never a cut-off file name.</summary>
+    public static string Eyebrow(RunKind kind, string? shortTitle)
+    {
+        var head = kind switch
+        {
+            RunKind.Preview => "Previewing",
+            RunKind.Rehearsal => "Rehearsal",
+            _ => "Placing",
+        };
+        return string.IsNullOrWhiteSpace(shortTitle) ? head : $"{head} · {shortTitle}";
+    }
+
+    /// <summary>
+    /// The words beside the big figure: "of 46 to do · then 20 dyes" (placing), "· 3 of 20 dyed" once
+    /// the dyes are being done; "of 20 to dye" when the dyes are all there is; "of 12 to put away" when
+    /// putting away is. A preview's are "marked", a rehearsal's "rehearsed".
+    /// </summary>
+    /// <param name="dyeing">The run is on its dyes now.</param>
+    public static string Figure(RunFigure f, RunKind kind, bool dyeing)
+    {
+        if (f.ToDo > 0)
+        {
+            var head = kind switch
+            {
+                RunKind.Preview => $"of {f.ToDo} marked",
+                RunKind.Rehearsal => $"of {f.ToDo} rehearsed",
+                _ => $"of {f.ToDo} to do",
+            };
+            if (f.Dyes <= 0) return head;
+            if (!dyeing && f.Dyed == 0) return $"{head} · then {Words.Count(f.Dyes, "dye")}";
+            return kind switch
+            {
+                RunKind.Preview => $"{head} · {f.Dyed} of {Words.Count(f.Dyes, "dye")} marked",
+                RunKind.Rehearsal => $"{head} · {f.Dyed} of {Words.Count(f.Dyes, "dye")} rehearsed",
+                _ => $"{head} · {f.Dyed} of {f.Dyes} dyed",
+            };
+        }
+        if (f.Dyes > 0)
+            return kind switch
+            {
+                RunKind.Preview => $"of {Words.Count(f.Dyes, "dye")} marked",
+                RunKind.Rehearsal => $"of {Words.Count(f.Dyes, "dye")} rehearsed",
+                _ => $"of {f.Dyes} to dye",
+            };
+        if (f.PutAway > 0) return $"of {f.PutAway} to put away";
+        return "nothing to do";
+    }
+
+    /// <summary>Under the piece in hand: "1 skipped so far · listed at the end" (pieces that didn't work, skipped or not).</summary>
+    public static string Skipped(int skipped) => $"{skipped} skipped so far · listed at the end";
+}

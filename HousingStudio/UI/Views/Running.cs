@@ -18,6 +18,25 @@ public sealed partial class MainWindow
 {
     private bool logOpen = true;
 
+    /// <summary>The run (its log's start) whose earlier lines are shown: "Earlier lines" is on for that run only.</summary>
+    private DateTime? logEarlierFor;
+
+    /// <summary>A little before the start given (a run logs its first line in the frame before the window sees it going).</summary>
+    private static readonly TimeSpan LogStartGrace = TimeSpan.FromSeconds(2);
+
+    private (int Count, string Line) skippedLine = (-1, string.Empty);
+    private (RunKind Kind, string Short, string Line) runEyebrow = (RunKind.Placing, string.Empty, string.Empty);
+    private (RunFigure Figure, RunKind Kind, bool Dyeing, string Big, string Text) figureWords = (default, RunKind.Placing, false, string.Empty, string.Empty);
+
+    /// <summary>"Placing · Solution9Loft" (the short name: the whole one was cut off), made again only when it changes.</summary>
+    private string RunEyebrow(RunKind kind)
+    {
+        var shortTitle = vm.RunShortTitle;
+        if (runEyebrow.Line.Length == 0 || runEyebrow.Kind != kind || !ReferenceEquals(runEyebrow.Short, shortTitle))
+            runEyebrow = (kind, shortTitle, PlacingWords.Eyebrow(kind, shortTitle));
+        return runEyebrow.Line;
+    }
+
     private void DrawRunning()
     {
         var preview = runner.DryRun;
@@ -26,7 +45,7 @@ public sealed partial class MainWindow
 
         Frame.BeginHeader(24);
         var at = Kit.At;
-        var eyebrowH = Kit.Eyebrow(at, rehearsal ? $"{RehearsalWords.Eyebrow} · {vm.RunTitle}" : $"{(preview ? "Previewing" : "Placing")} {vm.RunTitle}", null, Kit.Width);
+        var eyebrowH = Kit.Eyebrow(at, RunEyebrow(preview ? RunKind.Preview : rehearsal ? RunKind.Rehearsal : RunKind.Placing), null, Kit.Width);
         var left = Words.About(runner.TimeLeft);
         var (pill, tone) = waiting ? ("Waiting for you", Tone.Waiting)
             : runner.State == RunState.Paused ? ("Paused", Tone.Neutral)
@@ -51,21 +70,19 @@ public sealed partial class MainWindow
         if (runner.Current is { } job)
         {
             Kit.Gap(18);
-            DrawCurrent(job);
+            DrawCurrent(job, preview);
         }
+        // Pieces that didn't work (skipped, or failed and passed over): where they go, under the piece in hand.
         var problems = runner.Failed + runner.Skipped;
         if (problems > 0)
         {
-            Kit.Gap(18);
-            var at2 = Kit.At;
-            var textX = S(16 + 10);
-            var runs = new[] { Run.Note($"{problems} skipped so far.", Palette.Danger), Run.Note(" The run carries on; you'll see what happened at the end.") };
-            var h = Txt.Flow(at2 + new Vector2(textX, 0), Kit.Width - textX, runs, 19.5f, out _);
-            Icons.Draw(Kit.Dl, Icon.Alert, at2 + new Vector2(0, S(2)), S(16), Palette.Danger);
-            Kit.Reserve(at2, Kit.Width, h);
+            Kit.Gap(10);
+            if (skippedLine.Count != problems) skippedLine = (problems, PlacingWords.Skipped(problems));
+            Txt.Note(skippedLine.Line, null, true);
         }
         Kit.Gap(18);
-        DrawLog("running-bottom");
+        // The log from this run's start; the lines before it behind "Earlier lines".
+        DrawLog("running-bottom", vm.RunStartedAt);
 
         Frame.BeginBottom("running-bottom");
         var stay = session.Context.Side == Side.Garden
@@ -80,13 +97,23 @@ public sealed partial class MainWindow
         DrawRunningFooter();
     }
 
-    /// <summary>"131 of 447 pieces done": the 56px serif figure on the words' baseline, and the 8px bar.</summary>
+    /// <summary>
+    /// "18 of 46 to do · then 20 dyes": the 56px serif figure on the words' baseline, and the 8px bar.
+    /// The figure counts Ready's to-do (moves and placements), the dyes beside it (<see cref="RunFigure"/>);
+    /// the bar is everything the run does, so it's full only once the dyes are done too.
+    /// </summary>
     private void DrawFigure(bool preview)
     {
         var at = Kit.At;
         var w = Kit.Width;
-        var figure = vm.Figure.ToString();
-        var words = preview ? $"of {vm.RunPieces} pieces marked" : runner.Rehearsal ? RehearsalWords.Figure(vm.RunPieces) : $"of {vm.RunPieces} pieces done";
+        var counts = vm.RunCounts;
+        var kind = preview ? RunKind.Preview : runner.Rehearsal ? RunKind.Rehearsal : RunKind.Placing;
+        var dyeing = runner.Phase == RunPhase.Dye;
+        var fw0 = figureWords;
+        if (fw0.Big.Length == 0 || fw0.Figure != counts || fw0.Kind != kind || fw0.Dyeing != dyeing)
+            fw0 = figureWords = (counts, kind, dyeing, counts.Figure.ToString(), PlacingWords.Figure(counts, kind, dyeing));
+        var figure = fw0.Big;
+        var words = fw0.Text;
         var dl = Kit.Dl;
         // line-height 1 for the figure; the words share its baseline (align-items: baseline).
         var bigBox = S(56);
@@ -97,7 +124,7 @@ public sealed partial class MainWindow
         Kit.Reserve(at, w, bigBox);
         Kit.Gap(14);
         var bar = Kit.At;
-        Kit.Progress(bar, w, vm.RunPieces == 0 ? 0 : vm.Figure / (float)vm.RunPieces);
+        Kit.Progress(bar, w, counts.Bar);
         Kit.Reserve(bar, w, S(8));
     }
 
@@ -159,15 +186,21 @@ public sealed partial class MainWindow
         Kit.Reserve(at, w, h);
     }
 
-    /// <summary>The piece in hand: its icon, name, dye (the stain's own colour) and floor, and the step in words.</summary>
-    private void DrawCurrent(RunJob job)
+    /// <summary>
+    /// The piece in hand: its icon, name, dye (the stain's own colour) and floor, and the step in words;
+    /// a quiet Skip on the right (0.9.0: skipping a stuck piece was only in the step-by-step callout).
+    /// A preview has no Skip: it only marks the spot.
+    /// </summary>
+    private void DrawCurrent(RunJob job, bool preview = false)
     {
         Kit.BeginPanel("##current", 18, 20, 18);
         var at = Kit.At;
         var w = Kit.Width;
         var dl = Kit.Dl;
+        const string skipCard = "Skip";
+        var skipW = preview ? 0 : Kit.ButtonWidth(skipCard, BtnSize.Sm, null, Btn.Quiet);
         var x = at.X + S(52) + S(16);
-        var tw = at.X + w - x;
+        var tw = at.X + w - x - (preview ? 0 : skipW + S(12));
         var nameH = Txt.Natural(Face.SansMedium, 15);
         var note = new System.Collections.Generic.List<Run>();
         if (job.Target.Stain != 0)
@@ -189,6 +222,13 @@ public sealed partial class MainWindow
         Txt.Flow(new Vector2(x, y), tw, note, 19.5f, out _);
         y += noteH + S(4);
         if (step != null) Txt.Flow(new Vector2(x, y), tw, stepRuns, 19.5f, out _);
+        if (!preview)
+        {
+            var skipH = Kit.ButtonHeight(BtnSize.Sm);
+            if (Kit.Button("##skip-card", new Vector2(at.X + w - skipW, at.Y + (h - skipH) / 2), skipCard, Btn.Quiet, BtnSize.Sm, null, 0, false,
+                    "Leaves this piece for now (it's listed at the end) and goes on to the next."))
+                OnFramework(runner.SkipCurrent);
+        }
         Kit.Reserve(at, w, h);
         Kit.EndPanel();
     }
@@ -254,21 +294,51 @@ public sealed partial class MainWindow
     /// "What it's doing": a disclosure with Copy, and the log's last lines: as many as fit down to the
     /// window's bottom (at least three; <paramref name="bottomId"/> is the part kept under it), so a
     /// bigger window shows more. The newest in full colour, warnings and errors in theirs, the rest dim.
+    /// With <paramref name="since"/> (a run's start), the lines begin there (0.9.0: they began with
+    /// design loads from earlier); "Earlier lines" beside Copy shows the rest. Copy copies everything.
     /// </summary>
-    private void DrawLog(string? bottomId = null)
+    private void DrawLog(string? bottomId = null, DateTime? since = null) =>
+        DrawLogPanel("##log", ref logOpen, false, bottomId, since);
+
+    private (int Lines, string Title) logTitle = (-1, string.Empty);
+
+    /// <summary>
+    /// The log's panel (<see cref="DrawLog"/>) under its own id and open state; <paramref name="counted"/>
+    /// titles it with its line count, as a rehearsal's result does ("What it did · 13 lines").
+    /// </summary>
+    private void DrawLogPanel(string id, ref bool open, bool counted, string? bottomId, DateTime? since)
     {
-        Kit.BeginPanel("##log", 0, 0, 0);
-        const string copy = "Copy";
-        var copyW = Kit.ButtonWidth(copy, BtnSize.Tiny, null, Btn.Quiet);
-        Disclosure("##log-row", ref logOpen, "What it's doing", null, 14, copyW, S(30), (p, _) =>
+        var all = log.Lines;
+        var first = since is { } start ? LogFirstAt(all, start - LogStartGrace) : 0;
+        var earlier = first > 0 && logEarlierFor == since;
+        var from = earlier ? 0 : first;
+        var title = "What it's doing";
+        if (counted)
         {
-            if (Kit.Button("##copy-log", p, copy, Btn.Quiet, BtnSize.Tiny, null, 0, false, "Copies the whole log, for a report"))
+            if (logTitle.Lines != all.Count - from) logTitle = (all.Count - from, RehearsalWords.LogTitle(all.Count - from));
+            title = logTitle.Title;
+        }
+
+        Kit.BeginPanel(id, 0, 0, 0);
+        const string copy = "Copy";
+        const string before = "Earlier lines";
+        var copyW = Kit.ButtonWidth(copy, BtnSize.Tiny, null, Btn.Quiet);
+        // "Earlier lines" only when there are some: a toggle (picked while they're shown).
+        var beforeStyle = earlier ? Btn.Picked : Btn.Quiet;
+        var beforeW = first > 0 ? Kit.ButtonWidth(before, BtnSize.Tiny, null, beforeStyle) : 0;
+        var gap = first > 0 ? S(6) : 0;
+        Disclosure(id + "-row", ref open, title, null, 14, beforeW + gap + copyW, S(30), (p, _) =>
+        {
+            if (first > 0 && Kit.Button(id + "-earlier", p, before, beforeStyle, BtnSize.Tiny, null, 0, false,
+                    earlier ? "Shows the log from this run's start again" : "Shows the log's lines from before this run too"))
+                logEarlierFor = earlier ? null : since;
+            if (Kit.Button(id + "-copy", new Vector2(p.X + beforeW + gap, p.Y), copy, Btn.Quiet, BtnSize.Tiny, null, 0, false, "Copies the whole log, for a report"))
             {
                 ImGui.SetClipboardText(log.AsText());
                 Notify("Log copied");
             }
         }, true);
-        if (logOpen)
+        if (open)
         {
             var lineBox = S(12 * 1.6f);
             var step = lineBox + S(2);
@@ -280,7 +350,7 @@ public sealed partial class MainWindow
             var w = Kit.Width - S(40);
             var y = at.Y;
             var dl = Kit.Dl;
-            var lines = LogRows(count, x + w);
+            var lines = LogRows(count, x + w, from);
             if (lines.Count == 0)
             {
                 Txt.Line(dl, new Vector2(x, y), "Nothing yet.", Face.Sans, 12, Palette.Dim, 12 * 1.6f);
@@ -309,30 +379,46 @@ public sealed partial class MainWindow
         Kit.EndPanel();
     }
 
+    /// <summary>The first of the log's lines at or after <paramref name="at"/> (they're in time order), found by halving.</summary>
+    private static int LogFirstAt(IReadOnlyList<LogLine> lines, DateTime at)
+    {
+        var lo = 0;
+        var hi = lines.Count;
+        while (lo < hi)
+        {
+            var mid = (lo + hi) / 2;
+            if (lines[mid].At < at) lo = mid + 1;
+            else hi = mid;
+        }
+        return lo;
+    }
+
     private readonly record struct LogRow(string Time, string Text, string Fit, LogKind Kind);
 
-    private (int Count, LogLine? Last, int Shown, float Right, List<LogRow> Rows) logRows = (0, null, 0, 0, new List<LogRow>());
+    private (int Count, LogLine? Last, int Shown, float Right, int From, List<LogRow> Rows) logRows = (0, null, 0, 0, 0, new List<LogRow>());
 
     /// <summary>
-    /// The log's last <paramref name="count"/> lines, worded and cut to fit, made again only when a line
-    /// comes, the room changes or the window's width does (it was all done again every frame).
+    /// The log's last <paramref name="count"/> lines from line <paramref name="from"/> on, worded and cut
+    /// to fit, made again only when a line comes, the room changes or the window's width does (it was
+    /// all done again every frame).
     /// </summary>
-    private List<LogRow> LogRows(int count, float right)
+    private List<LogRow> LogRows(int count, float right, int from = 0)
     {
         var all = log.Lines;
         var last = all.Count > 0 ? all[^1] : null;
         var c = logRows;
-        if (c.Count == all.Count && ReferenceEquals(c.Last, last) && c.Shown == count && Math.Abs(c.Right - right) < 0.5f) return c.Rows;
-        var rows = new List<LogRow>(Math.Min(count, all.Count));
+        if (c.Count == all.Count && ReferenceEquals(c.Last, last) && c.Shown == count && c.From == from && Math.Abs(c.Right - right) < 0.5f) return c.Rows;
+        var start = Math.Max(Math.Max(0, from), all.Count - count);
+        var rows = new List<LogRow>(Math.Max(0, Math.Min(count, all.Count - start)));
         var timeW = Txt.Measure("00:00:00", Face.Mono, 12).X;
-        for (var i = Math.Max(0, all.Count - count); i < all.Count; i++)
+        for (var i = start; i < all.Count; i++)
         {
             var l = all[i];
             var text = LogWords(l.Text);
             var tx = right - Kit.Width + S(40) + timeW + S(12);
             rows.Add(new LogRow(l.At.ToString("HH:mm:ss"), text, Txt.Fit(text, Face.Sans, 12, right - tx), l.Kind));
         }
-        logRows = (all.Count, last, count, right, rows);
+        logRows = (all.Count, last, count, right, from, rows);
         return rows;
     }
 

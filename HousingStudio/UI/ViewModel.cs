@@ -60,11 +60,17 @@ public sealed class ViewModel
     /// <summary>Of those, already where the design has them when it started.</summary>
     public int RunInPlaceAtStart { get; private set; }
 
+    /// <summary>Of those, the ones to move or place (Ready's "to do"): the figure's total while a clear out goes first.</summary>
+    public int RunToDoAtStart { get; private set; }
+
     /// <summary>The pieces of the run you don't have (not in your storeroom or bags), so it never worked on them.</summary>
     public IReadOnlyList<PlanEntry> RunMissing { get; private set; } = Array.Empty<PlanEntry>();
 
     /// <summary>The design's name when the run started (a restore loads the backup as the design).</summary>
     public string RunTitle { get; private set; } = string.Empty;
+
+    /// <summary>Its short form, for the placing screen's eyebrow ("Placing · Solution9Loft").</summary>
+    public string RunShortTitle { get; private set; } = string.Empty;
 
     /// <summary>Pieces in the house before the run, as its backup saved them.</summary>
     public int LiveAtStart { get; private set; }
@@ -91,8 +97,10 @@ public sealed class ViewModel
             var entries = starting ?? session.Plan?.Entries.ToList() ?? new List<PlanEntry>();
             RunPieces = entries.Count;
             RunInPlaceAtStart = entries.Count(e => e.State == PieceState.InPlace);
+            RunToDoAtStart = entries.Count(e => e.State is PieceState.Move or PieceState.FromStoreroom or PieceState.FromInventory);
             RunMissing = entries.Where(e => e.State == PieceState.Missing).ToList();
             RunTitle = session.Title;
+            RunShortTitle = session.ShortTitle;
             LiveAtStart = session.Live.Count;
             RunStartedAt = DateTime.Now;
             ResultWaiting = false;
@@ -112,10 +120,15 @@ public sealed class ViewModel
         : MainView.Ready;
 
     /// <summary>
-    /// The big figure: pieces where the design has them (those already there, plus each moved or
-    /// placed; pieces put away are counted with the moves by the runner, but aren't the design's).
+    /// The run's counts with Ready's to-do numbers (0.9.0): its moves and placements done of those to
+    /// do, its dyes apart (expected until the dye phase is planned), and what it puts away. Before,
+    /// the figure was the design's pieces in place of all of them: with pieces still to buy it never
+    /// reached its total, and a piece that only needed its dye counted as done from the start.
     /// </summary>
-    public int Figure => Math.Min(RunPieces, RunInPlaceAtStart + runner.Count(RunPhase.Move, JobOutcome.Done) - runner.PutAwayDone + runner.Count(RunPhase.Place, JobOutcome.Done));
+    public RunFigure RunCounts => RunFigure.From(runner.Jobs, runner.ClearingOutFirst, RunToDoAtStart, runner.DyesStillExpected);
+
+    /// <summary>The big figure (<see cref="RunFigure.Figure"/> of <see cref="RunCounts"/>).</summary>
+    public int Figure => RunCounts.Figure;
 
     /// <summary>The step in hand in plain words ("Setting it at its spot").</summary>
     // TODO(runner): a `StepText` in plain words; the labels are written for the log.

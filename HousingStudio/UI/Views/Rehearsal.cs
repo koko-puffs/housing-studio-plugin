@@ -14,8 +14,10 @@ namespace HousingStudio.UI;
 /// (every step a real start does, nothing committed), following Ready's choices as the brass button
 /// would: Get first opens the errands to rehearse, else the placing is rehearsed (Keep, Clear out or
 /// Swap), with the fixtures after it when they're set after placing. While it runs, an outlined
-/// "Rehearsing" pill; after it, "Rehearsal done" with what it would have done, what didn't work, and
-/// Copy report (no Put them back, Swap back or Try again: nothing changed).
+/// "Rehearsing" pill; after it, "Rehearsal done" (or stopped) with one sentence of the outcome, what
+/// didn't work (first, when something didn't), what it would have done or, stopped before it would
+/// have done anything, how far it got, the folded log, and Done with Copy report (no Put them back,
+/// Swap back or Try again: nothing changed).
 /// </summary>
 public sealed partial class MainWindow
 {
@@ -125,9 +127,11 @@ public sealed partial class MainWindow
     private readonly Run[] rehearsalLine = new Run[1];
 
     /// <summary>
-    /// "Rehearsal done" (or stopped): the mark, one line of what didn't work; what it would have done
-    /// (the report's counts, the purchase questions, the teleports); what didn't work, each with its
-    /// message; the log; Copy report and Done.
+    /// "Rehearsal done" (or stopped): the mark, one sentence of the outcome (who stopped it, where, and
+    /// that nothing was committed, or bought or taken); what didn't work, each with its message, first
+    /// when there's any; what it would have done (the report's counts, the purchase questions, the
+    /// teleports), or how far it got when it stopped before it would have done anything; the log,
+    /// folded with its line count; Done in brass and Copy report, with where Done goes under them.
     /// </summary>
     private void DrawRehearsalResult(bool errands)
     {
@@ -149,13 +153,117 @@ public sealed partial class MainWindow
         var y = at.Y + d + S(12);
         var (plain, italic) = RehearsalWords.Title(stopped);
         y += CenteredTitle(y, plain, italic, at.X, w) + S(4);
-        rehearsalLine[0] = new Run(RehearsalWords.Line(issues.Count, stopped, byYou ? null : why), Face.Sans, 13, Palette.Dim);
+        var (outcome, far) = RehearsalOutcome(errands, stopped, why, byYou, report);
+        rehearsalLine[0] = new Run(outcome, Face.Sans, 13, Palette.Dim);
         y += Txt.Flow(new Vector2(at.X, y), w, rehearsalLine, 19.5f, out _, center: true);
         Kit.Reserve(at, w, y - at.Y);
         Frame.EndHeader();
 
         Frame.BeginBody("##rehearsal-done-body", "rehearsal-done-foot", 20, 22);
         if (!errands) DrawFixtureRunPanel();
+        // What didn't work first, when something didn't (0.9.0: an empty "0 · Every step worked" is left out;
+        // the line under the title says it).
+        if (issues.Count > 0)
+        {
+            Kit.Section("What didn't work", issues.Count.ToString());
+            Kit.Gap(10);
+            Kit.BeginPanel("##rehearsal-issues", 0, 0, 0);
+            for (var i = 0; i < issues.Count; i++) RehearsalIssueRow(i, issues[i]);
+            Kit.EndPanel();
+            Kit.Gap(18);
+        }
+        // Stopped before it would have done anything: how far it got, in place of "Nothing it would have done".
+        if (stopped && far != null && NothingCounted(report)) DrawHowFar(far, report);
+        else DrawWouldHaveDone(report);
+        Kit.Gap(14);
+        // The log from the rehearsal's start, folded with its line count: after a stop it's for sending.
+        DrawLogPanel("##rehearsal-log", ref rehearsalLogOpen, true, null, report.StartedAt == default ? (DateTime?)null : report.StartedAt);
+        Frame.EndBody();
+
+        // Done in brass on the left (every screen's main step), Copy report to its right, and where Done goes.
+        Frame.BeginFooter("rehearsal-done-foot", 18, 22);
+        var row = Kit.At;
+        var footW = Kit.Width;
+        const string copy = "Copy report";
+        const string done = "Done";
+        var cw = Kit.ButtonWidth(copy, BtnSize.Lg, Icon.Clipboard, Btn.Glass);
+        if (Kit.Button("##rehearsal-done", row, done, Btn.Primary, BtnSize.Lg, Icon.Check, footW - cw - S(10)))
+        {
+            if (errands)
+            {
+                e.Dismiss();
+                errandsOpen = false;
+                errandsRehearse = false;
+            }
+            vm.Dismiss();
+        }
+        if (Kit.Button("##rehearsal-copy", new Vector2(row.X + footW - cw, row.Y), copy, Btn.Glass, BtnSize.Lg, Icon.Clipboard, 0, false,
+                "Copies what it would have done, what didn't work, and the whole log, for a report"))
+        {
+            ImGui.SetClipboardText(report.Text(log.AsText()));
+            Notify("Report copied");
+        }
+        Kit.Reserve(row, footW, S(46));
+        Kit.Gap(12);
+        Txt.Note(RehearsalWords.DoneHint, null, true);
+        Frame.EndFooter();
+    }
+
+    /// <summary>The result's log starts folded (it's for sending, not reading).</summary>
+    private bool rehearsalLogOpen;
+
+    private (int Version, bool Errands, bool Stopped, string? Why, int Jobs, string Line, HowFar? Far) rehearsalResult =
+        (-1, false, false, null, -1, string.Empty, null);
+
+    /// <summary>
+    /// The line under the title (who stopped it, where, and that nothing was committed) and, after a
+    /// stop, how far it got: the pieces walked (placing) or the stops (the errands). Made again only
+    /// when the report, the run or why it stopped changes.
+    /// </summary>
+    private (string Line, HowFar? Far) RehearsalOutcome(bool errands, bool stopped, string? why, bool byYou, RehearsalReport report)
+    {
+        var e = Errands;
+        var jobs = errands ? e.GotCount : runner.Jobs.Count;
+        var r = rehearsalResult;
+        if (r.Line.Length > 0 && r.Version == report.Version && r.Errands == errands && r.Stopped == stopped && r.Why == why && r.Jobs == jobs)
+            return (r.Line, r.Far);
+        HowFar? far = null;
+        if (stopped)
+        {
+            if (errands)
+            {
+                var stops = new List<(string Name, int Things)>();
+                foreach (var trip in e.Plan.Trips)
+                    foreach (var stop in trip.Stops)
+                        stops.Add((RehearsalWords.StopName(stop), stop.Count));
+                far = RehearsalWords.Stops(stops, e.GotCount, report.Teleports);
+            }
+            else
+            {
+                var pieces = new List<(string Name, JobKind Kind, JobOutcome Outcome, bool StoppedHere)>(runner.Jobs.Count);
+                foreach (var j in runner.Jobs)
+                    pieces.Add((data.ItemName(j.Target.ItemId), j.Kind, j.Outcome, j.Outcome == JobOutcome.Skipped && j.Note == "Stopped."));
+                far = RehearsalWords.Pieces(pieces);
+            }
+        }
+        // The errands rehearse placing after their last trip: "or placed" once they did (or finished).
+        var placingToo = !stopped || report.Count(RehearsalAct.Place) + report.Count(RehearsalAct.Move) + report.Count(RehearsalAct.Store) + report.Count(RehearsalAct.Dye) > 0;
+        var line = RehearsalWords.Outcome(stopped, byYou, why, far?.At, report.Issues.Count, RehearsalWords.Nothing(errands, placingToo));
+        rehearsalResult = (report.Version, errands, stopped, why, jobs, line, far);
+        return (line, far);
+    }
+
+    /// <summary>The report counted nothing it would have done (it can still have issues).</summary>
+    private static bool NothingCounted(RehearsalReport report)
+    {
+        foreach (var act in Enum.GetValues<RehearsalAct>())
+            if (report.Count(act) > 0) return false;
+        return true;
+    }
+
+    /// <summary>"What it would have done": the report's counts, the purchase questions, the teleports and what it left out.</summary>
+    private void DrawWouldHaveDone(RehearsalReport report)
+    {
         Kit.BeginPanel("##rehearsal-counts", 14, 16, 14);
         var top = Kit.At;
         var eh = Kit.Eyebrow(top, "What it would have done", null, Kit.Width);
@@ -167,57 +275,73 @@ public sealed partial class MainWindow
             Kit.Gap(4);
             Txt.Note(q);
         }
-        Kit.Gap(4);
-        Txt.Note(report.Teleports > 0
-            ? $"Nothing was committed. {(report.Teleports == 1 ? "1 teleport" : $"{report.Teleports} teleports")} were made: their fees are the only gil spent."
-            : "Nothing was committed: nothing placed, moved, stored, dyed, bought or set.");
+        if (report.Teleports > 0)
+        {
+            Kit.Gap(4);
+            Txt.Note($"{(report.Teleports == 1 ? "1 teleport was" : $"{report.Teleports} teleports were")} made: their fees are the only gil spent.");
+        }
         foreach (var n in report.Notes)
         {
             Kit.Gap(4);
             Txt.Note(n);
         }
         Kit.EndPanel();
+    }
 
-        Kit.Gap(18);
-        Kit.Section("What didn't work", issues.Count.ToString());
-        Kit.Gap(10);
-        if (issues.Count == 0)
+    /// <summary>
+    /// "How far it got" (a rehearsal stopped before it would have done anything): the count on the
+    /// right ("0 of 10 stops"), then the last step that worked and where it stopped, each with a line
+    /// and how it ended; what it left out under them.
+    /// </summary>
+    private void DrawHowFar(HowFar far, RehearsalReport report)
+    {
+        Kit.BeginPanel("##rehearsal-far", 14, 16, 14);
+        var top = Kit.At;
+        var w = Kit.Width;
+        var countW = Txt.Measure(far.Count, Face.Mono, 12).X;
+        var eh = Kit.Eyebrow(top, "How far it got", null, MathF.Max(S(40), w - countW - S(12)));
+        Txt.Line(Kit.Dl, new Vector2(top.X + w - countW, top.Y), far.Count, Face.Mono, 12, Palette.Brass, eh / S(1));
+        Kit.Reserve(top, w, eh);
+        if (far.Rows.Count == 0)
         {
-            Txt.Note("Every step worked.");
+            Kit.Gap(8);
+            Txt.Note("It stopped before its first step.");
         }
-        else
+        for (var i = 0; i < far.Rows.Count; i++)
         {
-            Kit.BeginPanel("##rehearsal-issues", 0, 0, 0);
-            for (var i = 0; i < issues.Count; i++) RehearsalIssueRow(i, issues[i]);
-            Kit.EndPanel();
+            Kit.Gap(10);
+            HowFarRowDraw(far.Rows[i]);
         }
-        Kit.Gap(14);
-        DrawLog();
-        Frame.EndBody();
+        foreach (var n in report.Notes)
+        {
+            Kit.Gap(6);
+            Txt.Note(n);
+        }
+        Kit.EndPanel();
+    }
 
-        Frame.BeginFooter("rehearsal-done-foot", 18, 22);
-        var row = Kit.At;
-        const string copy = "Copy report";
-        const string done = "Done";
-        var dw = Kit.ButtonWidth(done, BtnSize.Lg, Icon.Check, Btn.Primary);
-        if (Kit.Button("##rehearsal-copy", row, copy, Btn.Glass, BtnSize.Lg, Icon.Clipboard, w - dw - S(10), false,
-                "Copies what it would have done, what didn't work, and the whole log, for a report"))
-        {
-            ImGui.SetClipboardText(report.Text(log.AsText()));
-            Notify("Report copied");
-        }
-        if (Kit.Button("##rehearsal-done", new Vector2(row.X + w - dw, row.Y), done, Btn.Primary, BtnSize.Lg, Icon.Check))
-        {
-            if (errands)
-            {
-                e.Dismiss();
-                errandsOpen = false;
-                errandsRehearse = false;
-            }
-            vm.Dismiss();
-        }
-        Kit.Reserve(row, w, S(46));
-        Frame.EndFooter();
+    /// <summary>A row of "How far it got": a round mark (a tick when it worked), the name and its line, and "worked" or "stopped".</summary>
+    private void HowFarRowDraw(HowFarRow row)
+    {
+        var at = Kit.At;
+        var w = Kit.Width;
+        var dl = Kit.Dl;
+        var d = S(28);
+        var nameH = Txt.Natural(Face.SansMedium, 14);
+        var noteH = S(18);
+        var wordsH = nameH + S(1) + noteH;
+        var h = MathF.Max(d, wordsH);
+        var end = row.Worked ? "worked" : "stopped";
+        var endW = Txt.Measure(end, Face.Mono, 11).X;
+        var x = at.X + d + S(12);
+        var tw = at.X + w - endW - S(12) - x;
+        var (fill, ink, icon) = row.Worked ? (Palette.SuccessWash, Palette.Success, Icon.Check) : (Palette.LinePicked, Palette.Dim, Icon.Square);
+        Kit.Round(new Vector2(at.X, at.Y + (h - d) / 2), d, icon, S(14), fill, ink);
+        var top = at.Y + (h - wordsH) / 2;
+        Txt.Line(dl, new Vector2(x, top), Txt.Fit(row.Name, Face.SansMedium, 14, tw), Face.SansMedium, 14, row.Worked ? Palette.Ivory : Palette.Ash);
+        Txt.Line(dl, new Vector2(x, top + nameH + S(1)), Txt.Fit(row.Note, Face.Sans, 12, tw), Face.Sans, 12, Palette.Dim, 18);
+        Txt.Line(dl, new Vector2(at.X + w - endW, top), end, Face.Mono, 11, row.Worked ? Palette.Success : Palette.Dim, nameH / S(1));
+        Kit.Reserve(at, w, h);
     }
 
     /// <summary>A row of what didn't work: where (a piece, a step), the message, and what kind (offscreen rows only take their room).</summary>

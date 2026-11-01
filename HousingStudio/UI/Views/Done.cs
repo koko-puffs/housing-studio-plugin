@@ -11,11 +11,11 @@ using static HousingStudio.UI.Theme;
 namespace HousingStudio.UI;
 
 /// <summary>
-/// Done (the 0.6 flow, docs/mockups/flow.html): a run finished or stopped. The mark, "<name> is in" and
-/// one line of what happened (with the errands' trips and gil when the run came from them); the tally;
-/// what needs you; one undo card (Swap back after a swap, else Put them back); a card for the fixtures
-/// left (Set them); and Try again / Carry on / Done. A finished preview offers to start placing as
-/// Ready's choice has it (Keep, Clear out or Swap).
+/// Done (the 0.6 flow, docs/mockups/flow.html; 0.9.0's order): a run finished or stopped. The mark,
+/// "<name> is in" and one line of what happened with Ready's to-do numbers ("44 of 46 placed · 20 dyed
+/// · 2 need you"); the tally; what needs you; a card for the fixtures left (Set them); one undo card
+/// (Swap back after a swap, else Put them back), last; and Try again / Carry on / Done. A finished
+/// preview offers to start placing as Ready's choice has it (Keep, Clear out or Swap).
 /// </summary>
 public sealed partial class MainWindow
 {
@@ -24,14 +24,17 @@ public sealed partial class MainWindow
     private sealed record Issue(Icon Icon, string Name, string Reason, string Action, Action OnAction, string? Tip = null, Icon? ActionIcon = null,
         bool NeedsHome = false);
 
-    private readonly record struct DoneLineKey(bool Preview, bool Stopped, bool ByYou, string? Why, int Figure, int Pieces, int Work, bool Dyes);
+    private readonly record struct DoneLineKey(bool Preview, bool Stopped, bool ByYou, string? Why, RunFigure Counts, int NeedYou, int Work, bool Dyes);
 
     private (DoneLineKey Key, string Line) doneLine = (default, string.Empty);
 
-    /// <summary>Done's one line under the title, made again only when what it says changes.</summary>
-    private string DoneLine(bool preview, bool stopped)
+    /// <summary>
+    /// Done's one line under the title, made again only when what it says changes: after a run, Ready's
+    /// to-do numbers as the placing screen had them ("44 of 46 placed · 20 dyed · 2 need you").
+    /// </summary>
+    private string DoneLine(bool preview, bool stopped, RunFigure counts, int needYou)
     {
-        var key = new DoneLineKey(preview, stopped, vm.StoppedByYou, runner.StopReason, vm.Figure, vm.RunPieces,
+        var key = new DoneLineKey(preview, stopped, vm.StoppedByYou, runner.StopReason, counts, needYou,
             preview ? runner.Count(RunPhase.Move) - runner.ClearOutCount + runner.Count(RunPhase.Place) : 0, config.DyeAfterPlacing);
         if (doneLine.Line.Length > 0 && doneLine.Key == key) return doneLine.Line;
         string line;
@@ -40,10 +43,12 @@ public sealed partial class MainWindow
         else if (stopped)
             line = vm.StoppedByYou ? "You stopped it" : runner.StopReason ?? "It stopped";
         else
-            line = DoneWords.Line(vm.Figure, vm.RunPieces);
+            line = DoneWords.Line(counts, needYou);
         doneLine = (key, line);
         return line;
     }
+
+    private (RunFigure Counts, string Title) stoppedTitle = (default, string.Empty);
 
     private readonly Run[] doneLineRun = new Run[1];
 
@@ -60,6 +65,7 @@ public sealed partial class MainWindow
         var problems = runner.Problems;
         var issues = preview ? NoIssues : Issues(problems);
         var needYou = preview ? 0 : problems.Count + vm.RunMissing.Count;
+        var counts = vm.RunCounts;
 
         // Header, centred: the mark, the title, one line of what happened.
         Frame.BeginHeader(24);
@@ -77,11 +83,16 @@ public sealed partial class MainWindow
         Icons.Draw(dl, markIcon, c - new Vector2(S(12)), S(24), markInk, markIcon == Icon.Check ? 2f : 1.8f);
         var y = at.Y + d + S(12);
         float titleH;
-        if (stopped) titleH = CenteredTitle(y, $"Stopped at {vm.Figure} of {vm.RunPieces}", null, at.X, w);
+        if (stopped)
+        {
+            // "Stopped at 18 of 46": the to-do, as the placing screen counted it.
+            if (stoppedTitle.Title.Length == 0 || stoppedTitle.Counts != counts) stoppedTitle = (counts, $"Stopped at {counts.Figure} of {counts.Total}");
+            titleH = CenteredTitle(y, stoppedTitle.Title, null, at.X, w);
+        }
         else if (preview) titleH = CenteredTitle(y, "Preview", "done", at.X, w);
         else titleH = CenteredTitle(y, $"{vm.RunTitle} is", "in", at.X, w);
         y += titleH + S(4);
-        doneLineRun[0] = new Run(DoneLine(preview, stopped), Face.Sans, 13, Palette.Dim);
+        doneLineRun[0] = new Run(DoneLine(preview, stopped, counts, needYou), Face.Sans, 13, Palette.Dim);
         y += Txt.Flow(new Vector2(at.X, y), w, doneLineRun, 19.5f, out _, center: true);
         Kit.Reserve(at, w, y - at.Y);
         Frame.EndHeader();
@@ -90,6 +101,8 @@ public sealed partial class MainWindow
         DrawFixtureRunPanel();
         DrawTally(preview);
         DrawPutAwayLine(preview);
+        // 0.9.0's order: what needs you first (the reason to look), then the usual next step (the
+        // fixtures), and the undo, rarely used, last.
         if (issues.Count > 0)
         {
             Kit.Gap(18);
@@ -99,6 +112,7 @@ public sealed partial class MainWindow
             for (var i = 0; i < issues.Count; i++) IssueRow(i, issues[i]);
             Kit.EndPanel();
         }
+        if (!preview && session.Layout is { } layout && !Plugin.FixtureRun.Active) DrawFixturesCard(layout);
         // One undo: Swap back after a swap, else Put them back. A swap's backup is from its first run:
         // Try again and Carry on keep it, so it may be older.
         if (!preview && runner.LastBackupPath != null && vm.BackupAt is { } savedAt
@@ -108,7 +122,6 @@ public sealed partial class MainWindow
             if (runner.KeptAs != null) DrawSwapBack(savedAt);
             else DrawPutBack(savedAt);
         }
-        if (!preview && session.Layout is { } layout && !Plugin.FixtureRun.Active) DrawFixturesCard(layout);
         Frame.EndBody();
 
         DrawDoneFooter(preview, stopped, problems);
