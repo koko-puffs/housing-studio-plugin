@@ -41,6 +41,7 @@ public static class ErrandWords
         LeftReason.NotListedHere => "not listed on the worlds the errands buy on",
         LeftReason.NoRoom => "no room in your bags",
         LeftReason.Currency => "sold for a currency the errands may not spend, or you haven't enough of: allow it in Settings → Getting → Currencies",
+        LeftReason.NoneListed => "sold on the market board, but none is listed on your data centre just now (as Universalis has it)",
         _ => "no way to get it is known",
     };
 
@@ -163,6 +164,7 @@ public static class ErrandWords
                     LeftReason.NotListedHere => $"{n} not listed where it buys",
                     LeftReason.NoRoom => $"{n} with no room in your bags",
                     LeftReason.Currency => $"{n} for {string.Join(", ", g.Select(l => l.Exchange?.CurrencyName).Where(c => !string.IsNullOrEmpty(c)).Distinct())}",
+                    LeftReason.NoneListed => $"{n} not on the board just now",
                     _ => $"{n} not known where from",
                 };
                 var what = string.Join(", ", g.GroupBy(l => l.Need.ItemId)
@@ -228,8 +230,12 @@ public static class ErrandWords
             bought[item.Need] = bought.GetValueOrDefault(item.Need) + item.Count;
         long market = 0;
         foreach (var line in shop.Lines)
-            if (line.Source == SourceKind.Market && line.Count > 0 && bought.TryGetValue(line.Need, out var n))
-                market += line.Gil * Math.Min(n, line.Count) / line.Count;
+        {
+            if (line.Count <= 0 || !bought.TryGetValue(line.Need, out var n)) continue;
+            if (line.Source == SourceKind.Market) market += line.Gil * Math.Min(n, line.Count) / line.Count;
+            // A vendor's (or a currency's) out of reach, bought on the board instead (0.9.4): the board's estimate.
+            else if (line.Source != SourceKind.Retainer && line.Board is { Listings.Count: > 0 } board) market += board.CostFor(Math.Min(n, line.Count)).Gil;
+        }
         return plan.VendorGil + market;
     }
 
@@ -487,7 +493,7 @@ public static class ErrandWords
     public static string NotGotKind(LeftReason reason) => reason switch
     {
         LeftReason.Craft => "craft",
-        LeftReason.OverCeiling or LeftReason.NotListedHere => "board",
+        LeftReason.OverCeiling or LeftReason.NotListedHere or LeftReason.NoneListed => "board",
         LeftReason.NoVendorReachable or LeftReason.Currency => "shop",
         LeftReason.NoRoom => "bags",
         _ => string.Empty,

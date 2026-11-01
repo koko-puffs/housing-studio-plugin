@@ -92,6 +92,13 @@ public sealed record ShoppingLine(Need Need, SourceKind Source, int Count)
     /// </summary>
     public ExchangeOffer? Exchangeable { get; init; }
 
+    /// <summary>
+    /// Any line but the board's: the board's listings for it, when they were asked about (0.9.4), so the
+    /// errands can buy there when this line's own source is out of their reach (a vendor they can't get
+    /// to, a currency you don't allow). Empty listings: none listed on the data centre.
+    /// </summary>
+    public MarketQuote? Board { get; init; }
+
     /// <summary>Gil for this line: a vendor's price times the count, or the market's estimate; 0 otherwise.</summary>
     public long Gil { get; init; }
 
@@ -162,6 +169,7 @@ public static class ShoppingPlanner
         {
             var left = need.Count;
             var recipe = craft(need.ItemId);
+            var board = quotes.TryGetValue(need.ItemId, out var asked) ? asked : null;
 
             var holders = retainers
                 .Select(r => (Stock: r, Has: r.Count(need.ItemId) - taken.GetValueOrDefault((r.RetainerId, need.ItemId))))
@@ -181,7 +189,7 @@ public static class ShoppingPlanner
 
             if (VendorChoice.Best(offers(need.ItemId), preferDistrict) is { } offer)
             {
-                lines.Add(new ShoppingLine(need, SourceKind.Vendor, left) { Vendor = offer, Gil = (long)offer.Price * left, Craft = recipe });
+                lines.Add(new ShoppingLine(need, SourceKind.Vendor, left) { Vendor = offer, Gil = (long)offer.Price * left, Craft = recipe, Board = board });
                 continue;
             }
 
@@ -196,7 +204,7 @@ public static class ShoppingPlanner
                     if (n <= 0) continue;
                     var cost = ex.CostFor(n);
                     spent[ex.Currency] = spent.GetValueOrDefault(ex.Currency) + cost;
-                    lines.Add(new ShoppingLine(need, SourceKind.Exchange, n) { Exchange = ex, CurrencyCost = cost, Craft = recipe });
+                    lines.Add(new ShoppingLine(need, SourceKind.Exchange, n) { Exchange = ex, CurrencyCost = cost, Craft = recipe, Board = board });
                     left -= n;
                 }
             if (left <= 0) continue;
@@ -217,8 +225,8 @@ public static class ShoppingPlanner
             // list says what to allow rather than "not known" (0.8.1: Wolf Marks' furnishings).
             var exchangeable = exchanges != null ? ExchangeChoice.Ranked(exchanges(need.ItemId), _ => true).FirstOrDefault() : null;
             lines.Add(recipe != null
-                ? new ShoppingLine(need, SourceKind.Craft, left) { Craft = recipe, Exchangeable = exchangeable }
-                : new ShoppingLine(need, SourceKind.Unknown, left) { Exchangeable = exchangeable });
+                ? new ShoppingLine(need, SourceKind.Craft, left) { Craft = recipe, Exchangeable = exchangeable, Board = board }
+                : new ShoppingLine(need, SourceKind.Unknown, left) { Exchangeable = exchangeable, Board = board });
         }
         return new ShoppingPlan(lines);
     }
@@ -243,8 +251,12 @@ public static class ShoppingPlanner
     }
 
     /// <summary>The items worth asking the market about: those no retainer or vendor covers.</summary>
-    public static List<uint> ToPrice(IReadOnlyList<Need> needs, IReadOnlyList<RetainerStock> retainers, Func<uint, IReadOnlyList<VendorOffer>> offers) =>
-        needs.Where(n => n.Count > retainers.Sum(r => r.Count(n.ItemId)) && offers(n.ItemId).Count == 0)
+    /// <param name="evenSold">
+    /// Those vendors sell too (0.9.4): the errands buy them on the board when they can't get to the vendor
+    /// (or its currency isn't allowed), as long as the board's listings are known.
+    /// </param>
+    public static List<uint> ToPrice(IReadOnlyList<Need> needs, IReadOnlyList<RetainerStock> retainers, Func<uint, IReadOnlyList<VendorOffer>> offers, bool evenSold = false) =>
+        needs.Where(n => n.Count > retainers.Sum(r => r.Count(n.ItemId)) && (evenSold || offers(n.ItemId).Count == 0))
             .Select(n => n.ItemId).Distinct().OrderBy(i => i).ToList();
 }
 

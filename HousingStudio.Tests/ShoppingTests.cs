@@ -123,6 +123,8 @@ public class ShoppingPlannerTests
         var needs = new[] { new Need(100, 2, NeedKind.Piece), new Need(200, 1, NeedKind.Piece), new Need(300, 1, NeedKind.Piece) };
         var retainers = new[] { Retainer(1, "Momo", Noon, (100, 2)) };
         Assert.Equal(new uint[] { 300 }, ShoppingPlanner.ToPrice(needs, retainers, Offers(Offer(200, 10))));
+        // Vendors' things too, for the board when the vendor is out of reach (0.9.4).
+        Assert.Equal(new uint[] { 200, 300 }, ShoppingPlanner.ToPrice(needs, retainers, Offers(Offer(200, 10)), evenSold: true));
     }
 
     [Fact]

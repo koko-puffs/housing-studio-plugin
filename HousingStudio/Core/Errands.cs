@@ -112,6 +112,9 @@ public enum LeftReason
 
     /// <summary>Sold only for a currency you don't allow the errands to spend, or haven't enough of (Wolf Marks…).</summary>
     Currency,
+
+    /// <summary>Sold on the board, but none listed on your data centre just now (0.9.4).</summary>
+    NoneListed,
 }
 
 /// <summary>Something left out of the errands, with why.</summary>
@@ -278,7 +281,9 @@ public static class ErrandPlanner
                     var offer = Reachable(line, o);
                     if (offer == null)
                     {
-                        left.Add(new ErrandLeft(line.Need, line.Count, LeftReason.NoVendorReachable));
+                        // On the board instead, when it's listed there (0.9.4).
+                        if (OnBoard(line)) marketSoFar = MarketUnits(FromBoard(line), o, stack, units, left, marketSoFar);
+                        else left.Add(new ErrandLeft(line.Need, line.Count, LeftReason.NoVendorReachable));
                         break;
                     }
                     // One stop per NPC (0.8.0 had one per shop: the Housing Merchant's three shops were three
@@ -290,7 +295,8 @@ public static class ErrandPlanner
                     // A currency vendor: walked to like a vendor, so it has to be reachable as one.
                     if (!o.Reachable(line.Exchange.Vendor))
                     {
-                        left.Add(new ErrandLeft(line.Need, line.Count, LeftReason.NoVendorReachable));
+                        if (OnBoard(line)) marketSoFar = MarketUnits(FromBoard(line), o, stack, units, left, marketSoFar);
+                        else left.Add(new ErrandLeft(line.Need, line.Count, LeftReason.NoVendorReachable));
                         break;
                     }
                     var ev = line.Exchange.Vendor;
@@ -300,8 +306,16 @@ public static class ErrandPlanner
                 case SourceKind.Market when line.Market != null:
                     marketSoFar = MarketUnits(line, o, stack, units, left, marketSoFar);
                     break;
+                case SourceKind.Craft or SourceKind.Unknown when OnBoard(line):
+                    marketSoFar = MarketUnits(FromBoard(line), o, stack, units, left, marketSoFar);
+                    break;
                 case SourceKind.Craft or SourceKind.Unknown when line.Exchangeable != null:
                     left.Add(new ErrandLeft(line.Need, line.Count, LeftReason.Currency) { Exchange = line.Exchangeable });
+                    break;
+                // Asked about, and none listed on the data centre (0.9.4: said so, rather than "craft" or
+                // "not known" for something that is sold on the board, just not now).
+                case SourceKind.Craft or SourceKind.Unknown when line.Board != null:
+                    left.Add(new ErrandLeft(line.Need, line.Count, LeftReason.NoneListed));
                     break;
                 case SourceKind.Craft:
                     left.Add(new ErrandLeft(line.Need, line.Count, LeftReason.Craft));
@@ -323,6 +337,13 @@ public static class ErrandPlanner
         var trips = Pack(ordered, o.FreeSlots, left);
         return new ErrandPlan(trips, left, Math.Max(0, o.FreeSlots), Math.Max(0, o.MarketCeiling));
     }
+
+    /// <summary>The board lists it (its listings were asked about and there are some).</summary>
+    private static bool OnBoard(ShoppingLine line) => line.Board is { Listings.Count: > 0 };
+
+    /// <summary>A line whose own source is out of reach, as a board line (its cost worked out from the listings).</summary>
+    private static ShoppingLine FromBoard(ShoppingLine line) =>
+        line with { Source = SourceKind.Market, Market = line.Board, MarketCost = null, Vendor = null, Exchange = null };
 
     /// <summary>The vendor to go to: the plan's when it can be reached, else the best reachable one.</summary>
     private static VendorOffer? Reachable(ShoppingLine line, ErrandOptions o)

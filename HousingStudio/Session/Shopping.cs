@@ -203,7 +203,10 @@ public sealed class Shopping : IDisposable
             Allagan.Refresh(soon: true);
         }
 
-        var needs = ShoppingPlanner.NeedsOf(plan, dyesToBuy.Select(d => (d.Stain, d.Count)), s => data.DyeItems(s).FirstOrDefault());
+        // A dye's item to buy (0.9.4): one a vendor sells, else one the board trades, else the first (a dye
+        // can have several items, and the first may be neither).
+        var needs = ShoppingPlanner.NeedsOf(plan, dyesToBuy.Select(d => (d.Stain, d.Count)), s => data.DyeItems(s)
+            .OrderByDescending(i => Offers(i).Count > 0).ThenByDescending(Vendors.Marketable).FirstOrDefault());
         // The fixtures too (0.7.13): got with the rest, then set after placing (Set them for me).
         needs.AddRange(fixtures.Where(i => i != 0).GroupBy(i => i).Select(g => new Need(g.Key, g.Count(), NeedKind.Fixture)));
         // Retainers' names: the game's list (once it's been sent this session), else AutoRetainer's.
@@ -217,7 +220,7 @@ public sealed class Shopping : IDisposable
         var quotes = new Dictionary<uint, MarketQuote>();
         if (scope != null)
         {
-            priced = ShoppingPlanner.ToPrice(needs, retainers, Offers).Where(Vendors.Marketable).ToList();
+            priced = ShoppingPlanner.ToPrice(needs, retainers, Offers, evenSold: true).Where(Vendors.Marketable).ToList();
             // Before the vendors are read, every item looks unsold: wait for them rather than ask about all.
             if (Vendors.Ready) Market.Request(scope, priced);
             quotes = Market.Quotes(scope, priced);

@@ -209,6 +209,34 @@ public class ErrandPlannerTests
     }
 
     [Fact]
+    public void AVendorOutOfReachIsBoughtOnTheBoardWhenListed()
+    {
+        // 0.9.4: sold by a vendor the errands can't reach, and listed on the board: bought there.
+        var shop = Shop(new[] { new Need(200, 2, NeedKind.Dye) }, offers: new[] { Offer(200, 216, district: "goblet") },
+            quotes: new[] { Quote(200, (900, 2, "Lich")) });
+        Assert.Equal(SourceKind.Vendor, shop.Lines.Single().Source);
+        var plan = ErrandPlanner.Build(shop, Options() with { Reachable = v => v.District == "mist" });
+        var stop = Assert.Single(plan.Stops(StopKind.Market));
+        Assert.Equal("Lich", stop.World);
+        Assert.Equal(2, stop.Items.Single().Count);
+        Assert.Empty(plan.Left);
+        // Not listed: left, as before.
+        var unlisted = Shop(new[] { new Need(200, 2, NeedKind.Dye) }, offers: new[] { Offer(200, 216, district: "goblet") });
+        Assert.Equal(LeftReason.NoVendorReachable, Assert.Single(ErrandPlanner.Build(unlisted, Options() with { Reachable = v => v.District == "mist" }).Left).Reason);
+    }
+
+    [Fact]
+    public void AskedAboutAndNoneListedIsSaidSo()
+    {
+        // The board was asked and lists none: not "craft" or "not known" (0.9.4).
+        var shop = Shop(new[] { new Need(400, 1, NeedKind.Piece), new Need(401, 1, NeedKind.Piece) },
+            quotes: new[] { new MarketQuote(400, "Light", Noon, Array.Empty<MarketListing>()) },
+            craft: id => id == 400 ? new CraftOption(400, 9, "Carpenter", 50) : null);
+        var plan = ErrandPlanner.Build(shop, Options());
+        Assert.Equal(new[] { LeftReason.NoneListed, LeftReason.Unknown }, plan.Left.OrderBy(l => l.Need.ItemId).Select(l => l.Reason));
+    }
+
+    [Fact]
     public void CraftAndUnknownAreLeftOut()
     {
         var shop = Shop(new[] { new Need(400, 2, NeedKind.Piece), new Need(401, 1, NeedKind.Piece) },

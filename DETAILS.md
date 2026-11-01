@@ -8,7 +8,14 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.9.3. Placing works in the game; the newer features haven't all been tried in it yet.**
+> **Status: 0.9.4. Placing works in the game; the newer features haven't all been tried in it yet.**
+> 0.9.4: **more of what's on the market board is got.** Something a vendor sells was never looked up on
+> the board, so when the errands couldn't get to that vendor (an aetheryte not attuned, a shop behind a
+> quest) or its currency wasn't allowed, it was left out though the board had it (a Wide Spectrum dye).
+> Now everything tradable that your retainers don't cover is looked up, and the errands buy it on the
+> board when the vendor is out of their reach. A dye with several items is bought as the one a vendor
+> sells, else one the board trades (the first could be neither). And something the board was asked
+> about and has none of is said so ("not on the board just now"), not "to craft" or "not known".
 > 0.9.3: **the dye crash, found**: both crash reports point at the dye confirmation's Yes, sent in the very
 > frame the question came up (0.9.1 had cut the wait before it to a third). Yes now waits for the whole
 > click gap after Dye and for the question to have been open for 0.2 s. **Dyes you don't have aren't
@@ -812,7 +819,10 @@ Each thing is taken from the first source that has it, in this order (`Core/Sour
    marked. Of the NPCs selling an item, `VendorChoice` picks the residential districts' (the district of
    the house you're in first), then any whose spot is known, then the rest; the cheapest of those.
 3. **Market board** ("About 12,000 gil each on Light"): for what no retainer or vendor covers and can be
-   traded, Universalis (`https://universalis.app/api/v2/{dataCentre}/{ids}?listings=20&entries=0`,
+   traded (and, since 0.9.4, what a vendor sells too, kept on the line as `ShoppingLine.Board`: the
+   errands buy it on the board when they can't get to the vendor or may not spend its currency, and a
+   craft or unknown line the board was asked about and lists none of is left as "not on the board just
+   now", `LeftReason.NoneListed`), Universalis (`https://universalis.app/api/v2/{dataCentre}/{ids}?listings=20&entries=0`,
    up to 100 ids a request) for the data centre you're on. The estimate buys whole stacks, cheapest
    first, or the one stack that covers the rest for less, tax included (`MarketQuote.CostFor`); if
    fewer are listed than needed, the rest falls through. Answers are kept 15 minutes (and shown up to

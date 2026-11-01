@@ -565,7 +565,7 @@ public sealed partial class MainWindow
         LeftReason.Craft => Icon.Hammer,
         LeftReason.NoVendorReachable => Icon.Store,
         LeftReason.OverCeiling => Icon.Scale,
-        LeftReason.NotListedHere => Icon.Scale,
+        LeftReason.NotListedHere or LeftReason.NoneListed => Icon.Scale,
         LeftReason.NoRoom => Icon.Backpack,
         LeftReason.Currency => Icon.Store,
         _ => Icon.Info,
