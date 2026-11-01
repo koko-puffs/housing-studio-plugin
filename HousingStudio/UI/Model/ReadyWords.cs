@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using HousingStudio.Core;
 
 namespace HousingStudio.UI.Model;
 
@@ -116,4 +117,34 @@ public static class ReadyWords
 
     /// <summary>The dyes short as a chip: "3 dyes short" (each dye counted as many times as it's needed).</summary>
     public static string DyesShort(int count) => $"{Words.Count(count, "dye")} short";
+
+    /// <summary>
+    /// Under Get's "102 to get": what that is, so it matches the Pieces screen and the shopping list
+    /// without a sum ("99 pieces and 3 fixtures", "99 pieces, 3 fixtures and 2 dyes"); null for nothing.
+    /// </summary>
+    public static string? GetLine(int pieces, int fixtures, int dyes)
+    {
+        var parts = new List<string>();
+        if (pieces > 0) parts.Add(Words.Count(pieces, "piece"));
+        if (fixtures > 0) parts.Add(Words.Count(fixtures, "fixture"));
+        if (dyes > 0) parts.Add(Words.Count(dyes, "dye"));
+        return parts.Count == 0 ? null : Words.List(parts);
+    }
+
+    /// <summary>A Get source chip's words after its count: it counts things, not retainers or vendors ("1 on a retainer", "30 from shops", "71 on the board").</summary>
+    public static string SourceLabel(SourceKind source, int count) => source switch
+    {
+        SourceKind.Retainer => count == 1 ? "on a retainer" : "on retainers",
+        SourceKind.Vendor => "from shops",
+        SourceKind.Exchange => "for currencies",
+        SourceKind.Market => "on the board",
+        SourceKind.Craft => "to craft",
+        _ => "not known",
+    };
+
+    /// <summary>The item limit chip ("46 of 150 item limit").</summary>
+    public static string LimitChip(int after, int limit) => $"{after} of {limit} item limit";
+
+    /// <summary>Ready's Pieces chip ("All 145 pieces").</summary>
+    public static string PiecesChip(int count) => count == 1 ? "1 piece" : $"All {count} pieces";
 }

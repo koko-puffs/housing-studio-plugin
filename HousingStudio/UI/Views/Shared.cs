@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Numerics;
+using Dalamud.Bindings.ImGui;
 using HousingStudio.Core;
 using HousingStudio.UI.Model;
 using static HousingStudio.UI.Theme;
@@ -134,5 +135,81 @@ public sealed partial class MainWindow
             config.Save();
             Notify($"Pinned {name}");
         });
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // A section label with a link on its right, and the pin star.
+
+    /// <summary>
+    /// A section's label (as <see cref="Kit.Section"/>) with, on its right, a link in ivory (true when
+    /// pressed) or plain dim words.
+    /// </summary>
+    private static bool SectionLink(string id, string label, string? link, string? rest = null)
+    {
+        var at = Kit.At;
+        var w = Kit.Width;
+        Kit.Section(label, link == null ? rest : null);
+        if (link == null) return false;
+        var lw = Txt.Measure(link, Face.Sans, 12).X;
+        var lh = Txt.Natural(Face.Sans, 12);
+        var h = Txt.Natural(Face.Mono, 11);
+        var pos = new Vector2(at.X + w - lw, at.Y + h - lh);
+        var (clicked, hovered, _) = Kit.Hit(id, pos - new Vector2(S(4)), new Vector2(lw, lh) + new Vector2(S(8)));
+        Txt.Draw(Kit.Dl, pos, link, Face.Sans, 12, hovered ? Palette.BrassSoft : Palette.Ivory);
+        return clicked;
+    }
+
+    /// <summary>
+    /// The pin star in a round <paramref name="size"/> button at <paramref name="pos"/>: filled brass when
+    /// pinned, an outline when not. Called twice: first for the mouse (before what's under it, so the star
+    /// answers there; true when pressed), then with <paramref name="drawOnly"/> to draw it on top.
+    /// </summary>
+    private static bool StarButton(string id, Vector2 pos, float size, bool on, string? tip, bool drawOnly = false)
+    {
+        var hovered = !Kit.Blocked && ImGui.IsWindowHovered() && ImGui.IsMouseHoveringRect(pos, pos + new Vector2(size));
+        if (!drawOnly)
+        {
+            var (clicked, hov, _) = Kit.Hit(id, pos, new Vector2(size));
+            if (hov && tip != null) Kit.Tooltip(tip);
+            return clicked;
+        }
+        var dl = Kit.Dl;
+        var c = pos + new Vector2(size / 2);
+        if (hovered) dl.AddCircleFilled(c, size / 2, Palette.U32(Palette.LineFaint), 24);
+        Star(dl, c, size * 0.3f, on || hovered ? Palette.Brass : Palette.Ash, on);
+        return false;
+    }
+
+    /// <summary>A five-pointed star around <paramref name="c"/>, filled (as a fan of triangles: it isn't convex) or outlined.</summary>
+    private static void Star(ImDrawListPtr dl, Vector2 c, float r, Vector4 color, bool filled)
+    {
+        Span<Vector2> p = stackalloc Vector2[10];
+        for (var i = 0; i < 10; i++)
+        {
+            var a = -MathF.PI / 2 + i * MathF.PI / 5;
+            var rad = i % 2 == 0 ? r : r * 0.45f;
+            p[i] = c + new Vector2(MathF.Cos(a), MathF.Sin(a)) * rad;
+        }
+        var col = Palette.U32(color);
+        if (filled)
+        {
+            for (var i = 0; i < 10; i++) dl.AddTriangleFilled(c, p[i], p[(i + 1) % 10], col);
+            return;
+        }
+        dl.AddPolyline(ref p[0], 10, col, ImDrawFlags.Closed, MathF.Max(1f, S(1.4f)));
+    }
+
+    /// <summary>A header's round pin button (40px, as Settings beside it): a brass ★ when pinned, a ☆ when not.</summary>
+    private static bool PinRound(string id, Vector2 pos, bool on, string tip)
+    {
+        var size = S(40);
+        var (clicked, hovered, _) = Kit.Hit(id, pos, new Vector2(size));
+        var dl = Kit.Dl;
+        var c = pos + new Vector2(size / 2);
+        dl.AddCircleFilled(c, size / 2, Palette.U32(hovered ? Palette.GlassLive : Palette.Glass), 32);
+        dl.AddCircle(c, size / 2 - 0.5f, Palette.U32(on ? Palette.BrassEdge : hovered ? Palette.LineHover : Palette.Line), 32, 1f);
+        Star(dl, c, size * 0.24f, on ? Palette.Brass : hovered ? Palette.Ivory : Palette.Ash, on);
+        if (hovered) Kit.Tooltip(tip);
+        return clicked;
     }
 }

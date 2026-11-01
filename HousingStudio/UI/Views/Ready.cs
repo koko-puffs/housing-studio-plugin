@@ -68,38 +68,39 @@ public sealed partial class MainWindow
         var plan = session.Plan;
         var summary = StartSummary.Of(entries, config.DyeAfterPlacing);
 
-        // Header: eyebrow, the design's name, the pill; Pieces, Settings and close on the right.
+        // Header (0.9.0, the shared one): back at the top left (closes the design, which stays in Recent),
+        // the eyebrow and the name on up to two lines, the pin ☆ and Settings on the right; the pill under it.
         Frame.BeginHeader(24);
-        var at = Kit.At;
         var w = Kit.Width;
-        const string piecesLabel = "Pieces";
-        var piecesW = Kit.ButtonWidth(piecesLabel, BtnSize.Md, Icon.List);
-        var buttonsW = piecesW + S(8) + S(40) + S(8) + S(40);
-        var leftW = w - buttonsW - S(16);
         var kind = layout.BuildName != null ? "Build" : "MakePlace";
-        var eyebrowH = Kit.Eyebrow(at, $"{kind} · {(side == Side.Garden ? "garden" : "inside")}", null, leftW);
-        var y = at.Y + eyebrowH + S(8);
-        var titleH = Title(new Vector2(at.X, y), session.Title, null, leftW);
-        y += titleH + S(8);
-        var (pill, tone) = ReadyPill();
-        // Below the buttons (40 tall, at the header's top), the pill has the whole width (0.3.4 kept it to the
-        // width beside them, and cut "you can decorate" short).
-        Kit.StatusPill(new Vector2(at.X, y), pill, tone, maxWidth: y >= at.Y + S(40) + S(4) ? w : leftW);
-        y += S(28);
-        var bx = at.X + w - buttonsW;
-        if (Kit.Button("##pieces", new Vector2(bx, at.Y), piecesLabel, Btn.Glass, BtnSize.Md, Icon.List)) sub = Sub.Pieces;
-        SettingsButton(new Vector2(bx + piecesW + S(8), at.Y));
+        var path = session.FilePath;
+        var pinned = vm.IsPinned(path);
+        var rightW = S(40) + S(8) + S(40);
         // Not while the fixtures go (closing the design would stop them, with no question).
         var fixturesGoing = Plugin.FixtureRun.Active;
-        if (Kit.IconButton("##close", new Vector2(bx + piecesW + S(8) + S(48), at.Y), Icon.X,
-                fixturesGoing ? "Stop the fixtures first" : "Close this design", disabled: fixturesGoing))
-            Later(() =>
+        var back = ScreenHeader(fixturesGoing ? "Stop the fixtures first" : "Back to Home (the design stays in Recent)",
+            $"{kind} · {(side == Side.Garden ? "garden" : "inside")}", session.Title, null, 26, rightW, pos =>
             {
-                if (Plugin.FixtureRun.Active) return;
-                session.Unload();
-                vm.Dismiss();
+                if (path != null && PinRound("##ready-pin", pos, pinned, pinned ? "Unpin it from Home" : "Pin it to the top of Home"))
+                    TogglePin(path, session.Title);
+                SettingsButton(pos + new Vector2(S(48), 0));
             });
-        Kit.Reserve(at, w, y - at.Y);
+        if (back)
+        {
+            if (fixturesGoing) Notify("Stop the fixtures first");
+            else
+                Later(() =>
+                {
+                    if (Plugin.FixtureRun.Active) return;
+                    session.Unload();
+                    vm.Dismiss();
+                });
+        }
+        Kit.Gap(10);
+        var (pill, tone) = ReadyPill();
+        var pillAt = Kit.At;
+        Kit.StatusPill(pillAt, pill, tone, maxWidth: w);
+        Kit.Reserve(pillAt, w, S(28));
         Frame.EndHeader();
 
         Frame.BeginBody("##ready", "ready-foot", 20, 22);
@@ -204,6 +205,9 @@ public sealed partial class MainWindow
     private (ShoppingPlan? Shop, int Things, string Big, string? Aside, (Icon Icon, string Count, string Label)[] Sources) getWords =
         (null, 0, string.Empty, null, Array.Empty<(Icon, string, string)>());
 
+    /// <summary>What Get's "N to get" is ("99 pieces and 3 fixtures"), made with <see cref="getWords"/>.</summary>
+    private string? getLine;
+
     private static readonly (SourceKind Source, Icon Icon, string Label)[] GetSources =
     {
         (SourceKind.Retainer, Icon.Bell, "retainers"),
@@ -217,11 +221,13 @@ public sealed partial class MainWindow
     private (ShoppingPlan? Shop, int Things, string Big, string? Aside, (Icon Icon, string Count, string Label)[] Sources) GetWords(ShoppingPlan shop)
     {
         if (ReferenceEquals(getWords.Shop, shop)) return getWords;
-        var things = shop.Lines.Sum(l => l.Count);
+        var things = ShoppingScreen.Things(shop);
         var sources = new List<(Icon, string, string)>();
-        foreach (var (source, icon, label) in GetSources)
-            if (shop.Count(source) is > 0 and var n) sources.Add((icon, n.ToString(), label));
-        return getWords = (shop, things, $"{things} missing", shop.TotalGil > 0 ? $"about {ShoppingList.Gil(shop.TotalGil)}" : null, sources.ToArray());
+        foreach (var (source, icon, _) in GetSources)
+            if (shop.Count(source) is > 0 and var n) sources.Add((icon, n.ToString(), ReadyWords.SourceLabel(source, n)));
+        var (pieces, fixtures, dyes) = ShoppingScreen.Counts(shop);
+        getLine = ReadyWords.GetLine(pieces, fixtures, dyes);
+        return getWords = (shop, things, ShoppingScreen.Title(shop), shop.TotalGil > 0 ? $"about {ShoppingList.Gil(shop.TotalGil)}" : null, sources.ToArray());
     }
 
 
@@ -243,6 +249,12 @@ public sealed partial class MainWindow
         {
             var g = GetWords(shop);
             Kit.StageHead(ReadyGet, g.Big, g.Aside);
+            // What "N to get" is, as the Pieces screen and the list count it ("99 pieces and 3 fixtures").
+            if (getLine != null)
+            {
+                Kit.Gap(2);
+                Txt.Note(getLine);
+            }
             Kit.Gap(10);
             var row = new Kit.Wrap(8);
             foreach (var (icon, count, label) in g.Sources)

@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
@@ -44,13 +46,30 @@ public sealed partial class MainWindow
 
         Frame.BeginBody("##start", null, 20, 22);
         CareNotice();
-        DrawDropZone();
+        // 0.9.0: pinned designs first, then a one-row Load, This house (with its backups), and a short
+        // Recent at the bottom. On a first start (nothing pinned or recent) the load row is the big one.
+        var pins = vm.Pinned();
+        var firstStart = pins.Count == 0 && vm.RecentCount == 0;
+        if (!firstStart)
+        {
+            DrawPins(pins);
+            Kit.Gap(14);
+        }
+        DrawDropZone(firstStart);
         if (session.LoadError != null && session.Layout == null)
         {
             Kit.Gap(12);
             AlertNote(session.LoadError, Palette.Danger);
         }
+        backupsDrawn = false;
         DrawThisHouse();
+        if (!backupsDrawn && vm.BackupRows().Count > 0)
+        {
+            Kit.Gap(14);
+            Kit.BeginPanel("##backups-panel", 10, 14, 10);
+            DrawBackups();
+            Kit.EndPanel();
+        }
         DrawFromSite();
         DrawRecent();
         Frame.BeginBottom("start-bottom");
@@ -80,12 +99,12 @@ public sealed partial class MainWindow
     /// design" and its note, and Choose a file on the right (under the words when narrow). Pressing
     /// anywhere on it chooses a file too; a file dragged over it lights it in brass.
     /// </summary>
-    private void DrawDropZone()
+    private void DrawDropZone(bool big = false)
     {
         var at = Kit.At;
         var w = Kit.Width;
-        var pad = S(18);
-        var well = S(44);
+        var pad = S(big ? 34 : 14);
+        var well = S(big ? 52 : 40);
         const string label = "Choose a file";
         var bw = Kit.ButtonWidth(label, BtnSize.Tiny);
         var bh = Kit.ButtonHeight(BtnSize.Tiny);
@@ -248,6 +267,13 @@ public sealed partial class MainWindow
         row.End();
         DrawSendState();
         DrawShotHint();
+        if (vm.BackupRows().Count > 0)
+        {
+            Kit.Gap(12);
+            Kit.Divider(Kit.At.X, Kit.At.X + Kit.Width, Kit.At.Y);
+            Kit.Gap(6);
+            DrawBackups();
+        }
         Kit.EndPanel();
 
         if (changesOpen && kept != null) DrawChanges(check);
@@ -260,13 +286,26 @@ public sealed partial class MainWindow
 
     private string? recentMenuFor;
 
-    /// <summary>Recent: the eyebrow, then a panel of rows (house badge, name, "447 pieces · House (medium) · today 05.24", kind, chevron).</summary>
+    /// <summary>Recent shows its three newest designs until "Show all" is pressed.</summary>
+    private bool recentAll;
+
+    private const int RecentShown = 3;
+
+    /// <summary>
+    /// Recent, at the bottom (0.9.0): designs only (backups are in This house, pinned designs at the top),
+    /// the newest three with "Show all N" for the rest. Each row: house badge, name, "447 pieces · House
+    /// (medium) · today 05.24", kind and chevron; hovering shows a ☆ that pins it, and right-click has Pin
+    /// and Take it off this list.
+    /// </summary>
     private void DrawRecent()
     {
-        var rows = vm.Recent();
-        if (rows.Count == 0) return;
+        var total = vm.RecentCount;
+        if (total == 0) return;
+        if (total <= RecentShown) recentAll = false;
+        var rows = vm.Recent(recentAll ? 50 : RecentShown);
         Kit.Gap(18);
-        Kit.Section("Recent");
+        var link = total > RecentShown ? recentAll ? "Show fewer" : $"Show all {total}" : null;
+        if (SectionLink("##recent-all", "Recent", link)) recentAll = !recentAll;
         Kit.Gap(10);
         Kit.BeginPanel("##recent", 6, 6, 6);
         var dl = Kit.Dl;
@@ -279,15 +318,27 @@ public sealed partial class MainWindow
             var h = S(12) * 2 + MathF.Max(S(36), nameH + S(2) + S(19.5f));
             if (i > 0) Kit.Divider(at.X, at.X + w, at.Y - 0.5f);
 
-            var (clicked, hovered, _) = Kit.Hit($"##recent{i}", at, new Vector2(w, h), !row.Exists && row.Backup);
-            if (clicked && row.Exists) Open(row.Path);
-            if (!row.Backup && ImGui.IsItemClicked(ImGuiMouseButton.Right) && !Kit.Blocked)
+            var chevronX = at.X + w - S(14) - S(16);
+            var kindW = Txt.SpacedWidth(row.Kind, Face.Mono, 11, 0.1f);
+            var kindX = chevronX - S(14) - kindW;
+            // The ☆ goes in first, so it (not the row under it) answers the mouse there.
+            var starSize = S(28);
+            var starAt = new Vector2(kindX - S(8) - starSize, at.Y + (h - starSize) / 2);
+            var rowHovered = !Kit.Blocked && ImGui.IsWindowHovered() && ImGui.IsMouseHoveringRect(at, at + new Vector2(w, h));
+            var overStar = rowHovered && ImGui.IsMouseHoveringRect(starAt, starAt + new Vector2(starSize));
+            if (rowHovered && row.Exists && StarButton($"##recent-pin{i}", starAt, starSize, false, "Pin to the top of Home"))
+                TogglePin(row.Path, row.Name);
+
+            var (clicked, hovered, _) = Kit.Hit($"##recent{i}", at, new Vector2(w, h));
+            if (clicked && row.Exists && !overStar) Open(row.Path);
+            if (ImGui.IsItemClicked(ImGuiMouseButton.Right) && !Kit.Blocked)
             {
                 recentMenuFor = row.Path;
                 ImGui.OpenPopup("##recent-menu");
             }
-            if (hovered) dl.AddRectFilled(at, at + new Vector2(w, h), Palette.U32(Palette.LineFaint), S(Palette.RadiusMd));
+            if (hovered || rowHovered) dl.AddRectFilled(at, at + new Vector2(w, h), Palette.U32(Palette.LineFaint), S(Palette.RadiusMd));
             if (hovered && !row.Exists) Kit.Tooltip("This file isn't there any more. Right-click to take it off the list.");
+            if (rowHovered && row.Exists) StarButton($"##recent-pin-draw{i}", starAt, starSize, false, null, drawOnly: true);
 
             var x = at.X + S(14);
             var badge = new Vector2(x, at.Y + (h - S(36)) / 2);
@@ -295,10 +346,7 @@ public sealed partial class MainWindow
             Icons.Draw(dl, Icon.House, badge + new Vector2(S(10)), S(16), Palette.Brass);
             x += S(36) + S(14);
 
-            var chevronX = at.X + w - S(14) - S(16);
-            var kindW = Txt.SpacedWidth(row.Kind, Face.Mono, 11, 0.1f);
-            var kindX = chevronX - S(14) - kindW;
-            var textW = kindX - S(14) - x;
+            var textW = (rowHovered ? starAt.X : kindX) - S(14) - x;
             var textTop = at.Y + (h - (nameH + S(2) + S(19.5f))) / 2;
             Txt.Line(dl, new Vector2(x, textTop), Txt.Fit(row.Name, Face.SansMedium, 14, textW), Face.SansMedium, 14, row.Exists ? Palette.Ivory : Palette.Dim);
             Txt.Line(dl, new Vector2(x, textTop + nameH + S(2)), Txt.Fit(row.Note, Face.Sans, 13, textW), Face.Sans, 13, Palette.Ash, 19.5f);
@@ -308,6 +356,11 @@ public sealed partial class MainWindow
         }
         if (Kit.BeginMenu("##recent-menu"))
         {
+            if (recentMenuFor != null && File.Exists(recentMenuFor) && Kit.MenuItem("##pin", "Pin to the top of Home", Icon.Bookmark))
+            {
+                TogglePin(recentMenuFor);
+                ImGui.CloseCurrentPopup();
+            }
             if (Kit.MenuItem("##remove", "Take it off this list", Icon.X) && recentMenuFor != null)
             {
                 config.RecentFiles.Remove(recentMenuFor);
@@ -318,6 +371,185 @@ public sealed partial class MainWindow
             Kit.EndMenu();
         }
         Kit.EndPanel();
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Pinned (0.9.0): three tiles at the top.
+
+    private string? pinMenuFor;
+
+    /// <summary>
+    /// "Pinned · N of 3" and a row of three tiles: a picture well, the name on up to two lines, and
+    /// "145 pieces · Apartment". A tile opens its design; its ★ unpins, as does right-click's Remove. An
+    /// empty slot is a dashed tile saying how to pin. Narrow windows stack the tiles.
+    /// </summary>
+    private void DrawPins(List<RecentRow> pins)
+    {
+        SectionLink("##pins-count", "Pinned", null, $"{pins.Count} of {PinsMost}");
+        Kit.Gap(10);
+        var at = Kit.At;
+        var w = Kit.Width;
+        var gap = S(10);
+        var columns = (w - gap * 2) / 3 >= S(112) ? 3 : 1;
+        var tw = columns == 3 ? (w - gap * 2) / 3 : w;
+        var pad = S(10);
+        var shotH = columns == 3 ? S(54) : S(40);
+        var nameH = Txt.Natural(Face.SansMedium, 13);
+        var metaH = Txt.Natural(Face.Sans, 12);
+        var th = columns == 3 ? pad + shotH + S(8) + nameH * 2 + S(2) + metaH + pad : pad * 2 + MathF.Max(shotH, nameH * 2 + metaH);
+        var dl = Kit.Dl;
+        var r = S(Palette.RadiusLg);
+        const string hint = "Pin a design from Recent";
+        // Stacked (a narrow window), one empty row is enough.
+        var slots = columns == 3 ? PinsMost : Math.Min(PinsMost, pins.Count + 1);
+        for (var slot = 0; slot < slots; slot++)
+        {
+            var pos = columns == 3 ? new Vector2(at.X + slot * (tw + gap), at.Y) : new Vector2(at.X, at.Y + slot * (th + gap));
+            var size = new Vector2(tw, th);
+            if (slot >= pins.Count)
+            {
+                Kit.Dashed(pos, pos + size, r, Palette.LineDashed, S(1));
+                var words = Txt.Fit(hint, Face.Sans, 12, tw - pad * 2);
+                var ww = Txt.Measure(words, Face.Sans, 12).X;
+                Txt.Draw(dl, pos + new Vector2((tw - ww) / 2, (th - metaH) / 2), words, Face.Sans, 12, Palette.Dim);
+                continue;
+            }
+            var pin = pins[slot];
+            var starSize = S(26);
+            var starAt = columns == 3 ? pos + new Vector2(tw - pad - starSize + S(4), pad - S(4)) : pos + new Vector2(tw - pad - starSize, (th - starSize) / 2);
+            var tileHovered = !Kit.Blocked && ImGui.IsWindowHovered() && ImGui.IsMouseHoveringRect(pos, pos + size);
+            var overStar = tileHovered && ImGui.IsMouseHoveringRect(starAt, starAt + new Vector2(starSize));
+            if (StarButton($"##unpin{slot}", starAt, starSize, true, "Unpin"))
+                TogglePin(pin.Path, pin.Name);
+            var (clicked, hovered, _) = Kit.Hit($"##pin{slot}", pos, size);
+            if (clicked && pin.Exists && !overStar) Open(pin.Path);
+            if (ImGui.IsItemClicked(ImGuiMouseButton.Right) && !Kit.Blocked)
+            {
+                pinMenuFor = pin.Path;
+                ImGui.OpenPopup("##pin-menu");
+            }
+            if (hovered && !pin.Exists) Kit.Tooltip("This file isn't there any more. Right-click to remove the pin.");
+
+            dl.AddRectFilled(pos, pos + size, Palette.U32(hovered || tileHovered ? Palette.GlassLive : Palette.Glass), r);
+            dl.AddRect(pos, pos + size, Palette.U32(hovered || tileHovered ? Palette.LineHover : Palette.Line), r, ImDrawFlags.None, 1f);
+            Vector2 shotAt;
+            Vector2 shotSize;
+            float textX, textTop, textW;
+            if (columns == 3)
+            {
+                shotAt = pos + new Vector2(pad);
+                shotSize = new Vector2(tw - pad * 2, shotH);
+                textX = pos.X + pad;
+                textTop = shotAt.Y + shotH + S(8);
+                textW = tw - pad * 2;
+            }
+            else
+            {
+                shotAt = pos + new Vector2(pad, (th - shotH) / 2);
+                shotSize = new Vector2(shotH);
+                textX = shotAt.X + shotH + S(12);
+                textTop = pos.Y + (th - (nameH * 2 + metaH)) / 2;
+                textW = starAt.X - S(8) - textX;
+            }
+            dl.AddRectFilled(shotAt, shotAt + shotSize, Palette.U32(Palette.Photo), S(Palette.RadiusSm));
+            Icons.Draw(dl, Icon.House, shotAt + shotSize / 2 - new Vector2(S(9)), S(18), Palette.Brass);
+            StarButton($"##unpin-draw{slot}", starAt, starSize, true, null, drawOnly: true);
+            var (one, two) = TwoLines(pin.Name, Face.SansMedium, 13, textW);
+            var nameColor = pin.Exists ? Palette.Ivory : Palette.Dim;
+            Txt.Line(dl, new Vector2(textX, textTop), one, Face.SansMedium, 13, nameColor);
+            if (two.Length > 0) Txt.Line(dl, new Vector2(textX, textTop + nameH), two, Face.SansMedium, 13, nameColor);
+            var meta = pin.Exists ? PinMeta(pin.Note) : "Not found";
+            Txt.Line(dl, new Vector2(textX, textTop + nameH * 2 + S(2)), Txt.Fit(meta, Face.Sans, 12, textW), Face.Sans, 12, Palette.Ash);
+        }
+        if (Kit.BeginMenu("##pin-menu"))
+        {
+            if (pinMenuFor != null && File.Exists(pinMenuFor) && Kit.MenuItem("##pin-open", "Open", Icon.ChevronRight))
+            {
+                Open(pinMenuFor);
+                ImGui.CloseCurrentPopup();
+            }
+            if (Kit.MenuItem("##pin-remove", "Remove from pinned", Icon.X) && pinMenuFor != null)
+            {
+                TogglePin(pinMenuFor);
+                ImGui.CloseCurrentPopup();
+            }
+            Kit.EndMenu();
+        }
+        var rows = columns == 3 ? 1 : slots;
+        Kit.Reserve(at, w, rows * th + (rows - 1) * gap);
+    }
+
+    /// <summary>A pin's note without its "when" ("145 pieces · Apartment · yesterday" → "145 pieces · Apartment").</summary>
+    private static string PinMeta(string note)
+    {
+        var parts = note.Split(" · ");
+        return parts.Length >= 3 ? string.Join(" · ", parts.Take(2)) : note;
+    }
+
+    /// <summary>A name on at most two lines: as many words as fit on the first, the rest cut to fit on the second.</summary>
+    private static (string One, string Two) TwoLines(string text, Face face, int px, float width)
+    {
+        if (Txt.Measure(text, face, px).X <= width) return (text, string.Empty);
+        var words = text.Split(' ');
+        var first = words[0];
+        var n = 1;
+        while (n < words.Length && Txt.Measure(first + " " + words[n], face, px).X <= width)
+        {
+            first += " " + words[n];
+            n++;
+        }
+        if (Txt.Measure(first, face, px).X > width) return (Txt.Fit(text, face, px, width), string.Empty);
+        return (first, Txt.Fit(string.Join(' ', words.Skip(n)), face, px, width));
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Backups (0.9.0): one row in This house, opening the list.
+
+    private bool backupsOpen;
+    private bool backupsDrawn;
+
+    /// <summary>
+    /// "Backups · 3 · newest yesterday" with a chevron; pressed, the backups the runs saved (and homes kept
+    /// by a swap) are listed under it, newest first, each opening as a design.
+    /// </summary>
+    private void DrawBackups()
+    {
+        backupsDrawn = true;
+        var rows = vm.BackupRows();
+        if (rows.Count == 0) return;
+        var at = Kit.At;
+        var w = Kit.Width;
+        var dl = Kit.Dl;
+        var h = S(36);
+        var (clicked, hovered, _) = Kit.Hit("##backups", at, new Vector2(w, h));
+        if (clicked) backupsOpen = !backupsOpen;
+        if (hovered) dl.AddRectFilled(at, at + new Vector2(w, h), Palette.U32(Palette.LineFaint), S(Palette.RadiusMd));
+        Icons.Draw(dl, Icon.Undo, new Vector2(at.X + S(6), at.Y + (h - S(16)) / 2), S(16), Palette.Ash);
+        var newest = rows[0].Note.Split(" · ").LastOrDefault() ?? string.Empty;
+        var words = $"Backups · {rows.Count}{(newest.Length > 0 ? $" · newest {newest}" : string.Empty)}";
+        var textX = at.X + S(6) + S(16) + S(10);
+        var chevronX = at.X + w - S(6) - S(16);
+        Txt.Line(dl, new Vector2(textX, at.Y + (h - Txt.Natural(Face.Sans, 13)) / 2), Txt.Fit(words, Face.Sans, 13, chevronX - S(8) - textX), Face.Sans, 13, Palette.Text);
+        Icons.Draw(dl, backupsOpen ? Icon.ChevronDown : Icon.ChevronRight, new Vector2(chevronX, at.Y + (h - S(16)) / 2), S(16), Palette.Dim);
+        if (hovered) Kit.Tooltip("What was here before each run: open one to put it back");
+        Kit.Reserve(at, w, h);
+        if (!backupsOpen) return;
+        foreach (var (row, i) in rows.Select((r, i) => (r, i)))
+        {
+            var ra = Kit.At;
+            var rh = S(40);
+            var (rc, rhov, _) = Kit.Hit($"##backup{i}", ra, new Vector2(w, rh), !row.Exists);
+            if (rc) Open(row.Path);
+            if (rhov) dl.AddRectFilled(ra, ra + new Vector2(w, rh), Palette.U32(Palette.LineFaint), S(Palette.RadiusMd));
+            var kindW = Txt.SpacedWidth(row.Kind, Face.Mono, 11, 0.1f);
+            var tx = textX;
+            var tw = at.X + w - S(6) - kindW - S(12) - tx;
+            var top = ra.Y + (rh - Txt.Natural(Face.Sans, 13) - Txt.Natural(Face.Sans, 12)) / 2;
+            Txt.Line(dl, new Vector2(tx, top), Txt.Fit(row.Name, Face.Sans, 13, tw), Face.Sans, 13, row.Exists ? Palette.Ivory : Palette.Dim);
+            Txt.Line(dl, new Vector2(tx, top + Txt.Natural(Face.Sans, 13)), Txt.Fit(row.Note, Face.Sans, 12, tw), Face.Sans, 12, Palette.Ash);
+            Txt.Spaced(dl, new Vector2(at.X + w - S(6) - kindW, ra.Y + (rh - Txt.Natural(Face.Mono, 11)) / 2), row.Kind, Face.Mono, 11, Palette.Dim, 0.1f);
+            Kit.Reserve(ra, w, rh);
+        }
     }
 
     private static readonly Run[] BrowseRuns =

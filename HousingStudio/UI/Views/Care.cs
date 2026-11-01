@@ -65,7 +65,8 @@ public sealed partial class MainWindow
             return;
         }
         var pressed = Kit.CheckChips(readyChecks.Chips, openCheck);
-        if (pressed >= 0) openCheck = openCheck == checks[pressed].Chip.Id ? null : checks[pressed].Chip.Id;
+        if (pressed >= 0 && checks[pressed].Chip.Id == PiecesChipId) sub = Sub.Pieces;
+        else if (pressed >= 0) openCheck = openCheck == checks[pressed].Chip.Id ? null : checks[pressed].Chip.Id;
         ReadyCheck? open = null;
         foreach (var c in checks)
             if (c.Chip.Id == openCheck) open = c;
@@ -129,6 +130,8 @@ public sealed partial class MainWindow
     /// go on this side, the dyes short, the storeroom not read, Near me, the floors left out, and the
     /// pieces placed from the other side. None when there's nothing to say.
     /// </summary>
+    private const string PiecesChipId = "##check-pieces-all";
+
     private List<ReadyCheck> ReadyChecks(StartSummary s, int shown)
     {
         var plan = session.Plan;
@@ -153,7 +156,7 @@ public sealed partial class MainWindow
             var check = ItemLimits.Check(planSide, ctx.HouseSize, layout.Pieces(planSide).Count(), session.Live.Count - clearing,
                 Math.Max(0, plan.Extras.Count - clearing), s.Places);
             if (check is { } c)
-                list.Add(new ReadyCheck(new CheckChipSpec("##check-limit", $"{c.After} of {c.Limit}", c.Over > 0 ? ChipTone.Warn : ChipTone.Normal, null,
+                list.Add(new ReadyCheck(new CheckChipSpec("##check-limit", ReadyWords.LimitChip(c.After, c.Limit), c.Over > 0 ? ChipTone.Warn : ChipTone.Normal, null,
                         c.Limit > 0 ? (float)c.After / c.Limit : 0, "Pieces in the home once Start is done, of the most it holds"),
                     Para(CareWords.LimitDetail(c, planSide, ctx.HouseSize, clearing > 0)), CheckActions.None));
         }
@@ -204,6 +207,11 @@ public sealed partial class MainWindow
             list.Add(new ReadyCheck(new CheckChipSpec("##check-other", $"{layout.Interior.Count} inside", ChipTone.Normal, Icon.House),
                 Para($"Its {Words.Count(layout.Interior.Count, "piece")} inside {(layout.Interior.Count == 1 ? "is" : "are")} placed from inside the house."),
                 CheckActions.None));
+
+        // Pieces (0.9.0: a chip with the design's other facts, no longer a header button): opens the list.
+        var all = layout.Pieces(side).Count();
+        if (all > 0)
+            list.Add(new ReadyCheck(new CheckChipSpec(PiecesChipId, ReadyWords.PiecesChip(all), ChipTone.Normal, Icon.List), Array.Empty<Run>(), CheckActions.None));
 
         readyChecks = (key, list, list.Select(c => c.Chip).ToArray());
         return list;
