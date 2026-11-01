@@ -12,19 +12,18 @@ using static HousingStudio.UI.Theme;
 
 namespace HousingStudio.UI;
 
-/// <summary>Settings' tabs (the 0.6 flow): what Start does, getting what's missing, the Beta features, and help.</summary>
+/// <summary>Settings' tabs: what Start does, getting what's missing, and help.</summary>
 public enum SettingsTab
 {
     Placing,
     Getting,
-    Beta,
     Help,
 }
 
 /// <summary>
 /// Settings (the 0.6 flow, docs/mockups/flow.html), from the header: four tabs as small pills under the
 /// title, Placing (what Start does, the pace, markers, and More options), Getting (market prices, the
-/// errands' limits, the Housing Studio account and what it brings from the site), Beta (the experimental features' switches) and Help
+/// errands' limits, the Housing Studio account and what it brings from the site) and Help
 /// (step by step, the recorder, the place words, the windows and clicks, trusting the errands' new
 /// clicks). Each setting is one row: its name, one line, the control on the right; the longer words
 /// are its tooltip. The version and What's new at the foot.
@@ -44,17 +43,15 @@ public sealed partial class MainWindow
     private const int MoreCount = 12;
 
     private const int GettingRows = 8;
-    private const int BetaRows = 5;
 
     private static readonly TabSpec[] SettingsTabs =
     {
         new("Placing"),
         new("Getting", GettingRows.ToString()),
-        new("Beta", BetaRows.ToString()),
         new("Help"),
     };
 
-    private static readonly string[] SettingsBodies = { "##settings-placing", "##settings-getting", "##settings-beta", "##settings-help" };
+    private static readonly string[] SettingsBodies = { "##settings-placing", "##settings-getting", "##settings-help" };
 
     /// <summary>Opens Settings on Placing (Dalamud's cog, /hstudio settings); during a run, the run.</summary>
     public void ShowSettings() => ShowSettings(SettingsTab.Placing);
@@ -100,9 +97,6 @@ public sealed partial class MainWindow
         {
             case SettingsTab.Getting:
                 DrawGettingTab();
-                break;
-            case SettingsTab.Beta:
-                DrawBetaTab();
                 break;
             case SettingsTab.Help:
                 DrawHelpTab();
@@ -191,6 +185,25 @@ public sealed partial class MainWindow
         var delta = 0;
         SetRow(index, name, note, Kit.StepperWidth(value), S(40), p => delta = Kit.Stepper(id, p, value, canDown, canUp), false, tip);
         return delta;
+    }
+
+    /// <summary>
+    /// The market ceiling: a stepper through <see cref="ErrandWords.Ceilings"/> whose value can be typed
+    /// in too (up to the gil cap). True when it changed (and was saved).
+    /// </summary>
+    private bool CeilingRow(int index, string id, string note, string? tip = null)
+    {
+        var now = config.ErrandsMarketCeiling;
+        var shown = ErrandWords.Gil(now);
+        var delta = 0;
+        string? typed = null;
+        SetRow(index, "Market ceiling", note, Kit.StepperWidth(shown), S(40),
+            p => delta = Kit.StepperEdit(id, p, shown, now > 0, now < ErrandWords.GilCap, out typed), false, tip);
+        var next = delta != 0 ? ErrandWords.StepCeiling(now, delta) : typed != null && ErrandWords.ParseGil(typed) is { } v ? v : now;
+        if (next == now) return false;
+        config.ErrandsMarketCeiling = next;
+        config.Save();
+        return true;
     }
 
     /// <summary>A setting with a small button on the right; true when it's pressed.</summary>
@@ -396,15 +409,9 @@ public sealed partial class MainWindow
             config.LookUpMarketPrices = !config.LookUpMarketPrices;
             config.Save();
         }
-        const string errands = " Used by Get everything for me (Beta).";
-        var d = StepperRow(i++, "##errand-ceiling", "Market ceiling", "The most errands spend there", ErrandWords.Gil(config.ErrandsMarketCeiling),
-            config.ErrandsMarketCeiling > 0, config.ErrandsMarketCeiling < ErrandWords.Ceilings[^1],
-            "The most the errands may spend on the market board in all; 0 buys nothing there." + errands);
-        if (d != 0)
-        {
-            config.ErrandsMarketCeiling = ErrandWords.StepCeiling(config.ErrandsMarketCeiling, d);
-            config.Save();
-        }
+        const string errands = " Used by Get everything for me.";
+        CeilingRow(i++, "##errand-ceiling", "The most errands spend there",
+            "The most the errands may spend on the market board in all; 0 buys nothing there. Type a number in (2500000, 2.5m, 750k) or step through." + errands);
         if (SwitchRow(i++, "##errand-worlds", "Other worlds", "Buy across your data centre", config.ErrandsOtherWorlds,
                 "The other worlds of your data centre (Lifestream visits them). Off: your home world only." + errands))
         {
@@ -429,7 +436,7 @@ public sealed partial class MainWindow
             config.Save();
         }
         var spare = config.ErrandsSpareSlots;
-        d = StepperRow(i++, "##errand-spare", "Spare bag slots", "Each trip leaves these empty", spare.ToString(), spare > 0, spare < 20,
+        var d = StepperRow(i++, "##errand-spare", "Spare bag slots", "Each trip leaves these empty", spare.ToString(), spare > 0, spare < 20,
             "Bag slots the errands leave free, for a stack that doesn't join one already there or a quest item." + errands);
         if (d != 0)
         {
@@ -458,75 +465,25 @@ public sealed partial class MainWindow
     /// <summary>
     /// Way to your door: you walk from where the home teleport lands you to your front door and go in,
     /// once, and the errands follow that way (vnavmesh's own runs into the walls: a ward's map has no
-    /// houses in it). Record / Stop; Forget when one's recorded in this zone.
+    /// houses in it). Record (again, to replace it) / Stop. The note says whether this home's plot has one.
     /// </summary>
     private void DrawDoorWayRow(int index)
     {
         var errands = Plugin.Errands;
-        var recorded = errands.HasWayHere(out var n);
+        var home = ErrandGame.HomeHere(session.Context);
+        var way = errands.WayFor(home);
         var note = errands.WayNote
-                   ?? (recorded ? $"{(n == 1 ? "One way" : $"{n} ways")} recorded in this ward's zone" : "Walk it once; the errands follow it");
-        var label = errands.RecordingWay ? "Stop" : recorded ? "Forget" : "Record";
+                   ?? (home is null ? "Recorded once, walked by the errands"
+                       : home.Kind == HomeKind.Apartment ? "An apartment: none needed"
+                       : way != null ? $"Recorded for plot {home.Plot}: {DoorWays.Length(way.Spots()):0} yalms"
+                       : $"None for plot {home.Plot} yet: record it once");
+        var label = errands.RecordingWay ? "Stop" : way != null ? "Record again" : "Record";
         const string tip = "Stand where the home teleport lands you, outside your home, press Record, walk to your front door and go in: going in saves the way. "
                            + "The errands then follow it to your door (vnavmesh's own way runs into the walls: its map of a ward has no houses in it). "
-                           + "One way serves the same plot in every ward. Forget (beside your door, or anywhere in the zone) lets it go, to record it again.";
+                           + "Recording again replaces it; one way serves the same plot in every ward.";
         if (!ButtonRow(index, "##door-way", "Way to your door", note, label, errands.RecordingWay ? Btn.Danger : Btn.Glass, errands.Active, tip: tip)) return;
         if (errands.RecordingWay) errands.StopWay();
-        else if (recorded) errands.ForgetWays();
         else if (errands.RecordWay() is { } why) Services.Chat.PrintError($"Way to your door: {why}", "Housing Studio");
-    }
-
-    // ---------------------------------------------------------------------------------------------
-    // Beta: the experimental features. One switch lets them be used; each has its own under it. A
-    // feature checks Configuration.Experimental and its own switch both.
-
-    private void DrawBetaTab()
-    {
-        Kit.BeginPanel("##set-beta", 0, 0, 0);
-        var i = 0;
-        if (SwitchRow(i++, "##experimental", "Experimental features", "Lets the Beta features below be used", config.Experimental,
-                "Features not yet tried in the game, or that act further on your behalf. Keep the backup on, and send the log if anything goes wrong."))
-        {
-            config.Experimental = !config.Experimental;
-            config.Save();
-        }
-        var off = !config.Experimental;
-        if (SwitchRow(i++, "##errands", "Get everything for me", "Retainers, vendors, the board, then home", config.ErrandsForYou,
-                "Shopping and Ready get \"Get everything for me\": it fetches what's missing from your retainers, vendors and the market board (vnavmesh and Lifestream walk and travel), then places it. You see the gil first.",
-                off, true))
-        {
-            config.ErrandsForYou = !config.ErrandsForYou;
-            config.Save();
-        }
-        if (SwitchRow(i++, "##get-first", "Get things first from Ready", "Ready's button gets, then places", config.GetFirst,
-                "Ready's Get stage, \"Get them for me first\": the brass button opens the errands, which get what's missing and then place it.",
-                !Plugin.Errands.Enabled, true))
-        {
-            config.GetFirst = !config.GetFirst;
-            config.Save();
-        }
-        if (SwitchRow(i++, "##set-fixtures", "Set the fixtures for me", "From your bags, step by step", config.SetFixturesForYou,
-                "Ready's Finish stage and Done get \"Set them\": the game's fixtures window is opened and each fixture put in from your bags, step by step. You press its apply.",
-                off, true))
-        {
-            config.SetFixturesForYou = !config.SetFixturesForYou;
-            config.Save();
-        }
-        if (SwitchRow(i++, "##fixtures-after", "Set fixtures after placing", "When placing from Ready finishes", config.FixturesAfterPlacing,
-                "Ready's Finish stage, \"Set them for me after placing\": when a placing run started from Ready (or the errands' placing) finishes and fixtures are left, setting them starts by itself.",
-                !Plugin.FixtureRun.Enabled, true))
-        {
-            config.FixturesAfterPlacing = !config.FixturesAfterPlacing;
-            config.Save();
-        }
-        if (SwitchRow(i++, "##putback-changes", "Put back what changed", "Since your last run", config.PutBackChanges,
-                "After Start's check for changes: moves the pieces moved since your last run back, and places the ones taken away. Pieces added since stay.",
-                off, true))
-        {
-            config.PutBackChanges = !config.PutBackChanges;
-            config.Save();
-        }
-        Kit.EndPanel();
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -594,7 +551,7 @@ public sealed partial class MainWindow
                  + "If your menu says something else, type it here (several, comma-separated).");
 
         if (SwitchRow(i++, "##errand-trust", "Trust the new clicks", "Stop holding the ones not yet seen working", config.ErrandsTrustGuesses,
-                "Get everything for me (Beta): off, each click not yet seen working (buying, a retainer's menu) waits for Continue, so you can watch it. On once you have."))
+                "Get everything for me: off, each click not yet seen working (buying, a retainer's menu) waits for Continue, so you can watch it. On once you have."))
         {
             config.ErrandsTrustGuesses = !config.ErrandsTrustGuesses;
             config.Save();

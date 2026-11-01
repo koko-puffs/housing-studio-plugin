@@ -134,6 +134,26 @@ public static unsafe class ErrandGame
         return ui != null && ui->IsAetheryteUnlocked(aetheryte);
     }
 
+    /// <summary>
+    /// You've done every quest a shop wants before it offers an item (none wanted: yes). A check the game
+    /// won't answer counts as done: the shop itself is the last word (an item it doesn't show is left).
+    /// </summary>
+    public static bool QuestsDone(IReadOnlyList<uint> quests)
+    {
+        foreach (var q in quests)
+        {
+            try
+            {
+                if (!QuestManager.IsQuestComplete((ushort)(q & 0xFFFF))) return false;
+            }
+            catch (Exception ex)
+            {
+                Services.Log.Debug(ex, $"Couldn't read whether quest {q} is done");
+            }
+        }
+        return true;
+    }
+
     public static uint Territory => Services.ClientState.TerritoryType;
 
     public static Vector3? Me => Services.Objects.LocalPlayer?.Position;

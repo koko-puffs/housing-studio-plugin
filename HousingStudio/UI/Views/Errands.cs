@@ -114,7 +114,7 @@ public sealed partial class MainWindow
     private void ErrandsButton(Vector2 pos)
     {
         if (Kit.Button("##errands", pos, ErrandsLabel, Btn.Glass, BtnSize.Md, Icon.Package, 0, false,
-                "Beta: fetches what's missing from your retainers, vendors and the market board, and places it. You see the gil first."))
+                "Fetches what's missing from your retainers, vendors and the market board, and places it. You see the gil first."))
         {
             errandsRehearse = false;
             errandsOpen = true;
@@ -311,15 +311,13 @@ public sealed partial class MainWindow
         var rehearse = errandsRehearse;
         var blocked = rehearse ? ErrandsRehearsalBlocked(plan) : ErrandsBlocked(plan);
 
-        // Header: "<design> · GET" and the Beta tag, the title, Back on the right.
+        // Header: "<design> · GET", the title, Back on the right.
         Frame.BeginHeader(20);
         var at = Kit.At;
         var w = Kit.Width;
         var leftW = w - S(40) - S(12);
         var eyebrowH = Txt.Natural(Face.Mono, 12);
-        var ew = MathF.Min(Txt.SpacedWidth(g.EyebrowUpper, Face.Mono, 12, 0.18f), leftW - Kit.BetaTagWidth - S(8));
-        Kit.Eyebrow(at, g.Eyebrow, null, leftW - Kit.BetaTagWidth - S(8));
-        Kit.BetaTag(new Vector2(at.X + ew + S(8), at.Y + (eyebrowH - Kit.BetaTagHeight) / 2));
+        Kit.Eyebrow(at, g.Eyebrow, null, leftW);
         var titleH = FitTitle(new Vector2(at.X, at.Y + eyebrowH + S(8)), g.TitlePlain, g.TitleItalic, leftW);
         if (Kit.IconButton("##errands-back", new Vector2(at.X + w - S(40), at.Y), Icon.ArrowLeft, "Back"))
         {
@@ -342,6 +340,22 @@ public sealed partial class MainWindow
             Kit.Gap(14);
         }
 
+        // No way to the front door recorded for this plot (none yet, or you've moved): asked for here,
+        // before setting out, with the way to record it.
+        if (!plan.IsEmpty && !Errands.HasWayFor(here))
+        {
+            AlertNote($"Record the way to your door once: no way is recorded for plot {here!.Plot} yet. vnavmesh's map of a ward has no houses in it, so its own way can run into walls, "
+                      + "and you'd be asked to walk in. Outside, where the home teleport lands you: Record, walk to your door, go in.", Palette.Brass, Icon.Alert, Palette.Text);
+            Kit.Gap(8);
+            const string record = "Way to your door";
+            var rw = Kit.ButtonWidth(record, BtnSize.Tiny, Icon.MapPin);
+            var rp = Kit.At;
+            if (Kit.Button("##errand-record-way", rp, record, Btn.Glass, BtnSize.Tiny, Icon.MapPin, rw, false, "Settings → Getting, where the way is recorded"))
+                OpenSettings(SettingsTab.Getting);
+            Kit.Reserve(rp, rw, Kit.ButtonHeight(BtnSize.Tiny));
+            Kit.Gap(14);
+        }
+
         // The plugins it needs: green ticks, or a warning chip when one isn't there; pressing one says more.
         var chips = ErrandChips(plan.Needs(StopKind.Retainer));
         var pressed = Kit.CheckChips(chips, errandChipOpen);
@@ -358,6 +372,11 @@ public sealed partial class MainWindow
             Kit.Gap(12);
             DimLine("##errand-have", Icon.Backpack, g.Have);
         }
+
+        // The limits above the trips (0.7.13): changing one changes the trips, and with the limits
+        // below them, the row you were using moved away as the list above it grew or shrank.
+        Kit.Gap(14);
+        DrawErrandLimits(here);
 
         if (plan.IsEmpty)
         {
@@ -399,8 +418,6 @@ public sealed partial class MainWindow
             Kit.EndPanel();
         }
 
-        Kit.Gap(14);
-        DrawErrandLimits(here);
         Frame.EndBody();
 
         // The brass button names the most it spends: it is the confirmation. It starts the very plan shown.
@@ -592,13 +609,8 @@ public sealed partial class MainWindow
     private void DrawErrandLimitRows(int first, HomeRef? here)
     {
         var i = first;
-        var d = StepperRow(i++, "##errand-ceiling", "Market ceiling", "The most it spends on the market board in all",
-            ErrandWords.Number(config.ErrandsMarketCeiling), config.ErrandsMarketCeiling > 0, config.ErrandsMarketCeiling < ErrandWords.Ceilings[^1]);
-        if (d != 0)
-        {
-            config.ErrandsMarketCeiling = ErrandWords.StepCeiling(config.ErrandsMarketCeiling, d);
-            config.Save();
-        }
+        CeilingRow(i++, "##errand-ceiling", "The most it spends on the market board in all",
+            "Type a number in (2500000, 2.5m, 750k) or step through. 0 buys nothing there.");
         if (SwitchRow(i++, "##errand-worlds", "Other worlds", "Buy across your data centre (Lifestream visits them). Off: your home world only.",
                 config.ErrandsOtherWorlds))
         {
@@ -617,7 +629,7 @@ public sealed partial class MainWindow
                 }
             }, below: true);
         var spare = config.ErrandsSpareSlots;
-        d = StepperRow(i++, "##errand-spare", "Bag slots to keep free", "Each trip leaves these empty", spare.ToString(), spare > 0, spare < 20);
+        var d = StepperRow(i++, "##errand-spare", "Bag slots to keep free", "Each trip leaves these empty", spare.ToString(), spare > 0, spare < 20);
         if (d != 0)
         {
             config.ErrandsSpareSlots = Math.Clamp(spare + d, 0, 20);
@@ -745,7 +757,7 @@ public sealed partial class MainWindow
         Kit.Gap(14);
         DrawErrandCards(e);
         Kit.Gap(14);
-        DrawLog();
+        DrawLog("errands-run-bottom");
         Frame.BeginBottom("errands-run-bottom");
         Txt.Note(e.Rehearsal ? "Leave the keyboard and mouse alone while it walks. Nothing is bought or taken; teleports are real." : "Leave the keyboard and mouse alone while it walks and buys.", center: true);
         Frame.EndBottom();

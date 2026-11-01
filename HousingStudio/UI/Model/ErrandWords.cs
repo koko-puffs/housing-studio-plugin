@@ -23,7 +23,7 @@ public static class ErrandWords
     public static string Reason(LeftReason reason) => reason switch
     {
         LeftReason.Craft => "crafted: no vendor sells it, none listed",
-        LeftReason.NoVendorReachable => "its vendors are where the errands don't go (another district, or an aetheryte you haven't)",
+        LeftReason.NoVendorReachable => "its vendors are where the errands don't go (another district, an aetheryte you haven't, or a shop that wants a quest you haven't done)",
         LeftReason.OverCeiling => "past your market ceiling",
         LeftReason.NotListedHere => "not listed on the worlds the errands buy on",
         LeftReason.NoRoom => "no room in your bags",
@@ -52,9 +52,12 @@ public static class ErrandWords
     {
         var pieces = trip.Stops.SelectMany(s => s.Items).Where(i => i.Need.Kind == NeedKind.Piece).Sum(i => i.Count);
         var dyes = trip.Stops.SelectMany(s => s.Items).Where(i => i.Need.Kind == NeedKind.Dye).Sum(i => i.Count);
-        if (pieces == 0) return dyes > 0 ? $"{Words.Count(dyes, "dye")} for the pieces here" : "What's in your bags goes in";
-        var words = $"{Words.Count(pieces, "piece")} go{(pieces == 1 ? "es" : string.Empty)} in";
-        return dyes > 0 ? $"{words} · {Words.Count(dyes, "dye")}" : words;
+        var fixtures = trip.Stops.SelectMany(s => s.Items).Where(i => i.Need.Kind == NeedKind.Fixture).Sum(i => i.Count);
+        var parts = new List<string>();
+        if (pieces > 0) parts.Add($"{Words.Count(pieces, "piece")} go{(pieces == 1 ? "es" : string.Empty)} in");
+        if (dyes > 0) parts.Add(pieces > 0 ? Words.Count(dyes, "dye") : $"{Words.Count(dyes, "dye")} for the pieces here");
+        if (fixtures > 0) parts.Add($"{Words.Count(fixtures, "fixture")} to set");
+        return parts.Count == 0 ? "What's in your bags goes in" : string.Join(" · ", parts);
     }
 
     /// <summary>
@@ -253,8 +256,56 @@ public static class ErrandWords
             .Select(g => (g.Key, g.Value == 1 ? g.Name : $"{g.Name} ×{g.Value}"))
             .ToList();
 
-    /// <summary>The ceilings the stepper goes through.</summary>
-    public static readonly long[] Ceilings = { 0, 10_000, 25_000, 50_000, 100_000, 250_000, 500_000, 1_000_000, 2_500_000, 5_000_000, 10_000_000 };
+    /// <summary>The most gil a character can hold, so the most a ceiling can be.</summary>
+    public const long GilCap = 999_999_999;
+
+    /// <summary>The ceilings the stepper goes through (any other can be typed in).</summary>
+    public static readonly long[] Ceilings =
+    {
+        0, 10_000, 25_000, 50_000, 100_000, 250_000, 500_000, 1_000_000, 2_500_000, 5_000_000, 10_000_000,
+        25_000_000, 50_000_000, 100_000_000, 250_000_000, 500_000_000, GilCap,
+    };
+
+    /// <summary>
+    /// A ceiling typed in: "2500000", "2,500,000 gil", "2.500.000", "2.5m", "750k", "1b" (k, m and b
+    /// may have a decimal part, with a point or a comma); kept between 0 and <see cref="GilCap"/>. Null
+    /// when there's no number in it.
+    /// </summary>
+    public static long? ParseGil(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        var t = text.Trim().ToLowerInvariant().Replace("gil", string.Empty).Replace(" ", string.Empty).Replace("\u00a0", string.Empty);
+        if (t.Length == 0) return null;
+        var scale = t[^1] switch { 'k' => 1_000L, 'm' => 1_000_000L, 'b' => 1_000_000_000L, _ => 1L };
+        if (scale > 1) t = t[..^1];
+        double value;
+        if (scale > 1)
+        {
+            // One separator with a short tail is a decimal point ("2.5m", "2,5m"); more are groupings.
+            var seps = t.Count(c => c is '.' or ',');
+            var last = t.LastIndexOfAny(new[] { '.', ',' });
+            var digits = new string(t.Where(char.IsDigit).ToArray());
+            if (digits.Length == 0) return null;
+            if (seps == 1 && t.Length - last - 1 is >= 1 and <= 2)
+            {
+                var whole = new string(t[..last].Where(char.IsDigit).ToArray());
+                var part = new string(t[(last + 1)..].Where(char.IsDigit).ToArray());
+                value = double.Parse((whole.Length == 0 ? "0" : whole) + "." + part, CultureInfo.InvariantCulture);
+            }
+            else
+            {
+                value = double.Parse(digits, CultureInfo.InvariantCulture);
+            }
+        }
+        else
+        {
+            var digits = new string(t.Where(char.IsDigit).ToArray());
+            if (digits.Length == 0) return null;
+            if (digits.Length > 12) return GilCap;
+            value = double.Parse(digits, CultureInfo.InvariantCulture);
+        }
+        return (long)Math.Clamp(Math.Round(value * scale), 0, GilCap);
+    }
 
     /// <summary>The next ceiling up or down from <paramref name="now"/>.</summary>
     public static long StepCeiling(long now, int delta)

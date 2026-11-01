@@ -63,7 +63,7 @@ public sealed partial class MainWindow
             DrawCallout();
         }
         Kit.Gap(18);
-        DrawLog();
+        DrawLog("running-bottom");
 
         Frame.BeginBottom("running-bottom");
         var stay = session.Context.Side == Side.Garden
@@ -248,8 +248,12 @@ public sealed partial class MainWindow
         Kit.EndPanel();
     }
 
-    /// <summary>"What it's doing": a disclosure with Copy, and the last three lines of the log (older ones dim).</summary>
-    private void DrawLog()
+    /// <summary>
+    /// "What it's doing": a disclosure with Copy, and the log's last lines: as many as fit down to the
+    /// window's bottom (at least three; <paramref name="bottomId"/> is the part kept under it), so a
+    /// bigger window shows more. The newest in full colour, warnings and errors in theirs, the rest dim.
+    /// </summary>
+    private void DrawLog(string? bottomId = null)
     {
         Kit.BeginPanel("##log", 0, 0, 0);
         const string copy = "Copy";
@@ -264,11 +268,15 @@ public sealed partial class MainWindow
         }, true);
         if (logOpen)
         {
-            var lines = log.Lines.Skip(Math.Max(0, log.Lines.Count - 3)).ToList();
+            var lineBox = S(12 * 1.6f);
+            var step = lineBox + S(2);
+            // The panel's own padding below the lines (16) is in the room too.
+            var fits = (int)MathF.Floor((Frame.RoomLeft(bottomId) - S(16) + S(2)) / step);
+            var count = Math.Clamp(fits, 3, 200);
+            var lines = log.Lines.Skip(Math.Max(0, log.Lines.Count - count)).ToList();
             var at = Kit.At;
             var x = at.X + S(20);
             var w = Kit.Width - S(40);
-            var lineBox = S(12 * 1.6f);
             var y = at.Y;
             var dl = Kit.Dl;
             if (lines.Count == 0)
@@ -282,15 +290,20 @@ public sealed partial class MainWindow
                 var time = l.At.ToString("HH:mm:ss");
                 var tw = Txt.Line(dl, new Vector2(x, y), time, Face.Mono, 12, Palette.Dim, 12 * 1.6f);
                 var text = LogWords(l.Text);
-                var color = i < lines.Count - 1 ? Palette.Dim : l.Kind switch
+                var color = l.Kind switch
                 {
                     LogKind.Error => Palette.Danger,
                     LogKind.Warn => Palette.BrassSoft,
-                    _ => Palette.Text,
+                    _ => i < lines.Count - 1 ? Palette.Dim : Palette.Text,
                 };
                 var tx = x + tw + S(12);
-                Txt.Line(dl, new Vector2(tx, y), Txt.Fit(text, Face.Sans, 12, x + w - tx), Face.Sans, 12, color, 12 * 1.6f);
-                y += lineBox + (i < lines.Count - 1 ? S(2) : 0);
+                var fit = Txt.Fit(text, Face.Sans, 12, x + w - tx);
+                Txt.Line(dl, new Vector2(tx, y), fit, Face.Sans, 12, color, 12 * 1.6f);
+                // A line cut short: the whole of it on hover.
+                if (fit != text && !Kit.Blocked && ImGui.IsWindowHovered()
+                    && ImGui.IsMouseHoveringRect(new Vector2(tx, y), new Vector2(x + w, y + lineBox)))
+                    Kit.Tooltip(text);
+                y += i < lines.Count - 1 ? step : lineBox;
             }
             Kit.Reserve(at, Kit.Width, y - at.Y + S(16));
         }

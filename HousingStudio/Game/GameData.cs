@@ -129,6 +129,14 @@ public sealed class GameData
         catch (System.Exception ex) { Services.Log.Warning(ex, "Couldn't read the fixture tables yet"); }
     });
 
+    /// <summary>The fixtures' item UI categories (65 Exterior Fixtures … 75).</summary>
+    public const uint FixtureCategoryFirst = 65;
+
+    public const uint FixtureCategoryLast = 75;
+
+    /// <summary>Whether an item UI category is a fixture's.</summary>
+    public static bool IsFixtureCategory(uint category) => category is >= FixtureCategoryFirst and <= FixtureCategoryLast;
+
     /// <summary>The item a fixture key is (a HousingExterior or HousingInterior row, as the game keeps them), or 0.</summary>
     public uint FixtureItem(uint key) => key != 0 && FixtureTables.ItemOfKey.TryGetValue(key, out var item) ? item : 0;
 
@@ -178,8 +186,8 @@ public sealed class GameData
     private sealed class Fixtures
     {
         /// <summary>ItemUICategory rows for fixtures: 65 Roof … 72 Fence outside, 73 Interior Wall, 74 Flooring, 75 Ceiling Light.</summary>
-        private const uint FirstFixtureCategory = 65;
-        private const uint LastFixtureCategory = 75;
+        private const uint FirstFixtureCategory = FixtureCategoryFirst;
+        private const uint LastFixtureCategory = FixtureCategoryLast;
 
         public readonly Dictionary<uint, uint> ItemOfKey = new();
         public readonly Dictionary<uint, uint> UnitedOfPart = new();

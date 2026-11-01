@@ -327,52 +327,79 @@ public static class ErrandPlanner
         _ => u.World ?? string.Empty,
     };
 
-    /// <summary>Fills trips up to the free slots, in order; a splittable part is split by whole stacks, a listing never.</summary>
+    /// <summary>
+    /// Fills trips up to the free slots, a splittable part split by whole stacks, a listing never. Each
+    /// stop (a retainer, a vendor, a world's board) goes into as few trips as it can: its parts are cut
+    /// only where they don't fit one trip's slots, and the pieces are packed biggest first into the first
+    /// trip with room (0.7.12 packed in order, so a world's board came back in trip after trip). Within
+    /// a trip, the plan's order (retainers, vendors by place, the board by world).
+    /// </summary>
     private static List<ErrandTrip> Pack(List<Unit> units, int freeSlots, List<ErrandLeft> left)
     {
-        var trips = new List<List<Unit>>();
         if (freeSlots <= 0)
         {
             foreach (var u in units) left.Add(new ErrandLeft(u.Need, u.Count, LeftReason.NoRoom));
             return new List<ErrandTrip>();
         }
-        var current = new List<Unit>();
-        var room = freeSlots;
-        foreach (var unit in units)
+        // Each stop's parts, cut into pieces that fit a trip.
+        var pieces = new List<List<(Unit U, int I)>>();
+        foreach (var stop in units.Select((u, i) => (U: u, I: i)).GroupBy(x => x.U.Key))
         {
-            var u = unit;
-            while (u.Count > 0)
+            var piece = new List<(Unit U, int I)>();
+            var room = freeSlots;
+            foreach (var (unit, i) in stop)
             {
-                if (u.Slots <= room)
+                var u = unit;
+                while (u.Count > 0)
                 {
-                    current.Add(u);
-                    room -= u.Slots;
-                    break;
-                }
-                if (!u.Splits)
-                {
-                    if (u.Slots > freeSlots)
+                    if (u.Slots <= room)
                     {
-                        left.Add(new ErrandLeft(u.Need, u.Count, LeftReason.NoRoom));
+                        piece.Add((u, i));
+                        room -= u.Slots;
                         break;
                     }
+                    if (!u.Splits)
+                    {
+                        if (u.Slots > freeSlots)
+                        {
+                            left.Add(new ErrandLeft(u.Need, u.Count, LeftReason.NoRoom));
+                            break;
+                        }
+                    }
+                    else if (room > 0)
+                    {
+                        // As many whole stacks as there's room for; the rest in the next piece.
+                        var fits = room * u.Stack;
+                        var gilEach = u.Count > 0 ? u.Gil / u.Count : 0;
+                        piece.Add((u with { Count = fits, Bought = fits, Gil = gilEach * fits }, i));
+                        u = u with { Count = u.Count - fits, Bought = u.Bought - fits, Gil = u.Gil - gilEach * fits };
+                    }
+                    if (piece.Count > 0) pieces.Add(piece);
+                    piece = new List<(Unit U, int I)>();
+                    room = freeSlots;
                 }
-                else if (room > 0)
-                {
-                    // As many whole stacks as there's room for; the rest on the next trip.
-                    var fits = room * u.Stack;
-                    var gilEach = u.Count > 0 ? u.Gil / u.Count : 0;
-                    current.Add(u with { Count = fits, Bought = fits, Gil = gilEach * fits });
-                    u = u with { Count = u.Count - fits, Bought = u.Bought - fits, Gil = u.Gil - gilEach * fits };
-                    room = 0;
-                }
-                trips.Add(current);
-                current = new List<Unit>();
-                room = freeSlots;
             }
+            if (piece.Count > 0) pieces.Add(piece);
         }
-        if (current.Count > 0) trips.Add(current);
-        return trips.Where(t => t.Count > 0).Select((t, i) => new ErrandTrip(i + 1, Stops(t))).ToList();
+        // Biggest first, into the first trip with room.
+        var trips = new List<(List<(Unit U, int I)> Units, int Room)>();
+        foreach (var piece in pieces.OrderByDescending(p => p.Sum(x => x.U.Slots)).ThenBy(p => p[0].I))
+        {
+            var slots = piece.Sum(x => x.U.Slots);
+            var t = trips.FindIndex(x => x.Room >= slots);
+            if (t < 0)
+            {
+                trips.Add((new List<(Unit U, int I)>(piece), freeSlots - slots));
+                continue;
+            }
+            trips[t].Units.AddRange(piece);
+            trips[t] = (trips[t].Units, trips[t].Room - slots);
+        }
+        return trips
+            .Select(t => t.Units.OrderBy(x => x.I).ToList())
+            .OrderBy(t => t[0].I)
+            .Select((t, n) => new ErrandTrip(n + 1, Stops(t.Select(x => x.U).ToList())))
+            .ToList();
     }
 
     /// <summary>A trip's units as stops: the same place's put together, the same item at it put together.</summary>

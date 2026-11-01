@@ -385,6 +385,18 @@ listed); the item search proxy only when it isn't.
 and opening the furnishing editor waits for its bar too: the editor opens in the mode last used
 (0.7.11's recording: mode Store at 403.85 s, `HousingLayout` open at 404.02).
 
+**0.7.13**: `ErrandPlanner.Pack` cuts each stop's units (by `Key`) into pieces that fit a trip, then
+packs the pieces biggest first into the first trip with room (first-fit decreasing); a trip keeps the
+plan's order. `NeedKind.Fixture`: `Shopping.FixturesToGet` (the plugin sets it to `FixtureRun.Plan()`'s
+`NotOwned` items, read at most every 2 s, part of the plan's cache key); `VendorData` keeps gil shops'
+fixture items too (`GameData.IsFixtureCategory`, item UI categories 65-75). `VendorOffer.UnlockQuests`
+(GilShopItem's QuestRequired) and `ErrandGame.QuestsDone` (QuestManager) in `Reachable`. A shop's
+question with another price (`MarketRule.AskedCost`, divisible by the quantity): `Shopping.LearnPrice`
+→ `Configuration.ErrandsVendorPrices`, applied by `Shopping.Offers`. `DoorWay.Plot` is read inside
+after recording (`TickWay` waits up to 15 s for `HomeHere`); `DoorWays.HasFor(ways, wardTerritory,
+plot)` (a way with plot 0 counts for any plot until `LearnWayPlot`). The rehearsal's dye stand-in takes
+a dyed placed piece first, then `GameData.Dyeable`.
+
 **Vendors in a ward's divisions**: `VendorData` keeps every spot of a selling NPC
 (`SpotsOf(name, territory)`), not only the offer's (the first per territory). `VendorTravelSteps` walks to
 the NPC in sight (`ErrandGame.NpcOrNamed`: by id, else by name), else the nearest such spot.

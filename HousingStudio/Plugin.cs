@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Dalamud.Game.Command;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin;
@@ -22,10 +23,10 @@ public sealed class Plugin : IDalamudPlugin
     /// <summary>Where the missing pieces and dyes come from (retainers, vendors, the market board).</summary>
     internal static Shopping Shop { get; private set; } = null!;
 
-    /// <summary>"Set them for me" (Settings → Beta): the design's fixtures, through the game's fixtures windows.</summary>
+    /// <summary>"Set them for me": the design's fixtures, through the game's fixtures windows.</summary>
     internal static FixtureRunner FixtureRun { get; private set; } = null!;
 
-    /// <summary>"Get everything for me" (Settings → Beta): fetching what's missing, and placing it.</summary>
+    /// <summary>"Get everything for me": fetching what's missing, and placing it.</summary>
     internal static ErrandRunner Errands { get; private set; } = null!;
 
     private readonly Configuration config;
@@ -77,6 +78,8 @@ public sealed class Plugin : IDalamudPlugin
         runner = new PlacementRunner(config, session, editor, actions, furniture, anywhere, data, log);
         FixtureRun = new FixtureRunner(config, session, data, log);
         Errands = new ErrandRunner(config, session, runner, data, log, Shop);
+        // The errands get the fixtures not in your bags too; Set them for me puts them up after placing.
+        Shop.FixturesToGet = () => FixtureRun.Plan().Where(t => t.State == FixtureState.NotOwned).Select(t => t.Fixture.ItemId).ToList();
         BoardListings.Hook();
         // One run acts at a time; the errands start the placing run themselves.
         runner.OtherRunActive = () => FixtureRun.Active || (Errands.Active && !Errands.LetsPlace);

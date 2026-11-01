@@ -94,8 +94,12 @@ public sealed partial class ErrandRunner
     }
 
     /// <summary>Reads the game's yes/no, checks it names the price planned, and says Cancel (closes it): never yes.</summary>
-    private void CheckAndCancel(string where, string? question, uint unit, int quantity, long cost, bool board = false)
+    private void CheckAndCancel(string where, string? question, uint unit, int quantity, long cost, bool board = false, uint itemId = 0)
     {
+        // A vendor's price the game's data has wrong: learnt, so the next estimate has it right.
+        if (!board && itemId != 0 && !MarketRule.QuestionMatches(question, unit, quantity, cost)
+            && MarketRule.AskedCost(question, quantity) is { } askedSum && askedSum > 0 && askedSum % quantity == 0)
+            LearnPrice(itemId, (uint)(askedSum / quantity), unit);
         // A vendor asking another price: a real run says yes while the run stays within the gil agreed.
         var then = board ? "say no and stop"
             : MarketRule.AskedCost(question, quantity) is { } asked && Spent + asked <= agreedGil ? $"buy it at {asked:N0} gil, still within the {agreedGil:N0} agreed"
@@ -103,7 +107,11 @@ public sealed partial class ErrandRunner
         var matched = MarketRule.QuestionMatches(question, unit, quantity, cost);
         Rehearsals.Report.Question(matched);
         log.Info($"  The game asks: \"{question}\": {(matched ? "it names the price planned" : $"it doesn't name {quantity} for {cost:N0} gil (a real run would {then})")} → Cancel (a rehearsal never says yes).");
-        if (!matched) Rehearsals.Report.Issue(where, $"The game asked \"{question}\", which doesn't name {quantity} for {cost:N0} gil: a real run would {then}.", RehearsalTrouble.NoMatch);
+        // A vendor's other price that a real run would pay (within the gil agreed) isn't a failure: a note,
+        // and the price is learnt for the next estimate (0.7.12's Stage Panel and White Screen).
+        var paid = !board && MarketRule.AskedCost(question, quantity) is { } wouldPay && Spent + wouldPay <= agreedGil;
+        if (!matched && paid) Rehearsals.Report.Note($"{where}: the shop asks another price than the game's data (\"{question}\"); a real run would {then}. Learnt for the next estimate.");
+        else if (!matched) Rehearsals.Report.Issue(where, $"The game asked \"{question}\", which doesn't name {quantity} for {cost:N0} gil: a real run would {then}.", RehearsalTrouble.NoMatch);
         GameUi.Close(UiTable.YesNo);
     }
 
@@ -189,7 +197,7 @@ public sealed partial class ErrandRunner
                 IsAction = true,
                 Run = () =>
                 {
-                    CheckAndCancel(where, GameUi.YesNoText(), v.Price, n, (long)v.Price * n);
+                    CheckAndCancel(where, GameUi.YesNoText(), v.Price, n, (long)v.Price * n, itemId: item.ItemId);
                     var gil = (long)v.Price * item.Count;
                     Rehearsals.Report.Would(RehearsalAct.Buy, item.Count, gil);
                     VendorSpent += gil;

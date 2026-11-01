@@ -181,7 +181,7 @@ public sealed partial class MainWindow
     /// <summary>The row's second line: where it comes from, in words.</summary>
     private string ShopNote(ShoppingLine line)
     {
-        var dye = line.Need.Kind == NeedKind.Dye ? "Dye · " : string.Empty;
+        var dye = line.Need.Kind switch { NeedKind.Dye => "Dye · ", NeedKind.Fixture => "Fixture · ", _ => string.Empty };
         switch (line.Source)
         {
             case SourceKind.Retainer:

@@ -112,9 +112,9 @@ public class SpeedTests
     }
 
     [Fact]
-    public void TheDefaultPaceIsQuickAndEachStepIsQuickerThanTheLast()
+    public void TheDefaultPaceIsDaringAndEachStepIsQuickerThanTheLast()
     {
-        Assert.Equal(Pace.Quick, Pacing.Default);
+        Assert.Equal(Pace.Daring, Pacing.Default);
         // Quick is 0.3.2's pace, as tested in game.
         var quick = Pacing.Profile(Pace.Quick);
         Assert.Equal((150, 300, 1.0), (quick.PieceGapMs, quick.ClickGapMs, quick.WaitScale));
@@ -126,7 +126,7 @@ public class SpeedTests
         Assert.Equal(TimeSpan.FromMilliseconds(120), quick.Wait(120));
         Assert.Equal(TimeSpan.FromMilliseconds(180), steady.Wait(120));
         // An unknown value (a hand-edited config) is the default's.
-        Assert.Equal(quick, Pacing.Profile((Pace)7));
+        Assert.Equal(daring, Pacing.Profile((Pace)7));
     }
 
     [Theory]

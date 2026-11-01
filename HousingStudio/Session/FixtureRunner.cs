@@ -10,7 +10,7 @@ using HousingStudio.UI.Model;
 namespace HousingStudio.Session;
 
 /// <summary>
-/// "Set them for me" (Settings → Beta): the design's fixtures for the side you're on (each
+/// "Set them for me": the design's fixtures for the side you're on (each
 /// floor's walls, flooring and light inside; the outside's parts on your plot), set through the game's
 /// own fixtures window, with the same step, wait and check pattern as placing:
 /// <list type="number">
@@ -99,8 +99,8 @@ public sealed unsafe partial class FixtureRunner
 
     public void Continue() => queue.Continue();
 
-    /// <summary>Both switches on: Settings → Beta: Experimental features and "Set the fixtures for me".</summary>
-    public bool Enabled => config.Experimental && config.SetFixturesForYou;
+    /// <summary>Always (0.7.13: no longer a Beta feature to switch on).</summary>
+    public bool Enabled => true;
 
     /// <summary>The design's fixtures for the side you're on, against what's set and what's in your bags. Framework thread.</summary>
     public List<FixtureTask> Plan()
@@ -121,7 +121,6 @@ public sealed unsafe partial class FixtureRunner
     /// <summary>Why "Set them for me" can't start now, or null.</summary>
     public string? CanStart()
     {
-        if (!Enabled) return "Switch it on in Settings → Beta.";
         if (Active) return "Already setting them.";
         if (OtherRunActive?.Invoke() == true) return "Wait until the run is done.";
         var ctx = session.Context;

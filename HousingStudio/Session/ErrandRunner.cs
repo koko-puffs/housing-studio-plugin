@@ -119,8 +119,8 @@ public sealed partial class ErrandRunner : IDisposable
     // ---------------------------------------------------------------------------------------------
     // What the window shows.
 
-    /// <summary>Settings → Beta: the Beta switch and its own are both on.</summary>
-    public bool Enabled => config.Experimental && config.ErrandsForYou;
+    /// <summary>Always (0.7.13: no longer a Beta feature to switch on); Ready's "Get them for me first" decides whether its button gets first.</summary>
+    public bool Enabled => true;
 
     public RunState State { get; private set; } = RunState.Idle;
     public bool Active => State is RunState.Running or RunState.Paused;
@@ -219,7 +219,7 @@ public sealed partial class ErrandRunner : IDisposable
             MarketCeiling = Math.Max(0, config.ErrandsMarketCeiling),
             StackSize = ErrandGame.StackSize,
             Reachable = v => Reachable(v, at, kind),
-            Offers = shop.Vendors.Offers,
+            Offers = shop.Offers,
             PreferDistrict = at.District,
             WorldAllowed = config.ErrandsOtherWorlds ? w => w == world || Travel.CanVisit(w) != false : w => w == world,
             ListingAllowed = (item, w) => !emptyBoards.Contains((item, w)),
@@ -235,6 +235,8 @@ public sealed partial class ErrandRunner : IDisposable
     private static bool Reachable(VendorOffer v, HomeRef at, HomeKind kind)
     {
         if (!v.Located) return false;
+        // A shop that offers the item only after a quest you haven't done (0.7.13): another vendor, or the board.
+        if (v.UnlockQuests.Count > 0 && !ErrandGame.QuestsDone(v.UnlockQuests)) return false;
         if (v.District != null) return v.District == at.District && kind != HomeKind.Apartment;
         var aetheryte = ErrandGame.AetheryteOf(v.TerritoryId);
         return aetheryte != 0 && ErrandGame.Attuned(aetheryte);
@@ -244,7 +246,6 @@ public sealed partial class ErrandRunner : IDisposable
     /// <param name="rehearse">For a rehearsal: too little gil doesn't stop it (it's noted as where a real run would stop).</param>
     public string? CanStart(ErrandPlan plan, HousingContext ctx, bool rehearse = false)
     {
-        if (!Enabled) return "Switch it on in Settings → Beta.";
         if (Active) return "Already on errands.";
         if (runner.Active || OtherRunActive?.Invoke() == true) return "Wait until the run is done.";
         if (ErrandGame.Blocked(false) is { } blocked) return blocked;
@@ -347,8 +348,8 @@ public sealed partial class ErrandRunner : IDisposable
                  + $"{(houseBell ? "a summoning bell in it" : "no summoning bell in it")}.{(config.ErrandsTrustGuesses ? string.Empty : " Clicks not yet seen working wait for Continue.")}"
                  + (keepAsFirst != null ? $" The first placing swaps: what's here is kept as “{keepAsFirst}”, and {ClearOutFirst} pieces not in the design are put away first."
                      : clearOutFirst != null ? $" The first placing clears out {ClearOutFirst} pieces not in the design first." : string.Empty));
-        if (homeKind != HomeKind.Apartment && config.ErrandsDoorWays.Count == 0)
-            log.Info("No way to your front door is recorded: vnavmesh's map of a ward has no houses in it, so its way to your door can run into walls. "
+        if (!HasWayFor(home))
+            log.Warn($"No way to your front door is recorded for plot {home.Plot}: vnavmesh's map of a ward has no houses in it, so its way to your door can run into walls. "
                      + "If it does, you're asked to walk in (Settings → Getting → Way to your door records the way once, to be followed after).");
         if (rehearse) RehearsalStarted(plan);
         State = RunState.Running;
@@ -485,12 +486,6 @@ public sealed partial class ErrandRunner : IDisposable
 
     private void TickSafely(HousingContext ctx)
     {
-        // Switched off in Settings while it goes: it stops.
-        if (!Enabled)
-        {
-            Stop("Switched off in Settings → Beta.");
-            return;
-        }
         // The placing run looks after itself (its own stops); the errands only wait for it.
         if (!Placing)
         {
@@ -1308,7 +1303,9 @@ public sealed partial class ErrandRunner : IDisposable
                             // Another price than the game's data has (0.7.6: "Purchase 1 stage panel for 4,000
                             // gil?" with 1,000 planned): yes when the whole run still stays within the gil you
                             // agreed to (and you have it), else no, and this item is left.
-                            if (MarketRule.AskedCost(question, n) is { } asked && Spent + asked <= agreedGil && ErrandGame.Gil() >= asked)
+                            var askedNow = MarketRule.AskedCost(question, n);
+                            if (askedNow is { } askedSum && askedSum > 0 && askedSum % n == 0) LearnPrice(item.ItemId, (uint)(askedSum / n), v.Price);
+                            if (askedNow is { } asked && Spent + asked <= agreedGil && ErrandGame.Gil() >= asked)
                             {
                                 log.Info($"  The shop asks {asked:N0} gil for {n} × {Name(item.ItemId)}, not the {(long)v.Price * n:N0} planned: still within the {agreedGil:N0} gil you agreed to, so yes.");
                                 allowed = asked;
@@ -1739,6 +1736,13 @@ public sealed partial class ErrandRunner : IDisposable
             steps.Add(Arriving(home is { Chamber: true }
                 ? WaitFor("Inside the house", In, TimeSpan.FromSeconds(30), "Didn't get inside the house.")
                 : WaitFor("Inside your home", Inside, TimeSpan.FromSeconds(30), "Didn't get inside your home.")));
+            // A way recorded before ways knew their plot learns it once it's taken you in.
+            if (way != null)
+                steps.Add(Step.Act("Note the way's plot", () =>
+                {
+                    if (!handed) LearnWayPlot(way, home);
+                    return StepOutcome.Done;
+                }));
         }
         // Private chambers: the door goes into the house's hall; then up to the room.
         if (home is { Chamber: true }) steps.AddRange(ChamberSteps());
@@ -2015,7 +2019,18 @@ public sealed partial class ErrandRunner : IDisposable
                     return StepOutcome.Waiting;
                 },
             }),
-            Arriving(You("Go up to your private chambers (the hall's door to them, then \"Move to your private chambers\")", Inside)),
+            // Up already (the usual): nothing for you to do, and nothing said (0.7.12 logged "You: Go up…, done
+            // after 0 s" every trip). Not up: you're asked to.
+            new Step
+            {
+                Label = "In your chambers",
+                Run = () =>
+                {
+                    if (!Inside())
+                        queue.InsertNext(new[] { Arriving(You("Go up to your private chambers (the hall's door to them, then \"Move to your private chambers\")", Inside)) });
+                    return StepOutcome.Done;
+                },
+            },
         };
     }
 

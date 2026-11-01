@@ -34,7 +34,8 @@ public static class Pacing
     /// <summary>The quickest the plugin ever goes between two pieces, whatever the setting.</summary>
     public const int MinimumMs = 50;
 
-    public const Pace Default = Pace.Quick;
+    /// <summary>A new install's pace (0.7.13: Daring; it was Quick).</summary>
+    public const Pace Default = Pace.Daring;
 
     /// <summary>The presets, in <see cref="Pace"/>'s order.</summary>
     public static readonly PaceProfile[] Profiles =

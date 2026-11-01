@@ -11,6 +11,9 @@ public enum NeedKind
 
     /// <summary>A dye to buy (beyond what's in your bags).</summary>
     Dye,
+
+    /// <summary>A fixture of the design for the side you're on (a floor's walls, floor or light) not in your bags (0.7.13).</summary>
+    Fixture,
 }
 
 /// <summary>Something to get: an item and how many (the design less what's placed, in the storeroom or in your bags).</summary>

@@ -10,7 +10,7 @@ using static HousingStudio.UI.Theme;
 namespace HousingStudio.UI;
 
 /// <summary>
-/// Setting the fixtures for you (Settings → Beta): in Ready's Finish stage, "Set them for me
+/// Setting the fixtures for you: in Ready's Finish stage, "Set them for me
 /// after placing" (it starts by itself when a placing run started from Ready finishes) and, under Tick
 /// off, what the plugin can set from your bags here with "Set them for me"; while it runs, the step
 /// it's on with Continue (it goes step by step) and Stop, in Ready's Finish stage and on Done.
@@ -166,7 +166,7 @@ public sealed partial class MainWindow
         var h = MathF.Max(Kit.ButtonHeight(BtnSize.Sm), noteH);
         Txt.Flow(new Vector2(at.X, at.Y + (h - noteH) / 2), tw, new[] { Run.Note(line) }, 19.5f, out _);
         if (Kit.Button("##set-fixtures", new Vector2(at.X + w - bw, at.Y + (h - Kit.ButtonHeight(BtnSize.Sm)) / 2), label, Btn.Glass, BtnSize.Sm, Icon.Play, 0,
-                blocked != null, blocked ?? "Experimental: opens the game's fixtures window and puts each one in from your bags, step by step."))
+                blocked != null, blocked ?? "Opens the game's fixtures window and puts each one in from your bags, step by step."))
             AskSetFixtures(toSet);
         Kit.Reserve(at, w, h);
     }

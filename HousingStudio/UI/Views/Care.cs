@@ -381,8 +381,7 @@ public sealed partial class MainWindow
                     ShowWhere(r.Moved.Select(m => m.Was).Concat(r.Gone));
             }
             const string put = "Put them back where they were";
-            var allowed = config.Experimental && config.PutBackChanges;
-            var cannot = runner.Active ? "Already running." : !allowed ? "Switch it on in Settings → Beta → Put back what changed." : null;
+            var cannot = runner.Active ? "Already running." : null;
             if (Kit.Button("##drift-put", row.Next(Kit.ButtonWidth(put, BtnSize.Tiny, Icon.Undo), h), put, Btn.Glass, BtnSize.Tiny, Icon.Undo, 0, cannot != null,
                     cannot ?? "Moves the pieces moved since back, and places the ones taken away (asks first)."))
                 AskPutBack(check);

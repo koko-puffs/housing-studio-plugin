@@ -85,6 +85,19 @@ public static class Frame
         Bottoms.Push((id, ImGui.GetCursorScreenPos().Y));
     }
 
+    /// <summary>
+    /// The room left in the body below where you are, as if it weren't scrolled (so what fills it doesn't
+    /// grow as you scroll), less the body's bottom padding and, given <paramref name="bottomId"/>, the
+    /// <see cref="BeginBottom"/> part that comes after (its gaps and its height last frame).
+    /// </summary>
+    public static float RoomLeft(string? bottomId = null, float gap = 18)
+    {
+        var bottom = ImGui.GetWindowPos().Y + ImGui.GetWindowHeight() - S(bodyPadBottom);
+        var y = ImGui.GetCursorScreenPos().Y + ImGui.GetScrollY();
+        var after = bottomId != null ? S(gap) * 2 + (Heights.TryGetValue(bottomId, out var h) ? h : 0) : 0;
+        return bottom - after - y;
+    }
+
     public static void EndBottom()
     {
         var (id, start) = Bottoms.Pop();

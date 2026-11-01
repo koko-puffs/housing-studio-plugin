@@ -17,9 +17,9 @@ you visit is a design on Housing Studio (like, save or stamp it from there).
 
 Ready can also **clear out** what isn't in the design first, or **swap** designs and swap back
 later. The **shopping list** says where each missing piece comes from (your retainers, a vendor,
-the market board, or crafting). Settings → **Beta** holds the newer features not yet
-tried in the game, such as **Get everything for me**, which fetches what's missing and places it
-(it needs the vnavmesh and Lifestream plugins).
+the market board, or crafting). **Get everything for me** fetches what's missing from your
+retainers, vendors and the market board (and the fixtures), then places it; it needs the vnavmesh
+and Lifestream plugins.
 
 ## Installing
 

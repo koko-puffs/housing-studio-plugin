@@ -9,7 +9,7 @@ namespace HousingStudio;
 [Serializable]
 public sealed partial class Configuration : IPluginConfiguration
 {
-    public int Version { get; set; } = 6;
+    public int Version { get; set; } = 7;
 
     /// <summary>Layouts opened lately, newest first.</summary>
     public List<string> RecentFiles { get; set; } = new();
@@ -61,7 +61,7 @@ public sealed partial class Configuration : IPluginConfiguration
     // Overlay
     public bool ShowMarkers { get; set; } = true;
     public bool ShowLabels { get; set; } = true;
-    public bool ShowPlacedMarkers { get; set; }
+    public bool ShowPlacedMarkers { get; set; } = true;
     public float MarkerRange { get; set; } = 40f;
 
     // Filters
@@ -109,25 +109,17 @@ public sealed partial class Configuration : IPluginConfiguration
     public bool ShowHomesWhenVisiting { get; set; } = true;
 
     /// <summary>
-    /// Settings → Beta, Experimental features: features not yet tried in the game (or that act further on your
-    /// behalf). Off by default; each has its own switch under it, which only counts while this is on.
+    /// Until 0.7.13, Settings → Beta's "Experimental features" (the errands, setting fixtures, putting
+    /// back what changed only worked while it was on). Read once by <see cref="Migrate"/>: those features
+    /// are always there now.
     /// </summary>
     public bool Experimental { get; set; }
 
-    /// <summary>Experimental: "Put them back where they were" after Check for changes (a run on the snapshot kept after the last run).</summary>
-    public bool PutBackChanges { get; set; }
-
-    /// <summary>
-    /// Experimental: Ready's "Set them for me" sets the design's fixtures through the game's fixtures
-    /// windows (Session/FixtureRunner). Only while <see cref="Experimental"/> is on too.
-    /// </summary>
-    public bool SetFixturesForYou { get; set; }
-
     /// <summary>
     /// Ready's Finish stage, "Set them for me after placing": when a placing run started from Ready
-    /// finishes, setting the fixtures starts by itself (only while <see cref="SetFixturesForYou"/> counts).
+    /// finishes, setting the fixtures starts by itself.
     /// </summary>
-    public bool FixturesAfterPlacing { get; set; }
+    public bool FixturesAfterPlacing { get; set; } = true;
 
     /// <summary>
     /// The furnishing list's storeroom rows learnt in each house (by house id), kept while the
@@ -154,9 +146,22 @@ public sealed partial class Configuration : IPluginConfiguration
     /// setting more than the pause between pieces; Careful becomes Steady, the rest Quick.
     /// </remarks>
     /// <remarks>Version 6 (0.3.4): place anywhere is on by default, so it's switched on.</remarks>
+    /// <remarks>Version 7 (0.7.13): no Beta switch; Get them for me first and Set them after placing on, unless the Beta features were in use.</remarks>
     public bool Migrate()
     {
-        if (Version >= 6) return false;
+        if (Version >= 7) return false;
+        if (Version < 7 && !Experimental)
+        {
+            // 0.7.13: the Beta features are always there; someone who never switched them on gets
+            // their own switches as a new install has them (they were never in use).
+            GetFirst = true;
+            FixturesAfterPlacing = true;
+        }
+        if (Version >= 6)
+        {
+            Version = 7;
+            return true;
+        }
         if (Version < 4)
         {
             NearMe = NearMeRadius > 0;
@@ -164,7 +169,7 @@ public sealed partial class Configuration : IPluginConfiguration
         }
         if (Version < 5) Pace = Pacing.FromOldInterval(IntervalMs);
         PlaceAnywhere = true;
-        Version = 6;
+        Version = 7;
         return true;
     }
 

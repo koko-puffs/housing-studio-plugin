@@ -37,6 +37,12 @@ public sealed record VendorOffer(
     string? District,
     bool NeedsUnlock = false)
 {
+    /// <summary>
+    /// The quests the shop wants done before it offers the item (Quest rows), from GilShopItem's
+    /// QuestRequired; empty when none (or not known). The errands go only where you've done them.
+    /// </summary>
+    public IReadOnlyList<uint> UnlockQuests { get; init; } = Array.Empty<uint>();
+
     /// <summary>Whether the NPC's spot is known (an errand can walk there).</summary>
     public bool Located => TerritoryId != 0 && Position != null;
 

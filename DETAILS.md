@@ -8,7 +8,25 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.7.12. Placing works in the game; the newer features haven't all been tried in it yet.**
+> **Status: 0.7.13. Placing works in the game; the newer features haven't all been tried in it yet.**
+> 0.7.13: **No Beta**: the errands, setting the fixtures and putting back what changed are always
+> there, and the Beta tab and tags are gone; Ready's own switches (Get them for me first, Set them for
+> me after placing) are on by default. **New defaults** for a new install: Daring pace, pieces in place
+> marked too, a 1,000,000 gil market ceiling, other worlds on, Ul'dah for the market. **Trips by
+> world**: each stop (a retainer, a vendor, a world's board) goes into as few trips as it can, the
+> biggest first into the first trip with room, so a world's board isn't visited trip after trip.
+> **Fixtures** for the side you're in that aren't in your bags are got too (vendors, the board,
+> retainers), and set after placing. **Vendors**: a price a shop asks that the game's data has wrong is
+> learnt and used in every estimate after (in a rehearsal it's a note, not a failure); a shop that
+> offers an item only after a quest you haven't done isn't planned. **The way to your door** is kept
+> for the plot it goes into: the errands' screen asks you to record it when your home's plot has none
+> (none yet, or you've moved), and Settings says which plot's it is (a way from 0.7.12 learns its plot
+> the first time it's followed in). **A rehearsal's dye**: a placed piece already dyed is a stand-in
+> first (0.7.12 found none going by the item sheet alone), and when none is found it says what it
+> counted. **The market ceiling** can be typed in (2500000, 2.5m, 750k), up to the gil cap. **The
+> errands' limits** sit above the trips, so changing one doesn't move the row away. **"What it's
+> doing"** shows as many lines as fit the window. The chambers' "You: Go up…" isn't logged when you're
+> up already.
 > 0.7.12: **the way to your front door** is recorded once and followed after (Settings → Getting →
 > **Way to your door**: Record, walk from where the home teleport lands you to your door, go in; going
 > in saves it). vnavmesh's map of a residential ward is built from the zone, which has no houses or

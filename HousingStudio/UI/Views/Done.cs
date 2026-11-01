@@ -14,7 +14,7 @@ namespace HousingStudio.UI;
 /// Done (the 0.6 flow, docs/mockups/flow.html): a run finished or stopped. The mark, "<name> is in" and
 /// one line of what happened (with the errands' trips and gil when the run came from them); the tally;
 /// what needs you; one undo card (Swap back after a swap, else Put them back); a card for the fixtures
-/// left (Set them, Beta); and Try again / Carry on / Done. A finished preview offers to start placing as
+/// left (Set them); and Try again / Carry on / Done. A finished preview offers to start placing as
 /// Ready's choice has it (Keep, Clear out or Swap).
 /// </summary>
 public sealed partial class MainWindow
@@ -255,7 +255,7 @@ public sealed partial class MainWindow
 
     /// <summary>
     /// The fixtures left as a card (step 3 of the flow): "8 fixtures to set", what they are, and Set them
-    /// (Beta) with the fixtures run switched on (asks first, as Ready's does); else where to set them.
+    /// with the fixtures run switched on (asks first, as Ready's does); else where to set them.
     /// </summary>
     private void DrawFixturesCard(Layout layout)
     {
@@ -283,7 +283,7 @@ public sealed partial class MainWindow
         foreach (var t in FixturePlan())
             if (t.State == FixtureState.ToSet) toSet++;
         var blocked = run.CanStart() ?? (toSet == 0 ? "Nothing here to set from your bags" : null);
-        if (Kit.ActionCard("##fixtures-card", Icon.Brick, null, f.Title, f.Line, "Set them", null, true, blocked != null, blocked ?? FixtureBagWords()))
+        if (Kit.ActionCard("##fixtures-card", Icon.Brick, null, f.Title, f.Line, "Set them", null, false, blocked != null, blocked ?? FixtureBagWords()))
             AskSetFixtures(toSet);
     }
 

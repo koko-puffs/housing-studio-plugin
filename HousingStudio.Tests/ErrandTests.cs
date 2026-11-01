@@ -173,6 +173,35 @@ public class ErrandPlannerTests
         Assert.Equal(2, stops[1].Items.Count);
     }
 
+    // 0.7.13: a world's board in as few trips as it can (0.7.12 went back to Shiva trip after trip).
+
+    [Fact]
+    public void EachWorldsBoardIsVisitedOnceWhenItFitsATrip()
+    {
+        var listings = new List<(uint, int, string)>();
+        for (var i = 0; i < 4; i++) listings.Add((1000u + (uint)i, 1, "Lich"));
+        for (var i = 0; i < 8; i++) listings.Add((2000u + (uint)i, 1, "Shiva"));
+        for (var i = 0; i < 3; i++) listings.Add((3000u + (uint)i, 1, "Twintania"));
+        var quotes = new[] { Quote(300, listings.Take(4).ToArray()), Quote(301, listings.Skip(4).Take(8).ToArray()), Quote(302, listings.Skip(12).ToArray()) };
+        var shop = Shop(new[] { new Need(300, 4, NeedKind.Piece), new Need(301, 8, NeedKind.Piece), new Need(302, 3, NeedKind.Piece) }, quotes: quotes);
+        var plan = ErrandPlanner.Build(shop, Options(free: 10));
+        Assert.Equal(2, plan.Trips.Count);
+        foreach (var world in new[] { "Lich", "Shiva", "Twintania" })
+            Assert.Single(plan.Trips, t => t.Stops.Any(s => s.World == world));
+        Assert.Equal(15, plan.Trips.Sum(t => t.Count));
+        Assert.All(plan.Trips, t => Assert.True(t.Slots <= 10));
+    }
+
+    [Fact]
+    public void AWorldTooBigForOneTripIsSplitOnlyAsMuchAsItMust()
+    {
+        var listings = Enumerable.Range(0, 13).Select(i => (1000u + (uint)i, 1, "Shiva")).ToArray();
+        var shop = Shop(new[] { new Need(300, 13, NeedKind.Piece) }, quotes: new[] { Quote(300, listings) });
+        var plan = ErrandPlanner.Build(shop, Options(free: 10));
+        Assert.Equal(2, plan.Trips.Count);
+        Assert.Equal(new[] { 10, 3 }, plan.Trips.Select(t => t.Count));
+    }
+
     // 0.7.12: listings Universalis hasn't seen lately are put after fresh ones; a world whose board had
     // none is left out.
 
@@ -239,9 +268,29 @@ public class ErrandWordsTests
         Assert.Equal(250_000, HousingStudio.UI.Model.ErrandWords.StepCeiling(100_000, 1));
         Assert.Equal(50_000, HousingStudio.UI.Model.ErrandWords.StepCeiling(100_000, -1));
         Assert.Equal(0, HousingStudio.UI.Model.ErrandWords.StepCeiling(0, -1));
-        Assert.Equal(10_000_000, HousingStudio.UI.Model.ErrandWords.StepCeiling(10_000_000, 1));
+        Assert.Equal(25_000_000, HousingStudio.UI.Model.ErrandWords.StepCeiling(10_000_000, 1));
+        Assert.Equal(HousingStudio.UI.Model.ErrandWords.GilCap, HousingStudio.UI.Model.ErrandWords.StepCeiling(HousingStudio.UI.Model.ErrandWords.GilCap, 1));
         Assert.Equal(100_000, HousingStudio.UI.Model.ErrandWords.StepCeiling(75_000, 1));
     }
+
+    [Theory]
+    [InlineData("2500000", 2_500_000L)]
+    [InlineData("2,500,000 gil", 2_500_000L)]
+    [InlineData("2.500.000", 2_500_000L)]
+    [InlineData("2.5m", 2_500_000L)]
+    [InlineData("2,5m", 2_500_000L)]
+    [InlineData("750k", 750_000L)]
+    [InlineData("1b", 999_999_999L)]
+    [InlineData("0", 0L)]
+    [InlineData("99999999999999", 999_999_999L)]
+    [InlineData(" 12 000 000 ", 12_000_000L)]
+    public void ACeilingCanBeTypedIn(string typed, long want) => Assert.Equal(want, HousingStudio.UI.Model.ErrandWords.ParseGil(typed));
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("gil")]
+    [InlineData("lots")]
+    public void NoNumberIsNoCeiling(string typed) => Assert.Null(HousingStudio.UI.Model.ErrandWords.ParseGil(typed));
 
     private static readonly Func<uint, string> Names = id => id switch { 100 => "Glade Shelf", 200 => "Riviera Table", 300 => "Oasis Rug", _ => $"Item {id}" };
 
@@ -533,6 +582,18 @@ public class DoorWayTests
     {
         var (left, _) = DoorWays.From(Line((0, 0), (1, 0)), new Vector3(1, 0, 0));
         Assert.Empty(left);
+    }
+
+    [Fact]
+    public void AHomeHasAWayWhenOneGoesIntoItsPlot()
+    {
+        var ways = new[] { DoorWay.From(340, Line((0, 0), (5, 10)), Noon, plot: 12) };
+        Assert.True(DoorWays.HasFor(ways, 340, 12));
+        Assert.False(DoorWays.HasFor(ways, 340, 13)); // moved to another plot: asked again
+        Assert.False(DoorWays.HasFor(ways, 341, 12));
+        Assert.True(DoorWays.HasFor(ways, 340, null)); // an apartment has no door to walk to
+        // A way from before plots were kept counts for any plot in its zone, until it's followed in.
+        Assert.True(DoorWays.HasFor(new[] { DoorWay.From(340, Line((0, 0), (5, 10)), Noon) }, 340, 13));
     }
 
     [Fact]

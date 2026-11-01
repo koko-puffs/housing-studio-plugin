@@ -75,7 +75,61 @@ public sealed class Shopping : IDisposable
 
     private static (uint World, string? Name) dataCentreOf = (uint.MaxValue, null);
 
-    private (Plan? Plan, object? Dyes, bool Vendors, int Market, int Record, int Allagan, bool Prices, string? Scope, string? District, long Minute) key;
+    private (Plan? Plan, object? Dyes, bool Vendors, int Market, int Record, int Allagan, bool Prices, string? Scope, string? District, long Minute, int Learnt, string Fixtures) key;
+
+    /// <summary>
+    /// The design's fixtures for the side you're on that aren't in your bags (an item each), for the
+    /// errands to get too; set by the plugin (Set them for me's own reading). Read at most every 2 s.
+    /// </summary>
+    public Func<IReadOnlyList<uint>>? FixturesToGet { get; set; }
+
+    private (DateTime Until, IReadOnlyList<uint> Items, string Key) fixturesNow = (DateTime.MinValue, Array.Empty<uint>(), string.Empty);
+
+    private (IReadOnlyList<uint> Items, string Key) Fixtures()
+    {
+        if (DateTime.UtcNow < fixturesNow.Until) return (fixturesNow.Items, fixturesNow.Key);
+        IReadOnlyList<uint> items;
+        try
+        {
+            items = FixturesToGet?.Invoke() ?? Array.Empty<uint>();
+        }
+        catch (Exception ex)
+        {
+            Services.Log.Debug(ex, "Couldn't read the fixtures to get");
+            items = Array.Empty<uint>();
+        }
+        var sorted = items.OrderBy(i => i).ToList();
+        fixturesNow = (DateTime.UtcNow + TimeSpan.FromSeconds(2), sorted, string.Join(",", sorted));
+        return (fixturesNow.Items, fixturesNow.Key);
+    }
+
+    /// <summary>Goes up when a vendor price is learnt (the plan is worked out again).</summary>
+    private int learnt;
+
+    /// <summary>
+    /// Every NPC selling an item for gil, at the price a shop was seen to ask when the game's data has
+    /// another (<see cref="Configuration.ErrandsVendorPrices"/>).
+    /// </summary>
+    public IReadOnlyList<VendorOffer> Offers(uint itemId)
+    {
+        var offers = Vendors.Offers(itemId);
+        return offers.Count > 0 && config.ErrandsVendorPrices.TryGetValue(itemId, out var price) && price > 0 && offers[0].Price != price
+            ? offers.Select(o => o with { Price = price }).ToList()
+            : offers;
+    }
+
+    /// <summary>
+    /// A shop asked <paramref name="unitPrice"/> for one of an item: kept, when it's not what the plan
+    /// had, for every estimate after. True when it was new.
+    /// </summary>
+    public bool LearnPrice(uint itemId, uint unitPrice)
+    {
+        if (unitPrice == 0 || Offers(itemId) is not { Count: > 0 } offers || offers[0].Price == unitPrice) return false;
+        config.ErrandsVendorPrices[itemId] = unitPrice;
+        config.Save();
+        learnt++;
+        return true;
+    }
     private (ShoppingPlan Shop, IReadOnlyList<Need> Needs, IReadOnlyList<uint> Priced, string? Scope) last = (ShoppingPlan.Empty, Array.Empty<Need>(), Array.Empty<uint>(), null);
 
     /// <summary>The needs the plan was last built for.</summary>
@@ -107,8 +161,9 @@ public sealed class Shopping : IDisposable
     private ShoppingPlan Build(Plan plan, IReadOnlyList<(byte Stain, string Name, int Count)> dyesToBuy, string? district)
     {
         var scope = config.LookUpMarketPrices ? DataCentre() : null;
+        var (fixtures, fixturesKey) = Fixtures();
         var k = (plan, (object?)dyesToBuy, Vendors.Ready, Market.Version, Record.Version, Allagan.Version, config.LookUpMarketPrices, scope, district,
-            DateTime.UtcNow.Ticks / TimeSpan.TicksPerMinute);
+            DateTime.UtcNow.Ticks / TimeSpan.TicksPerMinute, learnt, fixturesKey);
         if (k == key) return last.Shop;
         var firstForPlan = !ReferenceEquals(key.Plan, plan);
         key = k;
@@ -119,6 +174,8 @@ public sealed class Shopping : IDisposable
         }
 
         var needs = ShoppingPlanner.NeedsOf(plan, dyesToBuy.Select(d => (d.Stain, d.Count)), s => data.DyeItems(s).FirstOrDefault());
+        // The fixtures too (0.7.13): got with the rest, then set after placing (Set them for me).
+        needs.AddRange(fixtures.Where(i => i != 0).GroupBy(i => i).Select(g => new Need(g.Key, g.Count(), NeedKind.Fixture)));
         // Retainers' names: the game's list (once it's been sent this session), else AutoRetainer's.
         var names = RetainerRecord.Names();
         foreach (var (id, name) in AutoRetainer.Names) names.TryAdd(id, name);
@@ -130,12 +187,12 @@ public sealed class Shopping : IDisposable
         var quotes = new Dictionary<uint, MarketQuote>();
         if (scope != null)
         {
-            priced = ShoppingPlanner.ToPrice(needs, retainers, Vendors.Offers).Where(Vendors.Marketable).ToList();
+            priced = ShoppingPlanner.ToPrice(needs, retainers, Offers).Where(Vendors.Marketable).ToList();
             // Before the vendors are read, every item looks unsold: wait for them rather than ask about all.
             if (Vendors.Ready) Market.Request(scope, priced);
             quotes = Market.Quotes(scope, priced);
         }
-        var shop = ShoppingPlanner.Build(needs, retainers, Vendors.Offers, quotes, Vendors.Craft, district);
+        var shop = ShoppingPlanner.Build(needs, retainers, Offers, quotes, Vendors.Craft, district);
         last = (shop, needs, priced, scope);
         return shop;
     }

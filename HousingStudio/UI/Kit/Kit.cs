@@ -534,6 +534,76 @@ public static partial class Kit
 
     public static float StepperWidth(string value) => S(40) * 2 + MathF.Max(S(64), Txt.Measure(value, Face.Mono, 13).X + S(16));
 
+    /// <summary>What's typed in an editable stepper while it's being typed in (by id).</summary>
+    private static readonly Dictionary<string, string> StepperTyping = new();
+
+    /// <summary>
+    /// A stepper whose value can be typed in too: − value +, as <see cref="Stepper"/>, the value a field
+    /// (pressed, all of it is picked, so typing replaces it). Returns −1, 0 or +1 for the buttons;
+    /// <paramref name="typed"/> is what was typed once Enter is pressed or the field is left.
+    /// </summary>
+    public static int StepperEdit(string id, Vector2 pos, string value, bool canDown, bool canUp, out string? typed)
+    {
+        typed = null;
+        var dl = Dl;
+        var h = S(40);
+        var valueW = MathF.Max(S(64), Txt.Measure(value, Face.Mono, 13).X + S(16));
+        var w = h * 2 + valueW;
+        var typing = StepperTyping.TryGetValue(id, out var buffer);
+        dl.AddRect(pos + new Vector2(0.5f), pos + new Vector2(w, h) - new Vector2(0.5f), Palette.U32(typing ? Palette.Brass : Palette.LineStrong), h / 2, ImDrawFlags.None, 1f);
+        var result = 0;
+        foreach (var (dir, x, icon, can) in new[] { (-1, pos.X, Icon.Minus, canDown), (1, pos.X + h + valueW, Icon.Plus, canUp) })
+        {
+            var p = new Vector2(x, pos.Y);
+            var (clicked, hovered, held) = Hit($"{id}{dir}", p, new Vector2(h), !can);
+            if (clicked) result = dir;
+            var old = Palette.Opacity;
+            if (!can) Palette.Opacity = old * 0.4f;
+            if (hovered || held) dl.AddCircleFilled(p + new Vector2(h / 2), h / 2 - S(4), Palette.U32(held ? Palette.LinePicked : Palette.LineFaint), 32);
+            Icons.Draw(dl, icon, p + new Vector2((h - S(16)) / 2), S(16), hovered ? Palette.Ivory : Palette.Ash);
+            Palette.Opacity = old;
+            FocusRing(p + new Vector2(S(4)), p + new Vector2(h - S(4)), h / 2 - S(4));
+        }
+        var text = typing ? buffer! : value;
+        using (Txt.Fonts.Push(Face.Mono, 13))
+        {
+            var fh = ImGui.GetFontSize();
+            // Not being typed in: the value drawn centred as the stepper's, the field's own words hidden.
+            ImGui.PushStyleColor(ImGuiCol.Text, typing ? Palette.Ivory : new Vector4(0, 0, 0, 0));
+            ImGui.PushStyleColor(ImGuiCol.FrameBg, new Vector4(0, 0, 0, 0));
+            ImGui.PushStyleColor(ImGuiCol.FrameBgHovered, new Vector4(0, 0, 0, 0));
+            ImGui.PushStyleColor(ImGuiCol.FrameBgActive, new Vector4(0, 0, 0, 0));
+            ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(S(4), (h - fh) / 2));
+            var keep = ImGui.GetCursorScreenPos();
+            ImGui.SetCursorScreenPos(new Vector2(pos.X + h + S(4), pos.Y));
+            ImGui.SetNextItemWidth(valueW - S(8));
+            if (Blocked) ImGui.BeginDisabled();
+            ImGui.InputTextWithHint($"{id}-type", string.Empty, ref text, 24, ImGuiInputTextFlags.AutoSelectAll);
+            if (Blocked) ImGui.EndDisabled();
+            var active = ImGui.IsItemActive();
+            var hovered = ImGui.IsItemHovered() && !Blocked;
+            if (ImGui.IsItemDeactivated())
+            {
+                if (typing) typed = text;
+                StepperTyping.Remove(id);
+            }
+            else if (active)
+            {
+                StepperTyping[id] = text;
+            }
+            if (hovered) ImGui.SetMouseCursor(ImGuiMouseCursor.TextInput);
+            ImGui.PopStyleVar();
+            ImGui.PopStyleColor(4);
+            ImGui.SetCursorScreenPos(keep);
+        }
+        if (!typing)
+        {
+            var tw = Txt.Measure(value, Face.Mono, 13).X;
+            Txt.Line(dl, new Vector2(pos.X + h + (valueW - tw) / 2, pos.Y), value, Face.Mono, 13, Palette.Ivory, 40);
+        }
+        return result;
+    }
+
     /// <summary>
     /// A field you type in: 40 tall, radius 10, the strong edge (brass while you type in it), the well
     /// inside, an icon before the words, the hint in dim. Returns true when the text changed.

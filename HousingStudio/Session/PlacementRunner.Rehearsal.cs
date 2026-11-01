@@ -106,15 +106,26 @@ public sealed unsafe partial class PlacementRunner
         var dye = data.DyeName(stain);
         Rehearsals.Report.WouldDyeOncePlaced();
         LivePiece? standIn = null;
-        if (!dyesTriedOnStandIn.Contains(stain) && ReadLive() is { } live)
-            standIn = live.Values
-                .Where(p => p.Instance != 0 && p.Stain != stain && data.Dyeable(p.ItemId))
-                .OrderByDescending(p => p.Stain != 0) // one that's dyed already surely takes a dye
-                .Select(p => (LivePiece?)p)
-                .FirstOrDefault();
+        string? none = null;
+        if (!dyesTriedOnStandIn.Contains(stain))
+        {
+            if (ReadLive() is not { } live) none = "what's placed here couldn't be read";
+            else
+            {
+                // A piece dyed already surely takes a dye (0.7.12's chamber found no stand-in among 100
+                // placed pieces going by the item sheet alone); then those the sheet says take one.
+                var loaded = live.Values.Where(p => p.Instance != 0 && p.Stain != stain).ToList();
+                standIn = loaded.Where(p => p.Stain != 0).Concat(loaded.Where(p => p.Stain == 0 && data.Dyeable(p.ItemId)))
+                    .Select(p => (LivePiece?)p)
+                    .FirstOrDefault();
+                if (standIn == null)
+                    none = $"none of the {live.Count} pieces placed here is dyed or takes a dye by the game's data ({live.Values.Count(p => p.Instance != 0)} loaded, "
+                           + $"{live.Values.Count(p => data.Dyeable(p.ItemId))} dyeable, {live.Values.Count(p => p.Stain != 0)} dyed)";
+            }
+        }
         if (standIn is not { } s)
         {
-            var why = dyesTriedOnStandIn.Contains(stain) ? $"{dye} was tried on a stand-in already" : "nothing placed here takes a dye to try it on";
+            var why = dyesTriedOnStandIn.Contains(stain) ? $"{dye} was tried on a stand-in already" : none ?? "nothing placed here takes a dye to try it on";
             return (new List<Step>
             {
                 Step.Act($"Would dye {name} {dye} once placed (it isn't placed in a rehearsal; {why})", () =>

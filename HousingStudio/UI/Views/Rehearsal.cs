@@ -88,7 +88,6 @@ public sealed partial class MainWindow
         var notGetting = ShopPlan().IsEmpty ? null
             : g.NotGetting != null ? $"Getting wasn't rehearsed: {g.NotGetting}"
             : !config.GetFirst ? "Getting wasn't rehearsed: \"Get them for me first\" is off."
-            : !Errands.Enabled ? "Getting wasn't rehearsed: the errands are off (Settings → Beta)."
             : null;
         vm.Starting(entries);
         OnFramework(() =>

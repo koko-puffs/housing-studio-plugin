@@ -73,6 +73,10 @@ public sealed class VendorData
     public bool Marketable(uint itemId) => marketable.GetOrAdd(itemId, id =>
         Services.Data.GetExcelSheet<Item>().TryGetRow(id, out var item) && !item.IsUntradable && item.ItemSearchCategory.RowId != 0);
 
+    /// <summary>A fixture (a house's or a room's walls, floor, light…): its Item's UI category is one of the fixtures'.</summary>
+    private static bool IsFixtureItem(uint itemId) =>
+        Services.Data.GetExcelSheet<Item>().TryGetRow(itemId, out var item) && GameData.IsFixtureCategory(item.ItemUICategory.RowId);
+
     private static CraftOption? ReadCraft(uint itemId)
     {
         try
@@ -121,17 +125,23 @@ public sealed class VendorData
                 wanted.Add(id);
 
         // Gil shops' items (GilShopItem's subrows, one row per shop).
-        var shopItems = new Dictionary<uint, List<(uint Item, bool Unlock)>>();
+        var shopItems = new Dictionary<uint, List<(uint Item, bool Unlock, uint[] Quests)>>();
         foreach (var row in Services.Data.GetSubrowExcelSheet<GilShopItem>())
             foreach (var sub in row)
             {
                 var id = sub.Item.RowId;
-                if (id == 0 || !(data.IsFurnishing(id) || wanted.Contains(id))) continue;
+                // Furnishings, dyes, and (0.7.13, for the errands) fixtures: the Item's UI category.
+                if (id == 0 || !(data.IsFurnishing(id) || wanted.Contains(id) || IsFixtureItem(id))) continue;
                 var unlock = sub.AchievementRequired.RowId != 0;
+                var quests = new List<uint>();
                 foreach (var q in sub.QuestRequired)
-                    unlock |= q.RowId != 0;
-                if (!shopItems.TryGetValue(row.RowId, out var list)) shopItems[row.RowId] = list = new List<(uint, bool)>();
-                list.Add((id, unlock));
+                    if (q.RowId != 0)
+                    {
+                        unlock = true;
+                        quests.Add(q.RowId);
+                    }
+                if (!shopItems.TryGetValue(row.RowId, out var list)) shopItems[row.RowId] = list = new List<(uint, bool, uint[])>();
+                list.Add((id, unlock, quests.ToArray()));
             }
         var shopNames = new Dictionary<uint, string>();
         var gilShops = Services.Data.GetExcelSheet<GilShop>();
@@ -261,14 +271,14 @@ public sealed class VendorData
             if (name.Length == 0) name = "Vendor";
             var at = spots.TryGetValue(npc, out var list) ? list : new List<Spot>();
             foreach (var shop in shops)
-                foreach (var (item, unlock) in shopItems[shop])
+                foreach (var (item, unlock, quests) in shopItems[shop])
                 {
                     var price = items.TryGetRow(item, out var it) ? it.PriceMid : 0;
                     if (price == 0) continue;
                     if (!byItem.TryGetValue(item, out var offers)) byItem[item] = offers = new List<VendorOffer>();
                     if (at.Count == 0)
                     {
-                        offers.Add(new VendorOffer(item, price, npc, name, shop, shopNames[shop], 0, string.Empty, 0, null, null, null, unlock));
+                        offers.Add(new VendorOffer(item, price, npc, name, shop, shopNames[shop], 0, string.Empty, 0, null, null, null, unlock) { UnlockQuests = quests });
                         continue;
                     }
                     foreach (var spot in at)
@@ -277,7 +287,7 @@ public sealed class VendorData
                         System.Numerics.Vector2? coords = maps.TryGetRow(spot.Map, out var map)
                             ? MapCoords.FromWorld(spot.Position, map.OffsetX, map.OffsetY, map.SizeFactor)
                             : null;
-                        offers.Add(new VendorOffer(item, price, npc, name, shop, shopNames[shop], spot.Territory, place, spot.Map, coords, spot.Position, district, unlock));
+                        offers.Add(new VendorOffer(item, price, npc, name, shop, shopNames[shop], spot.Territory, place, spot.Map, coords, spot.Position, district, unlock) { UnlockQuests = quests });
                     }
                 }
         }

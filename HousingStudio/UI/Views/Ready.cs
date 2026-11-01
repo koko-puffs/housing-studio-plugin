@@ -252,8 +252,8 @@ public sealed partial class MainWindow
             if (Errands.Enabled)
             {
                 var beside = Kit.LabeledSwitchWidth(GetFirstLabel, true) + S(12) + listW <= w;
-                if (Kit.LabeledSwitch("##get-first", new Vector2(at.X, at.Y + S(3)), config.GetFirst, GetFirstLabel, true,
-                        "Experimental: the button below opens the errands first. They fetch what's missing from your retainers, vendors and the market board, then place. You see the gil before anything is bought."))
+                if (Kit.LabeledSwitch("##get-first", new Vector2(at.X, at.Y + S(3)), config.GetFirst, GetFirstLabel, false,
+                        "The button below opens the errands first. They fetch what's missing from your retainers, vendors and the market board, then place. You see the gil before anything is bought."))
                 {
                     config.GetFirst = !config.GetFirst;
                     config.Save();
@@ -383,7 +383,7 @@ public sealed partial class MainWindow
 
     /// <summary>
     /// Finish: the fixtures still to set and how many are ticked, what they are, "Set them for me
-    /// after placing" (Experimental), and Tick off (the tick list, with Set them for me). While the
+    /// after placing", and Tick off (the tick list, with Set them for me). While the
     /// plugin sets them, its step, Continue and Stop.
     /// </summary>
     private void DrawFinishStage(Layout layout, int all, int done, StageState state)
@@ -405,8 +405,8 @@ public sealed partial class MainWindow
             if (Plugin.FixtureRun.Enabled && left > 0)
             {
                 var beside = Kit.LabeledSwitchWidth(AfterLabel, true) + S(12) + tickW <= w;
-                if (Kit.LabeledSwitch("##fixtures-after", new Vector2(at.X, at.Y + S(3)), config.FixturesAfterPlacing, AfterLabel, true,
-                        "Experimental: when placing from here finishes, the game's fixtures window is opened and each fixture put in from your bags, step by step. You press its apply."))
+                if (Kit.LabeledSwitch("##fixtures-after", new Vector2(at.X, at.Y + S(3)), config.FixturesAfterPlacing, AfterLabel, false,
+                        "When placing from here finishes, the game's fixtures window is opened and each fixture put in from your bags, step by step. You press its apply."))
                 {
                     config.FixturesAfterPlacing = !config.FixturesAfterPlacing;
                     config.Save();
@@ -424,7 +424,7 @@ public sealed partial class MainWindow
         Kit.EndStage();
     }
 
-    /// <summary>Tick off: how to set them, Set them for me (Experimental), and the fixtures by floor, each with its tick box.</summary>
+    /// <summary>Tick off: how to set them, Set them for me, and the fixtures by floor, each with its tick box.</summary>
     private void DrawFixtureTicks(Layout layout)
     {
         Kit.Gap(10);

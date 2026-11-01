@@ -28,7 +28,7 @@ public sealed record FixtureTask(LayoutFixture Fixture, FixtureState State, stri
 public sealed record CurrentFixture(string Level, string Type, uint ItemId, string? DyeHex = null);
 
 /// <summary>
-/// Setting a design's fixtures (Settings → Beta): which of them the home has, which can be
+/// Setting a design's fixtures: which of them the home has, which can be
 /// set from your bags, and where each goes in the game's fixtures window. The window keeps what it
 /// shows in an edit container (InventoryType HousingInteriorAppearanceEdit, 2012, or the outside's
 /// 2011); the order of its slots is a guess (the game's own order of the parts, floor by floor),

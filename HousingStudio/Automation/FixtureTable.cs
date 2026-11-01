@@ -4,7 +4,7 @@ using Dalamud.Game;
 namespace HousingStudio.Automation;
 
 /// <summary>
-/// The game's fixtures windows, as "Set them for me" (Settings → Beta) uses them: every name,
+/// The game's fixtures windows, as "Set them for me" uses them: every name,
 /// container and word in one place, with where each came from. Recording 2 (setting one fixture by
 /// hand, inside) showed the menu's entry (Housing → Remodel Interior, [i:2]), the window's apply and
 /// its yes/no. How a fixture goes in its slot from the plugin is still a guess: the game's own way

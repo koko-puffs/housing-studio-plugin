@@ -20,6 +20,12 @@ public sealed class DoorWay
     /// <summary>The spots walked through, x/y/z each, in order; the last is at the door.</summary>
     public List<float[]> Points { get; set; } = new();
 
+    /// <summary>
+    /// The plot whose house it goes into (1-60, read inside once you've gone in), or 0 when not known
+    /// (0.7.12's recordings: such a way is taken as any plot's in its zone until one is followed in).
+    /// </summary>
+    public int Plot { get; set; }
+
     /// <summary>When it was recorded (shown in Settings).</summary>
     public DateTime RecordedAt { get; set; }
 
@@ -27,9 +33,10 @@ public sealed class DoorWay
 
     public Vector3? End => Points.Count > 0 && Points[^1] is { Length: >= 3 } e ? new Vector3(e[0], e[1], e[2]) : null;
 
-    public static DoorWay From(uint territory, IEnumerable<Vector3> spots, DateTime at) => new()
+    public static DoorWay From(uint territory, IEnumerable<Vector3> spots, DateTime at, int plot = 0) => new()
     {
         Territory = territory,
+        Plot = plot,
         Points = spots.Select(s => new[] { s.X, s.Y, s.Z }).ToList(),
         RecordedAt = at,
     };
@@ -109,6 +116,13 @@ public static class DoorWays
         var from = bestD > 2f ? best : best + 1;
         return (spots.Skip(from).ToList(), bestD);
     }
+
+    /// <summary>
+    /// A way is recorded for a home: one in its ward's zone going into its plot (or, not yet known which
+    /// plot, any in that zone). A home with no front door to walk to (an apartment) needs none.
+    /// </summary>
+    public static bool HasFor(IEnumerable<DoorWay> ways, uint wardTerritory, int? plot) =>
+        plot is not { } p || ways.Any(w => w.Territory == wardTerritory && (w.Plot == p || w.Plot == 0));
 
     private static float Flat(Vector3 a, Vector3 b) => Vector2.Distance(new Vector2(a.X, a.Z), new Vector2(b.X, b.Z));
 }
