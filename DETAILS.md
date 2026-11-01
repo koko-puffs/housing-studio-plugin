@@ -24,7 +24,10 @@ its exact spot, then dyes everything to match.
 > the game won't put away while the storeroom has room ("Another furnishing has been placed on that
 > item") is put away after the others; 0.8.6 took that refusal for a full storeroom and sent a hundred
 > pieces to your bags until they were full. A piece to put away whose furniture slot changed is found
-> again by its item and spot.
+> again by its item and spot. From a look through RemakePlace/plugin for more: a piece already placed
+> is now moved in one step (picked, set and let go at once, as it does), and **a dye that ran out** is
+> remembered for the run, so the other pieces needing it are skipped at once instead of each waiting
+> for a confirmation that won't come.
 > 0.8.6: **a click done by hand while it waits for Continue.** Taking from a retainer (and exchanging
 > currencies) has a click not yet seen working, so the errands hold before it for Continue. Its callout
 > showed the click's own words ("Choose “Retrieve…”"), which read as something for you to do; done by

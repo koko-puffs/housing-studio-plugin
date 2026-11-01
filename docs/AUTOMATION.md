@@ -81,7 +81,17 @@ skipped; a few of those in a row stop the run.
 ## Each kind of piece
 
 **Move** (already placed): the editor's pick-up, set the transform, the editor's set-down, check it
-landed. **Works in game.**
+landed. **Works in game.** Since 0.9.0 a piece placed before the run is picked, set and let go in one
+step, as RemakePlace/plugin's `SetItemPosition` does (its select, write and place in one frame); only
+when the editor doesn't hold it at once does the careful way follow (wait for the hold, the click gap,
+then the set-down: about 0.3 s more). A piece the run has just placed, a retry and a rehearsal keep the
+careful way (0.3.0 saw the game let go of a just-placed piece 19 ms after it was picked).
+
+**Dyes that ran out** (0.9.0, as RemakePlace/plugin's `MissingDyes`): when Dye gets no confirmation
+(the button greyed out), the dye counts as out for the run once that happens with none of its own dye
+items in your bags, or twice; later pieces needing it are skipped at once ("Out of …") rather than
+each waiting. The wait for the confirmation is 3 s (it's the game's own window: 30–200 ms in 0.8.6's
+run), not 6.
 
 **From the storeroom**, using only what has been seen to work:
 1. Rotate; the furnishing list `HousingGoods`; its Storeroom tab `HousingGoods ← [i:11]` (clicked only

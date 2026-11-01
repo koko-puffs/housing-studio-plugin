@@ -374,6 +374,8 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         storeAheadTried.Clear();
         storeDeferrals.Clear();
         deferring = false;
+        dyesOut.Clear();
+        dyeMisses.Clear();
         queue.Begin(Array.Empty<Step>());
         nextJobAt = DateTime.UtcNow;
         editorMayCloseUntil = DateTime.UtcNow + ModeSwitchGrace;
@@ -691,6 +693,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 if (job.StartedAt is { } startedS) timings.AddPiece(job.Phase, job.EndedAt.Value - startedS);
                 job.Note = queue.Message;
                 job.Problem = queue.Problem;
+                if (job.Kind == JobKind.Dye && job.Problem == ProblemKind.DyeMissing) NoteDyeOut(job.Target.Stain);
                 log.Warn($"{Name(job)}: {queue.Message}");
                 if (Rehearsal) Rehearsals.Report.Issue(Name(job), queue.Message ?? "Didn't work.", TroubleOf(queue.Message));
                 failuresInARow++;
@@ -938,6 +941,38 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 Run = () => HousingEditor.ActiveItem == 0 ? StepOutcome.Done : StepOutcome.Waiting,
             });
         }
+        // A piece placed before the run (not one it just put down, nor a retry or a rehearsal): picked up,
+        // set at its spot and let go in one go, as RemakePlace/plugin moves pieces (0.9.0; the careful way
+        // waited for the game to hold it and a click gap before the set-down, about 0.3 s). If the game
+        // doesn't hold it at once, the careful way follows.
+        if (!justPlaced && attempt == 0 && !Rehearsal)
+        {
+            steps.Add(new Step
+            {
+                Label = $"Move {name} to its spot (picked up and set down at once)",
+                Key = "pick up",
+                IsAction = true,
+                Run = () =>
+                {
+                    if (CheckBeforePick(job, key, false, out var piece) is { } stop) return stop;
+                    instance = piece.Instance;
+                    if (!editor.Select(instance)) return StepOutcome.Halt("Couldn't pick the piece up (the editor closed?).");
+                    if (HousingEditor.ActiveItem != instance)
+                    {
+                        log.Info($"  The game didn't hold {name} at once: picking it up the careful way.");
+                        queue.InsertNext(new[] { Step.Pause("Wait a moment", Speed.Wait(150)) }.Concat(MoveSteps(job, key, 1, false)));
+                        return StepOutcome.Done;
+                    }
+                    var sg = (SharedGroupLayoutInstance*)instance;
+                    sg->Transform.Translation = job.Target.Position;
+                    sg->Transform.Rotation = Transforms.YawQuaternion(job.Target.Yaw);
+                    if (!editor.Place(instance)) return StepOutcome.Halt("Couldn't set the piece down (the editor closed?).");
+                    queue.InsertNext(SetDownSteps(job, key, instance, attempt, justPlaced).Skip(1));
+                    return StepOutcome.Done;
+                },
+            });
+            return steps;
+        }
         steps.AddRange(new List<Step>
         {
             new Step
@@ -947,30 +982,10 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 IsAction = true,
                 Run = () =>
                 {
-                    var live = ReadLive();
-                    if (live == null || !live.TryGetValue(key, out var piece))
-                        return StepOutcome.Skip("It's no longer where the plan saw it (moved, stored, or the list changed).", ProblemKind.NotFound);
-                    if (piece.ItemId != job.Target.ItemId)
-                        return StepOutcome.Halt($"The furniture list changed under the plan (slot {key} is now {data.ItemName(piece.ItemId)}). Load the plan again and start over.");
-                    if (Landed(key, job.Target))
-                    {
-                        job.Note ??= "Already in place.";
-                        queue.FinishAfterThis();
-                        return StepOutcome.Done;
-                    }
-                    if (piece.Instance == 0)
-                    {
-                        // Just put down: its object may come a moment after its slot (waited for, 2.5 s).
-                        if (justPlaced && queue.Elapsed < TimeSpan.FromSeconds(2.5)) return StepOutcome.Waiting;
-                        return StepOutcome.Skip("The game hasn't loaded it (walk closer to it).", ProblemKind.NotLoaded);
-                    }
+                    if (CheckBeforePick(job, key, justPlaced, out var piece) is { } stop) return stop;
                     // The piece's object as the furniture list has it now (not one remembered from before: the
                     // game may make a new one once a placement goes through).
                     instance = piece.Instance;
-                    // The pick in another mode would do that mode's thing (Store or bags: put it away). The
-                    // mode is checked here too, not only before: a pause or Continue lets you change it.
-                    if (HousingEditor.Mode is not (EditorMode.Rotate or EditorMode.Move))
-                        return StepOutcome.Skip($"The editor was in {ModeWord(HousingEditor.Mode)} when it came to picking it up, so it wasn't picked (nothing changed). Try again moves it.", ProblemKind.Other);
                     if (justPlaced || attempt > 0)
                         log.Info($"  Picking up 0x{instance:X} (slot {key}); held before: {(HousingEditor.ActiveItem == 0 ? "nothing" : $"0x{HousingEditor.ActiveItem:X}")}.");
                     return editor.Select(instance) ? StepOutcome.Done : StepOutcome.Halt("Couldn't pick the piece up (the editor closed?).");
@@ -1003,6 +1018,38 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             },
         });
         return steps;
+    }
+
+    /// <summary>
+    /// Before a piece is picked to move: it's still in its slot as the plan saw it, not already at its spot
+    /// (then the job finishes), its object is loaded, and the editor is in Rotate or Move. A step's outcome
+    /// when it can't be picked now, else null with the piece.
+    /// </summary>
+    private StepOutcome? CheckBeforePick(RunJob job, int key, bool justPlaced, out LivePiece piece)
+    {
+        piece = default;
+        var live = ReadLive();
+        if (live == null || !live.TryGetValue(key, out piece))
+            return StepOutcome.Skip("It's no longer where the plan saw it (moved, stored, or the list changed).", ProblemKind.NotFound);
+        if (piece.ItemId != job.Target.ItemId)
+            return StepOutcome.Halt($"The furniture list changed under the plan (slot {key} is now {data.ItemName(piece.ItemId)}). Load the plan again and start over.");
+        if (Landed(key, job.Target))
+        {
+            job.Note ??= "Already in place.";
+            queue.FinishAfterThis();
+            return StepOutcome.Done;
+        }
+        if (piece.Instance == 0)
+        {
+            // Just put down: its object may come a moment after its slot (waited for, 2.5 s).
+            if (justPlaced && queue.Elapsed < TimeSpan.FromSeconds(2.5)) return StepOutcome.Waiting;
+            return StepOutcome.Skip("The game hasn't loaded it (walk closer to it).", ProblemKind.NotLoaded);
+        }
+        // The pick in another mode would do that mode's thing (Store or bags: put it away). The mode is
+        // checked here too, not only before: a pause or Continue lets you change it.
+        if (HousingEditor.Mode is not (EditorMode.Rotate or EditorMode.Move))
+            return StepOutcome.Skip($"The editor was in {ModeWord(HousingEditor.Mode)} when it came to picking it up, so it wasn't picked (nothing changed). Try again moves it.", ProblemKind.Other);
+        return null;
     }
 
     /// <summary>The object of the piece in this furniture slot, as the furniture list has it now (0 if none).</summary>
@@ -2305,6 +2352,10 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     return StepOutcome.Done;
                 }
                 if (piece.Instance == 0) return StepOutcome.Skip("The game hasn't loaded it (walk closer to it).", ProblemKind.NotLoaded);
+                // A dye that ran out earlier in the run isn't tried again for each piece (6 s each), as
+                // RemakePlace/plugin keeps its MissingDyes.
+                if (dyesOut.Contains(job.Target.Stain))
+                    return StepOutcome.Skip($"Out of {dye}: the dye window wouldn't use it for an earlier piece. Get more and Try again.", ProblemKind.DyeMissing);
                 if (HousingActions.DyesOwned(data, job.Target.Stain) <= 0)
                     log.Info($"  None of {dye}'s own dye items in your bags; trying anyway (the window may use another dye, as it used Standard Spectrum Dye in the recordings).");
                 instance = piece.Instance;
@@ -2397,7 +2448,9 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     // preview): only the window closed on its own with the dye in place counts.
                     return !GameUi.IsOpen(UiTable.DyeWindow) && StainOf(key) == job.Target.Stain ? StepOutcome.Done : StepOutcome.Waiting;
                 },
-                Timeout = WindowWait,
+                // The confirmation is the game's own window, not the server's answer: it came in 30-200 ms in
+                // 0.8.6's run, so 3 s (not 6) before taking the Dye button for greyed out.
+                Timeout = TimeSpan.FromSeconds(3),
                 OnTimeout = StepStatus.SkipJob,
                 TimeoutProblem = ProblemKind.DyeMissing,
                 TimeoutMessage = $"The dye confirmation didn't appear after Dye. The Dye button may be greyed out (no {dye} to use, or this piece can't take it).",
@@ -3118,6 +3171,26 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 },
             },
         };
+    }
+
+    /// <summary>Dyes the run found it's out of: later pieces needing them are skipped at once.</summary>
+    private readonly HashSet<byte> dyesOut = new();
+
+    /// <summary>Pieces whose dye the window wouldn't apply, by dye, this run.</summary>
+    private readonly Dictionary<byte, int> dyeMisses = new();
+
+    /// <summary>
+    /// A piece's dye wasn't applied (no confirmation after Dye: the button greyed out). The dye counts as
+    /// out once that happens with none of its own dye items in your bags, or twice (the window can use a
+    /// general-purpose dye, so one miss with some in your bags may be the piece).
+    /// </summary>
+    private void NoteDyeOut(byte stain)
+    {
+        dyeMisses.TryGetValue(stain, out var n);
+        dyeMisses[stain] = ++n;
+        if (dyesOut.Contains(stain) || (n < 2 && HousingActions.DyesOwned(data, stain) > 0)) return;
+        dyesOut.Add(stain);
+        log.Warn($"Out of {data.DyeName(stain)}, it seems: the other pieces needing it are skipped this run.");
     }
 
     /// <summary>The job being ended is moved after the others (<see cref="DeferStore"/>), not failed.</summary>
