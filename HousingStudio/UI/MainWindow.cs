@@ -116,6 +116,8 @@ public sealed partial class MainWindow : Window
         {
             // (Setting the fixtures: its Continue and Stop are in Ready's Finish stage and on Done.)
             if (runner.Active || Plugin.FixtureRun.Active || Plugin.Errands.Active) sub = Sub.None;
+            // With a question up, nothing under it reacts (its own window takes the clicks too).
+            Kit.Blocked = confirm != null;
             if (sub == Sub.Settings && !Plugin.Errands.Active && !Plugin.Errands.ResultWaiting)
             {
                 // Settings over the errands' estimate too (its limits are in Getting); back goes back to it.
@@ -150,8 +152,9 @@ public sealed partial class MainWindow : Window
                         break;
                 }
             }
-            DrawConfirm();
             Frame.DrawToast();
+            Kit.Blocked = false;
+            DrawConfirm();
         }
 
         // Dragging a file in from outside the game: the drop zone (Start) and the body (Ready) take it.
@@ -327,94 +330,125 @@ public sealed partial class MainWindow : Window
     // ---------------------------------------------------------------------------------------------
     // The confirmation dialog: a glass-solid card over the dimmed game, its answers saying what happens.
 
-    private sealed record Confirmation(string Title, string Body, string Yes, string No, Action OnYes);
+    /// <summary>
+    /// A question for you. With <paramref name="Choices"/>, one of them is picked first (the brass answer
+    /// stays greyed until one is) and <paramref name="OnChoice"/> gets its index instead of OnYes.
+    /// </summary>
+    private sealed record Confirmation(string Title, string Body, string Yes, string No, Action OnYes,
+        IReadOnlyList<string>? Choices = null, Action<int>? OnChoice = null);
 
     private Confirmation? confirm;
-    private bool confirmOpened;
+    private int confirmPick = -1;
 
     private void Ask(string title, string body, string yes, string no, Action onYes)
     {
         confirm = new Confirmation(title, body, yes, no, onYes);
-        confirmOpened = false;
+        confirmPick = -1;
     }
 
+    /// <summary>A question with a list to pick one from (Replace a pin?).</summary>
+    private void AskChoice(string title, string body, IReadOnlyList<string> choices, string yes, string no, Action<int> onChoice)
+    {
+        confirm = new Confirmation(title, body, yes, no, () => { }, choices, onChoice);
+        confirmPick = -1;
+    }
+
+    private float confirmCardH;
+
+    /// <summary>
+    /// The question over the plugin's window (0.9.0): a window of its own the size of the plugin's, kept
+    /// in front, which darkens only the plugin's window and takes every click on it; the card in its
+    /// middle. 0.8 used ImGui's modal popup, whose dim covered the whole screen in the game style's pale
+    /// colour, over the card too.
+    /// </summary>
     private void DrawConfirm()
     {
         if (confirm == null) return;
-        const string id = "##hs-confirm";
-        if (!confirmOpened)
-        {
-            ImGui.OpenPopup(id);
-            confirmOpened = true;
-        }
-        var width = MathF.Min(S(440), ImGui.GetWindowWidth() - S(56));
-        ImGui.SetNextWindowPos(ImGui.GetWindowPos() + ImGui.GetWindowSize() / 2, ImGuiCond.Always, new Vector2(0.5f));
-        ImGui.SetNextWindowSize(new Vector2(width, 0));
-        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(S(28)));
-        ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, S(Palette.Radius2Xl));
-        ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 1f);
-        // Its card and the dim behind it are drawn here, not by ImGui: ImGui's own dim takes the colour
-        // the game's style has when the frame is drawn (a pale wash over the whole screen), and the
-        // card was see-through, so the wash showed through it.
-        ImGui.PushStyleColor(ImGuiCol.PopupBg, Vector4.Zero);
-        ImGui.PushStyleColor(ImGuiCol.Border, Vector4.Zero);
-        var open = ImGui.BeginPopupModal(id, ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoSavedSettings);
-        ImGui.PopStyleColor(2);
-        ImGui.PopStyleVar(3);
-        if (!open)
-        {
-            confirm = null;
-            return;
-        }
-        DrawConfirmBackdrop();
-
         var c = confirm;
-        var at = ImGui.GetCursorScreenPos();
-        var inner = width - S(56);
-        Kit.PushBox(at.X, inner);
-        var titleH = Txt.LineBox(Face.Serif, 26, 26 * 1.1f);
-        Txt.Line(Kit.Dl, at, c.Title, Face.Serif, 26, Palette.Ivory, 26 * 1.1f);
-        Kit.Reserve(at, inner, titleH);
-        Kit.Gap(12);
-        Txt.Para(new[] { new Run(c.Body, Face.Sans, 15, Palette.Text) }, 24);
-        Kit.Gap(24);
-        var row = Kit.At;
-        var yesW = Kit.ButtonWidth(c.Yes, BtnSize.Md, null, Btn.Primary);
-        var noW = Kit.ButtonWidth(c.No);
-        var close = false;
-        if (Kit.Button("##no", new Vector2(row.X + inner - yesW - S(8) - noW, row.Y), c.No)) close = true;
-        if (Kit.Button("##yes", new Vector2(row.X + inner - yesW, row.Y), c.Yes, Btn.Primary))
+        var winPos = ImGui.GetWindowPos();
+        var winSize = ImGui.GetWindowSize();
+        ImGui.SetNextWindowPos(winPos, ImGuiCond.Always);
+        ImGui.SetNextWindowSize(winSize, ImGuiCond.Always);
+        ImGui.SetNextWindowFocus();
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, Vector2.Zero);
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 0f);
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, S(10));
+        ImGui.PushStyleColor(ImGuiCol.WindowBg, Vector4.Zero);
+        var shown = ImGui.Begin("##hs-confirm-over", ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoMove
+            | ImGuiWindowFlags.NoSavedSettings | ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoCollapse
+            | ImGuiWindowFlags.NoDocking | ImGuiWindowFlags.NoFocusOnAppearing);
+        ImGui.PopStyleColor();
+        ImGui.PopStyleVar(3);
+        try
         {
-            close = true;
-            c.OnYes();
-        }
-        if (ImGui.IsKeyPressed(ImGuiKey.Escape)) close = true;
-        Kit.Reserve(row, inner, Kit.ButtonHeight(BtnSize.Md));
-        Kit.PopBox();
-        if (close)
-        {
-            confirm = null;
-            ImGui.CloseCurrentPopup();
-        }
-        ImGui.EndPopup();
-    }
+            if (!shown) return;
+            var dl = ImGui.GetWindowDrawList();
+            // The plugin's window darkened (only it), and nothing under it reacts.
+            dl.AddRectFilled(winPos, winPos + winSize, Palette.U32(Palette.WithAlpha(Palette.Ink, 0.72f)), S(10));
+            var width = MathF.Min(S(440), winSize.X - S(56));
+            var pad = S(28);
+            var inner = width - pad * 2;
+            var cardH = confirmCardH > 0 ? confirmCardH : S(220);
+            var cardPos = new Vector2(winPos.X + (winSize.X - width) / 2, winPos.Y + MathF.Max(S(40), (winSize.Y - cardH) / 2));
+            var r = S(Palette.Radius2Xl);
+            dl.AddRectFilled(cardPos, cardPos + new Vector2(width, cardH), Palette.U32(Palette.Over(Palette.Float, Palette.Ink)), r);
+            dl.AddRect(cardPos, cardPos + new Vector2(width, cardH), Palette.U32(Palette.Line), r);
 
-    /// <summary>
-    /// Behind the ask: a dark scrim over the whole screen (above ImGui's pale one), then the card,
-    /// solid, with its edge. Drawn first in the ask's own window, so its words and buttons sit on top.
-    /// </summary>
-    private static void DrawConfirmBackdrop()
-    {
-        var dl = ImGui.GetWindowDrawList();
-        var vp = ImGui.GetMainViewport();
-        dl.PushClipRect(vp.Pos, vp.Pos + vp.Size, false);
-        dl.AddRectFilled(vp.Pos, vp.Pos + vp.Size, Palette.U32(Palette.WithAlpha(Palette.Ink, 0.62f)));
-        dl.PopClipRect();
-        var pos = ImGui.GetWindowPos();
-        var size = ImGui.GetWindowSize();
-        var r = S(Palette.Radius2Xl);
-        dl.AddRectFilled(pos, pos + size, Palette.U32(Palette.Over(Palette.Float, Palette.Ink)), r);
-        dl.AddRect(pos, pos + size, Palette.U32(Palette.Line), r);
+            var at = cardPos + new Vector2(pad, pad);
+            ImGui.SetCursorScreenPos(at);
+            Kit.PushBox(at.X, inner);
+            var titleH = Txt.LineBox(Face.Serif, 26, 26 * 1.1f);
+            Txt.Line(dl, at, c.Title, Face.Serif, 26, Palette.Ivory, 26 * 1.1f);
+            Kit.Reserve(at, inner, titleH);
+            Kit.Gap(12);
+            Txt.Para(new[] { new Run(c.Body, Face.Sans, 15, Palette.Text) }, 24);
+            if (c.Choices is { Count: > 0 } choices)
+            {
+                Kit.Gap(14);
+                for (var i = 0; i < choices.Count; i++)
+                {
+                    var row = Kit.At;
+                    var h = S(40);
+                    var (clicked, hovered, _) = Kit.Hit($"##choice{i}", row, new Vector2(inner, h));
+                    if (clicked) confirmPick = i;
+                    var picked = confirmPick == i;
+                    if (picked || hovered)
+                        dl.AddRectFilled(row, row + new Vector2(inner, h), Palette.U32(picked ? Palette.BrassPicked : Palette.RowHover), S(Palette.RadiusMd));
+                    if (picked) dl.AddRect(row, row + new Vector2(inner, h), Palette.U32(Palette.BrassEdge), S(Palette.RadiusMd));
+                    var text = Txt.Fit(choices[i], Face.Sans, 14, inner - S(28));
+                    Txt.Line(dl, row + new Vector2(S(14), (h - Txt.Natural(Face.Sans, 14)) / 2), text, Face.Sans, 14, picked ? Palette.Ivory : Palette.Text);
+                    Kit.Reserve(row, inner, h);
+                    Kit.Gap(6);
+                }
+            }
+            Kit.Gap(18);
+            var buttons = Kit.At;
+            var yesW = Kit.ButtonWidth(c.Yes, BtnSize.Md, null, Btn.Primary);
+            var noW = Kit.ButtonWidth(c.No);
+            var close = false;
+            var needPick = c.Choices is { Count: > 0 } && confirmPick < 0;
+            if (Kit.Button("##no", new Vector2(buttons.X + inner - yesW - S(8) - noW, buttons.Y), c.No)) close = true;
+            if (Kit.Button("##yes", new Vector2(buttons.X + inner - yesW, buttons.Y), c.Yes, Btn.Primary, BtnSize.Md, null, 0, needPick, needPick ? "Pick one first" : null))
+            {
+                close = true;
+                // Run after the frame (it may open a design, or ask again): not inside this window.
+                var pick = confirmPick;
+                Later(() =>
+                {
+                    if (c.OnChoice != null) c.OnChoice(pick);
+                    else c.OnYes();
+                });
+            }
+            if (ImGui.IsKeyPressed(ImGuiKey.Escape)) close = true;
+            Kit.Reserve(buttons, inner, Kit.ButtonHeight(BtnSize.Md));
+            Kit.PopBox();
+            confirmCardH = Kit.At.Y - cardPos.Y + pad;
+            if (close && ReferenceEquals(confirm, c)) confirm = null;
+        }
+        finally
+        {
+            ImGui.End();
+        }
     }
 
     // ---------------------------------------------------------------------------------------------

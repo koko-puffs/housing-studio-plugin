@@ -36,7 +36,14 @@ public sealed class LayoutSession
     public string? LoadError { get; private set; }
 
     /// <summary>The build's name, else the file's.</summary>
-    public string Title => Layout?.BuildName ?? (FilePath != null ? Path.GetFileNameWithoutExtension(FilePath) : "No layout");
+    /// <summary>The design's name as its file (or build) has it: what keys and saved choices use.</summary>
+    public string RawTitle => Layout?.BuildName ?? (FilePath != null ? Path.GetFileNameWithoutExtension(FilePath) : "No layout");
+
+    /// <summary>The design's name as shown (0.9.0: underscores as spaces, <see cref="DesignNames.Display"/>).</summary>
+    public string Title => DesignNames.Display(RawTitle);
+
+    /// <summary>A short form for eyebrows ("Solution9Loft").</summary>
+    public string ShortTitle => DesignNames.Short(RawTitle);
 
     public HousingContext Context { get; private set; } = HousingContext.None;
 

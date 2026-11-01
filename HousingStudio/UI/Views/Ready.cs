@@ -340,7 +340,7 @@ public sealed partial class MainWindow
 
     private static string FixtureKey(LayoutFixture f) => FixtureTicks.KeyOf(f.Level, f.Type, f.ItemId);
 
-    private string DesignKey => FixtureTicks.DesignKey(session.FilePath, session.Title);
+    private string DesignKey => FixtureTicks.DesignKey(session.FilePath, session.RawTitle);
 
     private (Layout? Layout, DateTime Until, int Done) fixturesDone = (null, DateTime.MinValue, 0);
 

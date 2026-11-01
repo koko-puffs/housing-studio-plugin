@@ -151,7 +151,7 @@ public sealed unsafe partial class FixtureRunner
         side = ctx.Side!.Value;
         var tasks = Plan();
         toSet = tasks.Where(t => t.State == FixtureState.ToSet && t.Slot != null).ToList();
-        designKey = FixtureTicks.DesignKey(session.FilePath, session.Title);
+        designKey = FixtureTicks.DesignKey(session.FilePath, session.RawTitle);
         startLayout = session.Layout;
         // What's set already is ticked (the ticks are kept per design); a rehearsal changes no ticks.
         if (!Rehearsal) TickSet(tasks.Where(t => t.State == FixtureState.Set).Select(t => t.Fixture));

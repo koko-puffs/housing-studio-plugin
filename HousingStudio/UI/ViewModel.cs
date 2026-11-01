@@ -176,39 +176,72 @@ public sealed class ViewModel
     private string recentKey = string.Empty;
 
     /// <summary>
-    /// The Recent list, read from the disk at most every two seconds (or when the list of files
-    /// changes): the window draws every frame, and listing a folder each time would be wasted work on
-    /// the game's thread.
+    /// The Recent list (0.9.0: designs only, pinned ones left out, newest first), read from the disk at
+    /// most every two seconds (or when the files or pins change): the window draws every frame, and
+    /// listing a folder each time would be wasted work on the game's thread.
     /// </summary>
-    public List<RecentRow> Recent(int max = 6)
+    public List<RecentRow> Recent(int max = 8)
     {
-        var key = string.Join("|", config.RecentFiles);
+        Refresh();
+        return recentRows!.Where(r => !r.Backup && !IsPinned(r.Path)).Take(max).ToList();
+    }
+
+    /// <summary>How many designs Recent has in all (for "Show all N").</summary>
+    public int RecentCount
+    {
+        get
+        {
+            Refresh();
+            return recentRows!.Count(r => !r.Backup && !IsPinned(r.Path));
+        }
+    }
+
+    /// <summary>The backups the runs saved, and homes kept by a swap, newest first (This house's Backups).</summary>
+    public List<RecentRow> BackupRows(int max = 12)
+    {
+        Refresh();
+        return backupRows!.Take(max).ToList();
+    }
+
+    /// <summary>The pinned designs, in the order pinned (Home's tiles).</summary>
+    public List<RecentRow> Pinned()
+    {
+        Refresh();
+        return pinnedRows!;
+    }
+
+    public bool IsPinned(string? path) =>
+        path != null && config.PinnedDesigns.Any(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase));
+
+    private List<RecentRow>? backupRows;
+    private List<RecentRow>? pinnedRows;
+
+    private void Refresh()
+    {
+        var key = string.Join("|", config.RecentFiles) + "#" + string.Join("|", config.PinnedDesigns);
         bool pending;
         lock (parsing) pending = parsing.Count > 0;
         // While files are being read in the background, the rows are made again a few times a second (to
         // show them as they come), not every frame.
-        if (recentRows != null && DateTime.UtcNow < recentUntil && key == recentKey) return recentRows;
-        recentRows = ReadRecent(max);
+        if (recentRows != null && DateTime.UtcNow < recentUntil && key == recentKey) return;
+        ReadRecent();
         recentKey = key;
         recentUntil = DateTime.UtcNow + TimeSpan.FromSeconds(pending ? 0.25 : 2);
-        return recentRows;
     }
 
-    private List<RecentRow> ReadRecent(int max)
+    private void ReadRecent()
     {
         var rows = new List<(string Path, bool Backup, DateTime At)>();
         foreach (var path in config.RecentFiles)
         {
             // A hand-edited config can hold an empty entry: File.GetLastWriteTime throws on one, every frame.
             if (string.IsNullOrWhiteSpace(path)) continue;
-            var exists = File.Exists(path);
-            var at = config.RecentOpened.TryGetValue(path, out var t) ? t : exists ? File.GetLastWriteTime(path) : DateTime.MinValue;
-            rows.Add((path, IsBackup(path), at));
+            rows.Add((path, IsBackup(path), OpenedAt(path)));
         }
         try
         {
             if (Directory.Exists(Backups.Folder))
-                foreach (var f in new DirectoryInfo(Backups.Folder).GetFiles("*.build").OrderByDescending(f => f.LastWriteTime).Take(3))
+                foreach (var f in new DirectoryInfo(Backups.Folder).GetFiles("*.build").OrderByDescending(f => f.LastWriteTime).Take(12))
                     if (!rows.Any(r => string.Equals(r.Path, f.FullName, StringComparison.OrdinalIgnoreCase)))
                         rows.Add((f.FullName, true, f.LastWriteTime));
         }
@@ -217,27 +250,46 @@ public sealed class ViewModel
         }
 
         var now = DateTime.Now;
-        return rows.OrderByDescending(r => r.At).Take(max).Select(r =>
+        var all = rows.OrderByDescending(r => r.At).Select(r => Row(r.Path, r.Backup, r.At, now)).ToList();
+        recentRows = all;
+        backupRows = all.Where(r => r.Backup).ToList();
+        pinnedRows = config.PinnedDesigns.Where(p => !string.IsNullOrWhiteSpace(p))
+            .Select(p => Row(p, IsBackup(p), OpenedAt(p), now)).ToList();
+    }
+
+    private DateTime OpenedAt(string path)
+    {
+        if (config.RecentOpened.TryGetValue(path, out var t)) return t;
+        try
         {
-            var exists = File.Exists(r.Path);
-            var kept = r.Backup && SwapNames.IsKept(Path.GetFileName(r.Path));
-            var layout = exists ? Parsed(r.Path) : null;
-            var name = layout?.BuildName ?? Path.GetFileNameWithoutExtension(r.Path);
-            var when = r.At == DateTime.MinValue ? null : When.Relative(r.At, now, t => t.ToString("HH:mm"));
-            string note;
-            if (!exists) note = "Not found";
-            else if (layout == null) note = kept ? string.Join(" · ", new[] { "Kept from a swap", when }.Where(s => !string.IsNullOrEmpty(s))) : when ?? string.Empty;
-            else
-            {
-                var count = Words.Count(layout.Interior.Count + layout.Garden.Count, "piece");
-                // A swap's kept home leads with that ("Kept from a swap · 391 pieces · yesterday"), so it's found to swap back to.
-                var parts = kept ? new[] { "Kept from a swap", count, when }
-                    : new[] { count, r.Backup ? "what was here" : layout.Interior.Count == 0 && layout.Garden.Count > 0 ? "Garden" : Words.Home(layout.HouseSize), when };
-                note = string.Join(" · ", parts.Where(s => !string.IsNullOrEmpty(s)));
-            }
-            var kind = kept ? "KEPT" : r.Backup ? "BACKUP" : r.Path.EndsWith(".build", StringComparison.OrdinalIgnoreCase) ? "BUILD" : "MAKEPLACE";
-            return new RecentRow(r.Path, name, note, kind, exists, r.Backup, r.At, kept);
-        }).ToList();
+            return File.Exists(path) ? File.GetLastWriteTime(path) : DateTime.MinValue;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            return DateTime.MinValue;
+        }
+    }
+
+    private RecentRow Row(string path, bool backup, DateTime at, DateTime now)
+    {
+        var exists = File.Exists(path);
+        var kept = backup && SwapNames.IsKept(Path.GetFileName(path));
+        var layout = exists ? Parsed(path) : null;
+        var name = DesignNames.Display(layout?.BuildName ?? Path.GetFileNameWithoutExtension(path));
+        var when = at == DateTime.MinValue ? null : When.Relative(at, now, t => t.ToString("HH:mm"));
+        string note;
+        if (!exists) note = "Not found";
+        else if (layout == null) note = kept ? string.Join(" · ", new[] { "Kept from a swap", when }.Where(s => !string.IsNullOrEmpty(s))) : when ?? string.Empty;
+        else
+        {
+            var count = Words.Count(layout.Interior.Count + layout.Garden.Count, "piece");
+            // A swap's kept home leads with that ("Kept from a swap · 391 pieces · yesterday"), so it's found to swap back to.
+            var parts = kept ? new[] { "Kept from a swap", count, when }
+                : new[] { count, backup ? "what was here" : layout.Interior.Count == 0 && layout.Garden.Count > 0 ? "Garden" : Words.Home(layout.HouseSize), when };
+            note = string.Join(" · ", parts.Where(s => !string.IsNullOrEmpty(s)));
+        }
+        var kind = kept ? "KEPT" : backup ? "BACKUP" : path.EndsWith(".build", StringComparison.OrdinalIgnoreCase) ? "BUILD" : "MAKEPLACE";
+        return new RecentRow(path, name, note, kind, exists, backup, at, kept);
     }
 
     public static bool IsBackup(string path)

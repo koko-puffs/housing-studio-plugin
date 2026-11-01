@@ -22,7 +22,7 @@ public sealed partial class MainWindow
     /// <summary>The design (its file) a choice other than Keep was made for, and the choice; another design starts with Keep.</summary>
     private (string? For, ReadyMode Mode) readyMode;
 
-    private string DesignId => session.FilePath ?? session.Title;
+    private string DesignId => session.FilePath ?? session.RawTitle;
 
     /// <summary>
     /// Ready's choice for the pieces here that aren't in the design, as picked for this design (the

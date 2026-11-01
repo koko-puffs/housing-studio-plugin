@@ -14,6 +14,9 @@ public sealed partial class Configuration : IPluginConfiguration
     /// <summary>Layouts opened lately, newest first.</summary>
     public List<string> RecentFiles { get; set; } = new();
 
+    /// <summary>Designs pinned to the top of Home (0.9.0), three at most, in the order pinned.</summary>
+    public List<string> PinnedDesigns { get; set; } = new();
+
     /// <summary>How fast a run goes (Settings → Pace): the pause between pieces, between clicks, and the waits for the game.</summary>
     public Pace Pace { get; set; } = Pacing.Default;
 

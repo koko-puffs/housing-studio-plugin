@@ -328,3 +328,26 @@ public class MenuTests
         Assert.Equal(0, Menus.FindEntry(new[] { "\u0002Place\u0003 " }, new[] { "Place" }));
     }
 }
+
+public class DesignNameTests
+{
+    [Fact]
+    public void UnderscoresBecomeSpaces()
+    {
+        Assert.Equal("Solution9Loft APARTMENT FCROOM CUSTOMTV", DesignNames.Display("Solution9Loft_APARTMENT_FCROOM_CUSTOMTV"));
+        Assert.Equal("Cozy Little Cabin - Towoko", DesignNames.Display("Cozy Little Cabin - Towoko"));
+        Assert.Equal(string.Empty, DesignNames.Display(null));
+        Assert.Equal("a b", DesignNames.Display("  a__b "));
+    }
+
+    [Fact]
+    public void TheShortFormKeepsWholeWords()
+    {
+        Assert.Equal("Solution9Loft", DesignNames.Short("Solution9Loft_APARTMENT_FCROOM_CUSTOMTV"));
+        Assert.Equal("Cozy Little Cabin", DesignNames.Short("Cozy Little Cabin - Towoko Extended"));
+        Assert.Equal("kokomed2", DesignNames.Short("kokomed2"));
+        Assert.Equal("Cozy Little Cabin", DesignNames.Short("Cozy Little Cabin - Towoko"));
+        Assert.Equal("Riviera Tea Room", DesignNames.Short("Riviera_Tea_Room"));
+        Assert.EndsWith("…", DesignNames.Short("Supercalifragilisticexpialidocious_room"));
+    }
+}
