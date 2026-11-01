@@ -35,7 +35,7 @@ public sealed partial class MainWindow
     /// <summary>The pieces to list: the plan's (matched, with states), or before you're home, the design's own.</summary>
     private (List<PlanEntry> Entries, bool Known) PieceEntries()
     {
-        if (session.Plan is { } plan) return (Filtered().ToList(), true);
+        if (session.Plan is { } plan) return (FilteredList(), true);
         // Worked out again when the design, the side or the plot changes (a garden's pieces move with its plot).
         var key = (session.Layout, ReadySide, session.Plot);
         if (!ReferenceEquals(targetsFor.Layout, key.Layout) || targetsFor.Side != key.ReadySide || !Equals(targetsFor.Plot, key.Plot))
@@ -46,10 +46,16 @@ public sealed partial class MainWindow
         return (designPieces, false);
     }
 
+    private (List<PlanEntry>? Entries, bool Known, FilterCounts Counts) piecesCountsFor;
+    private (List<PlanEntry>? Entries, bool Known, PieceFilter Filter, string? Search, List<FloorGroup>? Groups) piecesGroupsFor;
+
     private void DrawPieces()
     {
         var (entries, known) = PieceEntries();
-        var counts = PieceRows.Counts(entries, known);
+        // 1.0.0: counted and grouped again only when the pieces, the filter or the search change (every frame before).
+        if (!ReferenceEquals(piecesCountsFor.Entries, entries) || piecesCountsFor.Known != known)
+            piecesCountsFor = (entries, known, PieceRows.Counts(entries, known));
+        var counts = piecesCountsFor.Counts;
         // A chip with nothing in it can't stay picked: fall back to All.
         var filter = known && counts.Of(pieceFilter) > 0 ? pieceFilter : PieceFilter.All;
 
@@ -91,7 +97,10 @@ public sealed partial class MainWindow
             Kit.Gap(14);
         }
         DrawPiecesClashes();
-        var groups = PieceRows.Build(entries, filter, data.ItemName, pieceSearch, known);
+        if (!ReferenceEquals(piecesGroupsFor.Entries, entries) || piecesGroupsFor.Known != known || piecesGroupsFor.Filter != filter
+            || piecesGroupsFor.Search != pieceSearch || piecesGroupsFor.Groups == null)
+            piecesGroupsFor = (entries, known, filter, pieceSearch, PieceRows.Build(entries, filter, data.ItemName, pieceSearch, known));
+        var groups = piecesGroupsFor.Groups;
         if (groups.Count == 0)
         {
             Kit.BeginPanel("##pieces-none", 18, 20, 18);

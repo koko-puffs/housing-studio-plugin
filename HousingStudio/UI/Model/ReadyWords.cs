@@ -102,6 +102,8 @@ public static class ReadyWords
         {
             var why = notGetting.TrimEnd();
             if (why.Length > 0 && why[^1] is not ('.' or '!' or '?')) why += ".";
+            // After the colon, as a sentence goes on (1.0.0: "Not getting first: Wait until…").
+            if (why.Length > 1 && char.IsUpper(why[0]) && !char.IsUpper(why[1])) why = char.ToLowerInvariant(why[0]) + why[1..];
             return $"Not getting first: {why} {Words.Capital(about)} at a {pace} pace";
         }
         if (!getFirst) return $"{Words.Capital(about)} at a {pace} pace";

@@ -24,6 +24,24 @@ public static class Frame
     {
         Footers.Clear();
         Bottoms.Clear();
+        Open.Clear();
+    }
+
+    /// <summary>The ImGui children and popups the kit has open now, innermost last (1.0.0).</summary>
+    internal static readonly Stack<bool> Open = new();
+
+    /// <summary>
+    /// Ends what the kit left open (a view that threw between a Begin and its End), innermost first, so
+    /// the window ends with ImGui's stack as it found it rather than with a child or popup still open
+    /// (which ImGui asserts on). Nothing to do on a frame drawn to the end.
+    /// </summary>
+    public static void Unwind()
+    {
+        while (Open.Count > 0)
+        {
+            if (Open.Pop()) ImGui.EndPopup();
+            else ImGui.EndChild();
+        }
     }
 
     public const float SidePad = 28;
@@ -55,6 +73,7 @@ public static class Frame
         ImGui.SetCursorScreenPos(new Vector2(x, y));
         var height = MathF.Max(S(40), ImGui.GetWindowPos().Y + ImGui.GetWindowHeight() - footer - y);
         ImGui.BeginChild(id, new Vector2(ImGui.GetWindowWidth(), height), false, ImGuiWindowFlags.None);
+        Open.Push(false);
         var at = ImGui.GetCursorScreenPos();
         Kit.PushBox(at.X + S(SidePad), ImGui.GetContentRegionAvail().X - S(SidePad) * 2);
         Kit.Reserve(at, 1, S(padTop));
@@ -65,6 +84,7 @@ public static class Frame
     {
         Kit.Gap(bodyPadBottom);
         Kit.PopBox();
+        if (Open.Count > 0) Open.Pop();
         ImGui.EndChild();
     }
 

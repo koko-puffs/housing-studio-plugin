@@ -74,7 +74,22 @@ public sealed partial class MainWindow : Window
         IsOpen = true;
     }
 
-    public override void PreDraw() => Theme.PushFrame();
+    public override void PreDraw()
+    {
+        // The first size (980 tall, times the UI scale) could be taller than the screen, with the footer's
+        // buttons off it (1.0.0): at most nine tenths of the screen's height, the first time only.
+        if (!firstSizeFitted)
+        {
+            firstSizeFitted = true;
+            var screen = ImGui.GetMainViewport().Size.Y;
+            var scale = Dalamud.Interface.Utility.ImGuiHelpers.GlobalScale;
+            if (screen > 0 && scale > 0 && Size is { } size && size.Y * scale > screen * 0.9f)
+                Size = new Vector2(size.X, MathF.Max(600, screen * 0.9f / scale));
+        }
+        Theme.PushFrame();
+    }
+
+    private bool firstSizeFitted;
 
     public override void PostDraw()
     {
@@ -115,7 +130,7 @@ public sealed partial class MainWindow : Window
                 catch (Exception ex)
                 {
                     Services.Log.Error(ex, "Housing Studio action failed");
-                    Notify("That didn't work (see /xllog)");
+                    Notify("Something went wrong (see /xllog)");
                 }
             }
         }
@@ -169,7 +184,9 @@ public sealed partial class MainWindow : Window
             }
             finally
             {
-                // Even when a view throws, the question is drawn (to be answered) and nothing stays blocked.
+                // A view that threw leaves no child or popup open (1.0.0), then the question is drawn (to be
+                // answered) and nothing stays blocked.
+                Frame.Unwind();
                 Frame.DrawToast();
                 Kit.Blocked = false;
                 DrawConfirm();
@@ -210,6 +227,24 @@ public sealed partial class MainWindow : Window
 
     // ---------------------------------------------------------------------------------------------
     // The pieces a run works on: the plan, less the floors switched off and what "Near me" leaves out.
+
+    /// <summary>
+    /// <see cref="Filtered"/> as a list, made again only when the plan or the filters change (and twice a
+    /// second with Near me on, as you move): the same list otherwise, so what's worked out from it can be
+    /// kept by its reference (1.0.0: Ready and Pieces made it, and their counts, every frame). Not changed
+    /// by callers.
+    /// </summary>
+    private List<PlanEntry> FilteredList()
+    {
+        var plan = session.Plan;
+        var key = (plan, config.ShowBasement, config.ShowGround, config.ShowUpper, config.NearMe, config.NearMeRadius);
+        var now = DateTime.UtcNow;
+        if (filteredCache.List == null || !Equals(filteredCache.Key, key) || (config.NearMe && now >= filteredCache.Until))
+            filteredCache = (key, Filtered().ToList(), now + TimeSpan.FromSeconds(0.5));
+        return filteredCache.List;
+    }
+
+    private ((Plan?, bool, bool, bool, bool, float) Key, List<PlanEntry>? List, DateTime Until) filteredCache;
 
     private IEnumerable<PlanEntry> Filtered()
     {

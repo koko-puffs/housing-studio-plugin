@@ -91,7 +91,9 @@ public sealed partial class MainWindow
         }
         else
         {
-            if (ScreenHeader(session.Layout != null ? $"Back to {session.Title}" : "Back", null, "Settings")) sub = Sub.None;
+            // Back goes where Settings was opened from (1.0.0: it always named the design).
+            var back = errandsOpen ? "Back to the errands" : vm.View == MainView.Done ? "Back" : session.Layout != null ? $"Back to {session.Title}" : "Back";
+            if (ScreenHeader(back, null, "Settings")) sub = Sub.None;
             Kit.Gap(14);
             var tab = (int)settingsTab;
             if (tab < 0 || tab >= SettingsTabs.Length) tab = 0;

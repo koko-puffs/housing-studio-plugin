@@ -81,6 +81,8 @@ public static partial class Kit
         Panels.Clear();
         Details.Clear();
         Stages.Clear();
+        // A control that threw while drawn disabled left the whole window faded (1.0.0).
+        Palette.Opacity = 1f;
     }
 
     public static void PopBox() => Boxes.Pop();
@@ -162,7 +164,7 @@ public static partial class Kit
     public static bool Button(string id, Vector2 pos, string label, Btn style = Btn.Glass, BtnSize size = BtnSize.Md, Icon? icon = null,
         float width = 0, bool disabled = false, string? tip = null, float height = 0)
     {
-        var (hCss, _, px) = Spec(size);
+        var (hCss, padCss, px) = Spec(size);
         var h = height > 0 ? height : S(hCss);
         var w = width > 0 ? width : label.Length == 0 ? h : ButtonWidth(label, size, icon, style);
         var (clicked, hovered, held) = Hit(id, pos, new Vector2(w, h), disabled);
@@ -209,8 +211,11 @@ public static partial class Kit
         if (edge.W > 0) dl.AddRect(pos + new Vector2(0.5f), max - new Vector2(0.5f), Palette.U32(edge), r, ImDrawFlags.None, 1f);
 
         var face = FaceOf(style);
-        var textW = label.Length > 0 ? Txt.Measure(label, face, px).X : 0;
         var iconPx = S(16);
+        // A label wider than a button of a set width is cut to fit (1.0.0: it ran past the pill and the window).
+        if (width > 0 && label.Length > 0)
+            label = Txt.Fit(label, face, px, MathF.Max(0, w - S(padCss) * 2 - (icon != null ? iconPx + S(8) : 0) + 1));
+        var textW = label.Length > 0 ? Txt.Measure(label, face, px).X : 0;
         var content = (icon != null ? iconPx : 0) + (icon != null && label.Length > 0 ? S(8) : 0) + textW;
         var x = pos.X + (w - content) / 2;
         if (icon is { } ic)
@@ -817,10 +822,15 @@ public static partial class Kit
         var open = ImGui.BeginPopup(id, ImGuiWindowFlags.NoMove);
         ImGui.PopStyleColor(2);
         ImGui.PopStyleVar(3);
+        if (open) Frame.Open.Push(true);
         return open;
     }
 
-    public static void EndMenu() => ImGui.EndPopup();
+    public static void EndMenu()
+    {
+        if (Frame.Open.Count > 0) Frame.Open.Pop();
+        ImGui.EndPopup();
+    }
 
     /// <summary>A row in a menu: 36 tall, radius 8, a faint fill when pointed at.</summary>
     public static bool MenuItem(string id, string label, Icon? icon = null, float width = 0)

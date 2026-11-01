@@ -22,15 +22,24 @@ public sealed partial class MainWindow
 {
     /// <summary>Finish's Tick off: the fixtures' tick list shows.</summary>
     private bool fixturesOpen;
-    private (Plan? Plan, int Count, Pace Pace, bool Dyes, TimeSpan Time) estimate;
+    private (List<PlanEntry>? Entries, Pace Pace, bool Dyes, TimeSpan Time) estimate;
 
-    /// <summary>The time estimate, worked out again only when the plan or the pace changes.</summary>
+    /// <summary>The time estimate, worked out again only when the pieces (<see cref="FilteredList"/>'s list) or the pace change.</summary>
     private TimeSpan Estimate(StartSummary s, List<PlanEntry> entries)
     {
-        var key = (session.Plan, entries.Count, config.Pace, config.DyeAfterPlacing);
-        if (estimate.Plan != key.Plan || estimate.Count != key.Count || estimate.Pace != key.Pace || estimate.Dyes != key.DyeAfterPlacing)
-            estimate = (key.Plan, key.Count, key.Pace, key.DyeAfterPlacing, s.Estimate(entries, config.Pace));
+        if (!ReferenceEquals(estimate.Entries, entries) || estimate.Pace != config.Pace || estimate.Dyes != config.DyeAfterPlacing)
+            estimate = (entries, config.Pace, config.DyeAfterPlacing, s.Estimate(entries, config.Pace));
         return estimate.Time;
+    }
+
+    private (List<PlanEntry>? Entries, bool Dyes, bool Undye, StartSummary? Summary) summaryCache;
+
+    /// <summary>What Start does with these pieces, worked out again only when they or the dye setting change (1.0.0: every frame before).</summary>
+    private StartSummary SummaryOf(List<PlanEntry> entries)
+    {
+        if (summaryCache.Summary == null || !ReferenceEquals(summaryCache.Entries, entries) || summaryCache.Dyes != config.DyeAfterPlacing || summaryCache.Undye != data.CanUndye)
+            summaryCache = (entries, config.DyeAfterPlacing, data.CanUndye, StartSummary.Of(entries, config.DyeAfterPlacing, data.CanUndye));
+        return summaryCache.Summary;
     }
 
     /// <summary>The side Start works on: where you are, else the design's own.</summary>
@@ -64,9 +73,9 @@ public sealed partial class MainWindow
     {
         var layout = session.Layout!;
         var side = ReadySide;
-        var entries = Filtered().ToList();
+        var entries = FilteredList();
         var plan = session.Plan;
-        var summary = StartSummary.Of(entries, config.DyeAfterPlacing, data.CanUndye);
+        var summary = SummaryOf(entries);
 
         // Header (0.9.0, the shared one): back at the top left (closes the design, which stays in Recent),
         // the eyebrow and the name on up to two lines, the pin ☆ and Settings on the right; the pill under it.

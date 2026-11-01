@@ -316,7 +316,7 @@ public sealed partial class MainWindow
         var total = vm.RecentCount;
         if (total == 0) return;
         if (total <= RecentShown) recentAll = false;
-        var rows = vm.Recent(recentAll ? 50 : RecentShown);
+        var rows = vm.Recent(recentAll ? total : RecentShown);
         Kit.Gap(18);
         var link = total > RecentShown ? recentAll ? "Show fewer" : $"Show all {total}" : null;
         if (SectionLink("##recent-all", "Recent", link)) recentAll = !recentAll;
@@ -343,7 +343,8 @@ public sealed partial class MainWindow
             if (rowHovered && row.Exists && StarButton($"##recent-pin{i}", starAt, starSize, false, "Pin to the top of Home"))
                 TogglePin(row.Path, row.Name);
 
-            var (clicked, hovered, _) = Kit.Hit($"##recent{i}", at, new Vector2(w, h));
+            // A file that's gone can't be opened: no hand over it (its menu still forgets it).
+            var (clicked, hovered, _) = Kit.Hit($"##recent{i}", at, new Vector2(w, h), disabled: !row.Exists);
             if (clicked && row.Exists && !overStar) Open(row.Path);
             if (ImGui.IsItemClicked(ImGuiMouseButton.Right) && !Kit.Blocked)
             {

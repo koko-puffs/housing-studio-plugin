@@ -176,7 +176,23 @@ public sealed class ViewModel
         }
     }
 
-    public HashSet<byte> MissingStains => MissingDyes.Select(d => d.Stain).ToHashSet();
+    /// <summary>The dyes of <see cref="MissingDyes"/>, as a set made again only when that list changes (1.0.0: every frame).</summary>
+    public HashSet<byte> MissingStains
+    {
+        get
+        {
+            var list = MissingDyes;
+            if (!ReferenceEquals(stainsFor, list))
+            {
+                stainsFor = list;
+                missingStains = list.Select(d => d.Stain).ToHashSet();
+            }
+            return missingStains;
+        }
+    }
+
+    private object? stainsFor;
+    private HashSet<byte> missingStains = new();
 
     // ---------------------------------------------------------------------------------------------
     // Recent: the files you opened, and the backups the runs saved.

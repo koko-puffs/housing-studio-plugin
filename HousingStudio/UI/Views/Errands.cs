@@ -382,7 +382,7 @@ public sealed partial class MainWindow
             Kit.Gap(14);
             SectionLabel("ALREADY HERE", null);
             Kit.Gap(6);
-            Kit.StatCells(g.Have, 20);
+            Kit.StatCells(g.Have, 22);
         }
         if (g.Currencies != null)
         {
@@ -650,7 +650,7 @@ public sealed partial class MainWindow
         }
         DrawHomeIsRow(i++, here, "##errand-home");
         var spare = config.ErrandsSpareSlots;
-        var d = StepperRow(i++, "##errand-spare", "Bag slots to keep free", "Each trip leaves these empty", spare.ToString(), spare > 0, spare < 20);
+        var d = StepperRow(i++, "##errand-spare", "Spare bag slots", "Each trip leaves these empty", spare.ToString(), spare > 0, spare < 20);
         if (d != 0)
         {
             config.ErrandsSpareSlots = Math.Clamp(spare + d, 0, 20);
@@ -1049,7 +1049,8 @@ public sealed partial class MainWindow
             s.Hint = stopped ? "What's still missing stays on the shopping list." : ErrandWords.NotGotHint(s.NotGotCount);
         }
 
-        Frame.BeginHeader(28);
+        // 20, as every screen (1.0.0: 28 put its round buttons lower than the others').
+        Frame.BeginHeader(20);
         var at = Kit.At;
         var w = Kit.Width;
         var (fill, ink, mark) = stopped
