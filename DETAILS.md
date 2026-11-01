@@ -16,6 +16,18 @@ its exact spot, then dyes everything to match.
 > ("Next, it will choose…") and that Continue makes the click. Done by hand anyway, the errands see the
 > item come to your bags and carry on by themselves; Continue after it counts what came and never takes
 > or exchanges again; a menu closed with nothing taken is opened again once.
+> Also in 0.8.6, from the FC chamber's real run: **a full storeroom.** A bag piece is placed through the
+> storeroom (stored, then placed from there); the chamber's storeroom was full, so each fell back to
+> placing it straight from the bag, which the game refuses from the plugin ("Unable to place item.",
+> as in 0.3.0), and you were asked to put each down. Now the storeroom's pieces are placed before the
+> bags' (each frees a slot), the storeroom isn't asked again until it has room, and after one refused
+> set-down the rest go straight to you, saying that room for one piece in the storeroom lets the
+> plugin do them. **The storeroom read too late**: back in the chamber after the errands, the home was
+> read before the storeroom came in, so its 46 pieces counted as missing ("0 from the storeroom");
+> the errands now wait for it (15 s at most). **Put them back** did nothing with a backup of an empty
+> room ("The backup has no pieces here"): an empty backup of this home now means everything placed
+> since is put away, and with the storeroom full, pieces go to your bags (the editor's inventory
+> button) instead of being skipped.
 > 0.8.5, a scan before a real run. **Dyeing** never presses Dye unless the window shows the dye chosen on
 > this piece (its preview, read in the piece's dye; when no preview shows, Dye is pressed and the dye
 > checked after, as before): another dye, or the window on another piece, skips the piece instead of

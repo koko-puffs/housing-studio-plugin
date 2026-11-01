@@ -475,6 +475,13 @@ or a baseline step before the exchange); while `AwaitingContinue` on it, the ite
 calls `queue.Continue()`. The retainer's choose step returns Done when the count went up (the next step
 counts it), and opens the menu again once when it closed with nothing taken (8 s limit). The exchange step
 counts what came by hand (bags and currency against its baseline) before working out the rest.
+Also 0.8.6: `RunSequence.Build` places `FromStoreroom` before `FromInventory` in each late group;
+`BagSteps` goes to `HeldAttempt` while `StoreroomRefuses()` (a refused store sets `refusedAtRoom`);
+`heldRefused` (set when a held set-down is refused, reset at Start) sends later bag pieces to
+`ByHandSteps`. `StoreSteps(job, toBags)`: with `StoreroomRefuses()` and free bag slots, or after the
+storeroom refuses, `EditorMode.ToBags` and `UiTable.LayoutToBags` (0.7.2's recording) instead of Store.
+`Update` restores with `session.Plan.Extras` whatever the backup's count. `ReadAgainSteps` waits for
+`session.StoreroomLoaded` inside (15 s, then a warning; 45 s limit).
 
 **0.8.5**: `DyeShownCheck` between the pick and Dye: `HousingEditor.ActiveItem` must be the piece and its
 stored dye the target (the window's preview); after 1 s still its own dye → Dye anyway (no preview seen),
