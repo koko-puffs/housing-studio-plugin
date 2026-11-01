@@ -338,7 +338,8 @@ After a rehearsal (`runner.Rehearsal`, or the errands' `Rehearsal` in their summ
 tiles only beside a pin). The piece's card while placing is always three one-line rows (name; dye and
 floor; the step) and the errands' card two, each line cut short with "…" and whole on hover, so the
 cards keep their height and nothing under them moves; between two pieces the last one stays on the
-card. Ready's header starts 20 px down, as every screen with the back arrow. This house has **Clear
+card. Every screen's header starts 20 px down (Ready's and then, in 0.9.3, Home's, Running's, Done's and a
+rehearsal's were 24), so the back arrow and Settings sit at one height everywhere. This house has **Clear
 out** beside Save as a build and Send (it asks where the pieces go, as a choice of three). The serif is
 the site's, Source Serif 4, in place of the mockups' Cormorant Garamond.
 

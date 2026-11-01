@@ -144,7 +144,8 @@ public sealed partial class MainWindow
         var report = Rehearsals.Report;
         var issues = report.Issues;
 
-        Frame.BeginHeader(24);
+        // 20 on every screen (0.9.3): the round buttons at the top sit at one height from screen to screen.
+        Frame.BeginHeader(20);
         var at = Kit.At;
         var w = Kit.Width;
         var (fill, ink, mark) = stopped && byYou ? (Palette.LinePicked, Palette.Ash, Icon.Square)

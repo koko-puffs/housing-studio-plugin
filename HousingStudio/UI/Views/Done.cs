@@ -68,7 +68,8 @@ public sealed partial class MainWindow
         var counts = vm.RunCounts;
 
         // Header, centred: the mark, the title, one line of what happened.
-        Frame.BeginHeader(24);
+        // 20 on every screen (0.9.3): the round buttons at the top sit at one height from screen to screen.
+        Frame.BeginHeader(20);
         var at = Kit.At;
         var w = Kit.Width;
         var (markFill, markEdge, markInk, markIcon) = stopped

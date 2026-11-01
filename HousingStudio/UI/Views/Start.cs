@@ -33,7 +33,8 @@ public sealed partial class MainWindow
     private void DrawStart()
     {
         // Header: the pill for where you are above the title, Settings on the right.
-        Frame.BeginHeader(24);
+        // 20 on every screen (0.9.3): the round buttons at the top sit at one height from screen to screen.
+        Frame.BeginHeader(20);
         var at = Kit.At;
         var w = Kit.Width;
         var (where, tone) = WherePill();

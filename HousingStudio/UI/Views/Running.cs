@@ -43,7 +43,8 @@ public sealed partial class MainWindow
         var rehearsal = runner.Rehearsal;
         var waiting = runner.AwaitingContinue || runner.WaitingForYou;
 
-        Frame.BeginHeader(24);
+        // 20 on every screen (0.9.3): the round buttons at the top sit at one height from screen to screen.
+        Frame.BeginHeader(20);
         var at = Kit.At;
         var eyebrowH = Kit.Eyebrow(at, RunEyebrow(preview ? RunKind.Preview : rehearsal ? RunKind.Rehearsal : RunKind.Placing), null, Kit.Width);
         var left = Words.About(runner.TimeLeft);
