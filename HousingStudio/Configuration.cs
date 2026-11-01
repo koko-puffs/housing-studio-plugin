@@ -90,13 +90,13 @@ public sealed partial class Configuration : IPluginConfiguration
     public bool LookUpMarketPrices { get; set; } = true;
 
     /// <summary>
-    /// Settings → Getting, Housing Studio account: the token made on the site that lets Send to my builds put
+    /// Settings → Help, Housing Studio account: the token made on the site that lets Send to my builds put
     /// a house in your builds there (Core/SiteLink.cs); empty when not linked. Never logged.
     /// </summary>
     public string SiteToken { get; set; } = string.Empty;
 
     /// <summary>
-    /// Settings → Getting, "Check for things sent from the site": while linked and logged in, the
+    /// Settings → Help, "Check for things sent from the site": while linked and logged in, the
     /// inbox of builds and designs sent with the site's Send to game is checked about once a minute
     /// (Session/GameLink.cs), and what's new is said in chat and a notification.
     /// </summary>
@@ -106,7 +106,7 @@ public sealed partial class Configuration : IPluginConfiguration
     public DateTime InboxSeenAt { get; set; }
 
     /// <summary>
-    /// Settings → Getting, "Show homes on Housing Studio when I visit": in any home's interior, the
+    /// Settings → Help, "Show homes on Housing Studio when I visit": in any home's interior, the
     /// site is asked whether it's a published design verified there, and a small panel shows it.
     /// </summary>
     public bool ShowHomesWhenVisiting { get; set; } = true;

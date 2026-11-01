@@ -208,7 +208,7 @@ public sealed class VisitorPanel : SmallPanel
         else if (!link.Usable)
         {
             var words = link.TokenRefused ? "Housing Studio didn't accept your token: link again to like, save or stamp" : "Link your account to like, save or stamp";
-            if (Line(Run.Note(words, Palette.BrassSoft) with { Link = "settings" }) == "settings") openSettings(SettingsTab.Getting);
+            if (Line(Run.Note(words, Palette.BrassSoft) with { Link = "settings" }) == "settings") openSettings(SettingsTab.Help);
             Kit.Gap(10);
         }
         else

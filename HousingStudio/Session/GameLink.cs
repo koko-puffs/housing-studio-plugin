@@ -13,7 +13,7 @@ using HousingStudio.Game;
 namespace HousingStudio.Session;
 
 /// <summary>
-/// The plugin and the site, closer (0.7.0), with the token from Settings → Getting:
+/// The plugin and the site, closer (0.7.0), with the token from Settings → Help:
 /// <list type="bullet">
 /// <item>the inbox (GameLink.Inbox.cs): builds and designs sent from the site with Send to game,
 /// checked about once a minute, opened as a file in the plugin's folder;</item>

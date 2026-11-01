@@ -92,7 +92,7 @@ public sealed partial class GameLink
     /// <summary>Why Take a shot can't go now, or null.</summary>
     public string? CantShoot(HousingContext ctx)
     {
-        if (!Usable) return "Link your Housing Studio account in Settings → Getting first";
+        if (!Usable) return "Link your Housing Studio account in Settings → Help first";
         if (runActive()) return "Not while a run is going";
         if (Home is not { } h || ctx.Side != h.Side) return "Go to your own home first";
         if (h.Verified == null) return h.Designs == null ? "Still looking for this home on Housing Studio" : "Verify this home as one of your designs first";

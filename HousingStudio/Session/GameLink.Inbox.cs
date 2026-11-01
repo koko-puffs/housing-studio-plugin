@@ -45,7 +45,7 @@ public sealed partial class GameLink
 
     /// <summary>Why Open can't go now, or null.</summary>
     public string? CantOpen() =>
-        !Usable ? "Link your Housing Studio account in Settings → Getting first"
+        !Usable ? "Link your Housing Studio account in Settings → Help first"
         : runActive() ? "Not while a run is going"
         : Opening != null ? "Opening one already"
         : null;
