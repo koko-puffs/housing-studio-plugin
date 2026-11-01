@@ -130,6 +130,12 @@ public sealed record ErrandOptions
     /// <summary>Free slots in your four bags: a trip takes no more.</summary>
     public int FreeSlots { get; init; }
 
+    /// <summary>
+    /// How many of an item are in your bags now (null: none counted). What's bought tops up their stacks
+    /// before it takes a slot (0.9.5: one dye to a stack of two needed no slot, and was left for want of one).
+    /// </summary>
+    public Func<uint, int>? Held { get; init; }
+
     /// <summary>The most the market board may cost in all (gil); 0 buys nothing there.</summary>
     public long MarketCeiling { get; init; }
 
@@ -226,7 +232,11 @@ public static class ErrandPlanner
         public MarketListing? Listing { get; init; }
         public ExchangeOffer? Exchange { get; init; }
         public long CurrencyCost => Exchange?.CostFor(Count) ?? 0;
-        public int Slots => Stacks(Bought, Stack);
+
+        /// <summary>How many of those bought go onto stacks already in your bags (no slot for them).</summary>
+        public int TopUp { get; init; }
+
+        public int Slots => Stacks(Math.Max(0, Bought - TopUp), Stack);
     }
 
     /// <summary>
@@ -261,6 +271,16 @@ public static class ErrandPlanner
     }
 
     public static int Stacks(int count, int stack) => count <= 0 ? 0 : (count + Math.Max(1, stack) - 1) / Math.Max(1, stack);
+
+    /// <summary>
+    /// The bag slots that adding <paramref name="adding"/> of an item takes, with <paramref name="held"/>
+    /// of it in your bags already: their last stack's room first (0.9.5).
+    /// </summary>
+    public static int NewSlots(int held, int adding, int stack) =>
+        adding <= 0 ? 0 : Stacks(Math.Max(0, held) + adding, stack) - Stacks(Math.Max(0, held), stack);
+
+    /// <summary>The room left on the stacks of an item already in your bags.</summary>
+    public static int StackRoom(int held, int stack) => held <= 0 ? 0 : Stacks(held, stack) * Math.Max(1, stack) - held;
 
     public static ErrandPlan Build(ShoppingPlan shop, ErrandOptions o)
     {
@@ -334,6 +354,19 @@ public static class ErrandPlanner
             .ThenBy(x => x.i)
             .Select(x => x.u)
             .ToList();
+        // Stacks already in your bags take the first of each item (0.9.5), in the trips' order.
+        if (o.Held != null)
+        {
+            var room = new Dictionary<uint, int>();
+            for (var i = 0; i < ordered.Count; i++)
+            {
+                var u = ordered[i];
+                if (!room.TryGetValue(u.Need.ItemId, out var r)) r = StackRoom(o.Held(u.Need.ItemId), u.Stack);
+                var t = Math.Min(r, u.Bought);
+                if (t > 0) ordered[i] = u with { TopUp = t };
+                room[u.Need.ItemId] = r - t;
+            }
+        }
         var trips = Pack(ordered, o.FreeSlots, left);
         return new ErrandPlan(trips, left, Math.Max(0, o.FreeSlots), Math.Max(0, o.MarketCeiling));
     }
@@ -437,11 +470,7 @@ public static class ErrandPlanner
     /// </summary>
     private static List<ErrandTrip> Pack(List<Unit> units, int freeSlots, List<ErrandLeft> left)
     {
-        if (freeSlots <= 0)
-        {
-            foreach (var u in units) left.Add(new ErrandLeft(u.Need, u.Count, LeftReason.NoRoom));
-            return new List<ErrandTrip>();
-        }
+        freeSlots = Math.Max(0, freeSlots);
         // Each stop's parts, cut into pieces that fit a trip.
         var pieces = new List<List<(Unit U, int I)>>();
         foreach (var stop in units.Select((u, i) => (U: u, I: i)).GroupBy(x => x.U.Key))
@@ -459,21 +488,29 @@ public static class ErrandPlanner
                         room -= u.Slots;
                         break;
                     }
-                    if (!u.Splits)
+                    if (!u.Splits || freeSlots == 0)
                     {
                         if (u.Slots > freeSlots)
                         {
-                            left.Add(new ErrandLeft(u.Need, u.Count, LeftReason.NoRoom));
+                            // (No free slot at all: only what tops up a stack in your bags goes.)
+                            if (u.Splits && u.TopUp > 0)
+                            {
+                                var gilEach0 = u.Count > 0 ? u.Gil / u.Count : 0;
+                                piece.Add((u with { Count = u.TopUp, Bought = u.TopUp, Gil = gilEach0 * u.TopUp }, i));
+                                left.Add(new ErrandLeft(u.Need, u.Count - u.TopUp, LeftReason.NoRoom));
+                            }
+                            else left.Add(new ErrandLeft(u.Need, u.Count, LeftReason.NoRoom));
                             break;
                         }
                     }
-                    else if (room > 0)
+                    else if (room > 0 || u.TopUp > 0)
                     {
-                        // As many whole stacks as there's room for; the rest in the next piece.
-                        var fits = room * u.Stack;
+                        // As many whole stacks as there's room for (and what tops up a stack in your bags);
+                        // the rest in the next piece.
+                        var fits = Math.Min(u.Count, room * u.Stack + u.TopUp);
                         var gilEach = u.Count > 0 ? u.Gil / u.Count : 0;
                         piece.Add((u with { Count = fits, Bought = fits, Gil = gilEach * fits }, i));
-                        u = u with { Count = u.Count - fits, Bought = u.Bought - fits, Gil = u.Gil - gilEach * fits };
+                        u = u with { Count = u.Count - fits, Bought = u.Bought - fits, Gil = u.Gil - gilEach * fits, TopUp = 0 };
                     }
                     if (piece.Count > 0) pieces.Add(piece);
                     piece = new List<(Unit U, int I)>();

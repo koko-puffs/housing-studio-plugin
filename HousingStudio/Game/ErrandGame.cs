@@ -106,6 +106,13 @@ public static unsafe class ErrandGame
         return mgr->GetInventoryItemCount(itemId, false, false, false, 0) + mgr->GetInventoryItemCount(itemId, true, false, false, 0);
     }
 
+    /// <summary>How many normal-quality copies of an item your bags hold: what a bought one stacks onto.</summary>
+    public static int NqCount(uint itemId)
+    {
+        var mgr = InventoryManager.Instance();
+        return mgr == null ? 0 : mgr->GetInventoryItemCount(itemId, false, false, false, 0);
+    }
+
     private static readonly Dictionary<uint, int> Stacks = new();
 
     /// <summary>How many make a stack (the Item sheet's StackSize), 1 when not known.</summary>

@@ -8,7 +8,11 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.9.4. Placing works in the game; the newer features haven't all been tried in it yet.**
+> **Status: 0.9.5. Placing works in the game; the newer features haven't all been tried in it yet.**
+> 0.9.5: **what stacks onto your bags needs no free slot.** With 2 slots kept spare and 2 free, one Wide
+> Spectrum #1 Dye was "no room in your bags", though 2 were in them already and it would only have joined
+> their stack. The trips now count the room left on the stacks you have (normal quality) before taking a
+> slot, and so does each purchase, take from a retainer and exchange in the game.
 > 0.9.4: **more of what's on the market board is got.** Something a vendor sells was never looked up on
 > the board, so when the errands couldn't get to that vendor (an aetheryte not attuned, a shop behind a
 > quest) or its currency wasn't allowed, it was left out though the board had it (a Wide Spectrum dye).

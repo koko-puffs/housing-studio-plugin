@@ -209,6 +209,27 @@ public class ErrandPlannerTests
     }
 
     [Fact]
+    public void WhatStacksOntoYourBagsNeedsNoFreeSlot()
+    {
+        // 0.9.5's report: no slot to spare (2 free, 2 kept), one Wide Spectrum #1 Dye to buy, and 2 in
+        // your bags already: it goes on their stack, so it's got.
+        var shop = Shop(new[] { new Need(200, 1, NeedKind.Dye) }, quotes: new[] { Quote(200, (900, 1, "Lich")) });
+        var plan = ErrandPlanner.Build(shop, Options(free: 0, stack: 999) with { Held = id => id == 200 ? 2 : 0 });
+        Assert.Equal(1, Assert.Single(plan.Stops(StopKind.Market)).Items.Single().Count);
+        Assert.Empty(plan.Left);
+        // None in your bags: still no room.
+        Assert.Equal(LeftReason.NoRoom, Assert.Single(ErrandPlanner.Build(shop, Options(free: 0, stack: 999)).Left).Reason);
+        // A vendor's 30 onto a stack of 990 (room for 9): 9 go, the 21 that need a slot don't.
+        var vendor = Shop(new[] { new Need(201, 30, NeedKind.Dye) }, offers: new[] { Offer(201, 216) });
+        var part = ErrandPlanner.Build(vendor, Options(free: 0, stack: 999) with { Held = _ => 990 });
+        Assert.Equal(9, Assert.Single(part.Stops(StopKind.Vendor)).Items.Single().Count);
+        Assert.Equal(21, Assert.Single(part.Left).Count);
+        Assert.Equal(0, ErrandPlanner.NewSlots(2, 1, 999));
+        Assert.Equal(1, ErrandPlanner.NewSlots(0, 1, 999));
+        Assert.Equal(1, ErrandPlanner.NewSlots(998, 2, 999));
+    }
+
+    [Fact]
     public void AVendorOutOfReachIsBoughtOnTheBoardWhenListed()
     {
         // 0.9.4: sold by a vendor the errands can't reach, and listed on the board: bought there.

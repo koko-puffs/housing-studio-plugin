@@ -168,7 +168,7 @@ public sealed partial class ErrandRunner
                     if (gil < cost) WouldStop(where, $"Not enough gil: {cost:N0} for {n} {name}, and you have {gil:N0}.");
                     if (Spent + (long)v.Price * item.Count > agreedGil) WouldStop(where, $"That would spend more than the {agreedGil:N0} gil agreed to.");
                     var room = ErrandGame.FreeSlots();
-                    if (room < ErrandPlanner.Stacks(item.Count, stack)) WouldStop(where, $"Your bags are full ({room} free slots).");
+                    if (room < ErrandPlanner.NewSlots(ErrandGame.NqCount(item.ItemId), item.Count, stack)) WouldStop(where, $"Your bags are full ({room} free slots).");
                     var row = ErrandGame.ShopRow(v.ShopId, item.ItemId);
                     if (row < 0)
                     {
@@ -251,7 +251,7 @@ public sealed partial class ErrandRunner
                     unit = l.UnitPrice;
                     quantity = l.Quantity;
                     if (gil < cost) WouldStop(where, $"Not enough gil: {cost:N0} for this listing, and you have {gil:N0}.");
-                    if (ErrandGame.FreeSlots() < ErrandPlanner.Stacks(l.Quantity, ErrandGame.StackSize(item.ItemId)))
+                    if (ErrandGame.FreeSlots() < ErrandPlanner.NewSlots(ErrandGame.NqCount(item.ItemId), l.Quantity, ErrandGame.StackSize(item.ItemId)))
                         WouldStop(where, $"Your bags are full ({ErrandGame.FreeSlots()} free slots).");
                     before = ErrandGame.BagCount(item.ItemId);
                     gilBefore = gil;
@@ -310,7 +310,7 @@ public sealed partial class ErrandRunner
                         return Finished();
                     }
                     var room = ErrandGame.FreeSlots();
-                    if (room < ErrandPlanner.Stacks(slot.Quantity, stack)) WouldStop(where, $"Your bags are full ({room} free slots; the stack of {slot.Quantity} needs more).");
+                    if (room < ErrandPlanner.NewSlots(ErrandGame.NqCount(item.ItemId), slot.Quantity, stack)) WouldStop(where, $"Your bags are full ({room} free slots; the stack of {slot.Quantity} needs more).");
                     before = ErrandGame.BagCount(item.ItemId);
                     return ErrandGame.OpenRetainerItemMenu(slot.Container, slot.Slot) ? StepOutcome.Done : StepOutcome.Halt("Couldn't open the item's menu.");
                 },

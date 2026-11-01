@@ -256,6 +256,7 @@ public sealed partial class ErrandRunner : IDisposable
             FreeSlots = Math.Max(0, ErrandGame.FreeSlots() - Math.Max(0, config.ErrandsSpareSlots)),
             MarketCeiling = Math.Max(0, config.ErrandsMarketCeiling),
             StackSize = ErrandGame.StackSize,
+            Held = ErrandGame.NqCount,
             Reachable = v => Reachable(v, at, kind),
             Offers = shop.Offers,
             PreferDistrict = at.District,
@@ -1320,7 +1321,8 @@ public sealed partial class ErrandRunner : IDisposable
                         return Finished();
                     }
                     var room = ErrandGame.FreeSlots();
-                    if (room < ErrandPlanner.Stacks(slot.Quantity, stack)) return StepOutcome.Halt($"Your bags are full ({room} free slots; the stack of {slot.Quantity} needs more).");
+                    // (What tops up a stack already in your bags takes no slot, 0.9.5.)
+                    if (room < ErrandPlanner.NewSlots(ErrandGame.NqCount(item.ItemId), slot.Quantity, stack)) return StepOutcome.Halt($"Your bags are full ({room} free slots; the stack of {slot.Quantity} needs more).");
                     before = ErrandGame.BagCount(item.ItemId);
                     menuReopened = false;
                     // Held for Continue next (a click not seen working yet): taken by hand meanwhile carries on.
@@ -1621,7 +1623,7 @@ public sealed partial class ErrandRunner : IDisposable
                     if (gil < cost) return StepOutcome.Halt($"Not enough gil: {cost:N0} for {n} {Name(item.ItemId)}, and you have {gil:N0}.");
                     if (Spent + cost > agreedGil) return StepOutcome.Halt($"That would spend more than the {agreedGil:N0} gil you agreed to.");
                     var room = ErrandGame.FreeSlots();
-                    if (room < ErrandPlanner.Stacks(n, stack)) return StepOutcome.Halt($"Your bags are full ({room} free slots).");
+                    if (room < ErrandPlanner.NewSlots(ErrandGame.NqCount(item.ItemId), n, stack)) return StepOutcome.Halt($"Your bags are full ({room} free slots).");
                     var row = ErrandGame.ShopRow(v.ShopId, item.ItemId);
                     if (row < 0)
                     {
@@ -1794,7 +1796,7 @@ public sealed partial class ErrandRunner : IDisposable
                         return Finished();
                     }
                     var room = ErrandGame.FreeSlots();
-                    if (room < ErrandPlanner.Stacks(n, stack)) return StepOutcome.Halt($"Your bags are full ({room} free slots).");
+                    if (room < ErrandPlanner.NewSlots(ErrandGame.NqCount(item.ItemId), n, stack)) return StepOutcome.Halt($"Your bags are full ({room} free slots).");
                     var row = ErrandGame.ExchangeRow(window, shop.Vendors.ExchangeShopItems(v.ShopId), item.ItemId);
                     if (row < 0)
                     {
@@ -2001,7 +2003,7 @@ public sealed partial class ErrandRunner : IDisposable
                             firstWhy ??= why;
                             continue;
                         }
-                        if (ErrandGame.FreeSlots() < ErrandPlanner.Stacks(l.Quantity, ErrandGame.StackSize(item.ItemId)))
+                        if (ErrandGame.FreeSlots() < ErrandPlanner.NewSlots(ErrandGame.NqCount(item.ItemId), l.Quantity, ErrandGame.StackSize(item.ItemId)))
                         {
                             // Too big for your bags: a smaller listing may still fit.
                             firstWhy ??= $"your bags have {ErrandGame.FreeSlots()} free slots";
