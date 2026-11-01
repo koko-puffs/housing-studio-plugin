@@ -535,8 +535,8 @@ public sealed partial class MainWindow
         if (!ReferenceEquals(backupsWords.Rows, rows))
         {
             // The newest by when it was saved (or opened), not the last words of its note (which can be "Not found").
-            var at = rows.Max(r => r.At);
-            var newest = at == DateTime.MinValue ? null : When.Relative(at, DateTime.Now, t => t.ToString("HH:mm"));
+            var newestAt = rows.Max(r => r.At);
+            var newest = newestAt == DateTime.MinValue ? null : When.Relative(newestAt, DateTime.Now, t => t.ToString("HH:mm"));
             var total = Math.Max(rows.Count, vm.BackupsTotal);
             backupsWords = (rows, $"Backups · {total}{(newest != null ? $" · newest {newest}" : string.Empty)}");
         }

@@ -271,11 +271,13 @@ public sealed class ViewModel
         try
         {
             if (Directory.Exists(Backups.Folder))
+            {
                 var files = new DirectoryInfo(Backups.Folder).GetFiles("*.build");
                 BackupsTotal = files.Length;
                 foreach (var f in files.OrderByDescending(f => f.LastWriteTime).Take(12))
                     if (!rows.Any(r => string.Equals(r.Path, f.FullName, StringComparison.OrdinalIgnoreCase)))
                         rows.Add((f.FullName, true, f.LastWriteTime));
+            }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
