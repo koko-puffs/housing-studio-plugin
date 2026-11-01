@@ -203,6 +203,11 @@ public sealed partial class MainWindow
                 var each = line.Count > 0 ? line.Gil / line.Count : 0;
                 var extra = cost != null && cost.Covered > line.Count ? $" · whole stacks: {cost.Covered} bought" : string.Empty;
                 return dye + $"About {ShoppingList.Gil(each)} each on {line.Market?.Scope}" + extra;
+            case SourceKind.Craft or SourceKind.Unknown when line.Exchangeable is { } ex:
+                return dye + $"{ex.Vendor.Where()} · {ex.Cost:N0} {ex.CurrencyName}" + (ex.Gives > 1 ? $" for {ex.Gives}" : " each")
+                       + (config.ErrandsCurrencies.Contains(ex.Currency)
+                           ? $" · you haven't enough {ex.CurrencyName}"
+                           : $" · allow {ex.CurrencyName} in Settings → Getting → Currencies");
             case SourceKind.Craft:
                 var c = line.Craft!;
                 var none = !config.LookUpMarketPrices ? "no vendor sells it" : "no vendor sells it, none listed";

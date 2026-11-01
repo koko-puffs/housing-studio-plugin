@@ -436,6 +436,16 @@ to `HeldAttempt` when `StoreroomAutomatic` is off; `ListSettles` and `WatchList`
 stops a garden run when `ctx.Plot` is another real plot. Fixtures: the wait after Apply ends only on
 the yes/no; "The fixtures are set" answers a late "Proceed…" question yes (once a second).
 
+**0.8.2**: `HousingContext.Read` (inside): the district from the interior's name, else `HouseDistrict(id)`
+(the house id's bits 32-47, the ward's TerritoryType, "s1h1"; else `GetOriginalHouseTerritoryTypeId`),
+kept per house: "h2i2" (a remodelled interior) names none. `MarketRule.WhyNot` allows `Leeway` (25%)
+over the planned price for one and over the item's gil left; the ceiling and the gil agreed still bound
+it. `ShoppingLine.Exchangeable` (Craft/Unknown lines: the best currency vendor, any currency) →
+`LeftReason.Currency` with `ErrandLeft.Exchange`. `PlacementRunner.EditorCloses()` after
+`ModeClick.CloseEditor`: the Housing menu back, else after 1.5 s `HousingGoods` closed and `LayoutClose`
+again (as by hand: HousingGoods [i:-1], HousingLayout [i:-2]), then `HousingLayout` closed outright;
+closed with no menu after 0.8 s: `HousingActions.OpenHousingMenu()`. 8 s in all.
+
 **0.7.13**: `ErrandPlanner.Pack` cuts each stop's units (by `Key`) into pieces that fit a trip, then
 packs the pieces biggest first into the first trip with room (first-fit decreasing); a trip keeps the
 plan's order. `NeedKind.Fixture`: `Shopping.FixturesToGet` (the plugin sets it to `FixtureRun.Plan()`'s

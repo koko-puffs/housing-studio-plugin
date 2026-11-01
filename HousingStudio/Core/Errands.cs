@@ -109,10 +109,17 @@ public enum LeftReason
 
     /// <summary>Your bags have no room for it (no free slot, or a listing bigger than your free slots).</summary>
     NoRoom,
+
+    /// <summary>Sold only for a currency you don't allow the errands to spend, or haven't enough of (Wolf Marks…).</summary>
+    Currency,
 }
 
 /// <summary>Something left out of the errands, with why.</summary>
-public sealed record ErrandLeft(Need Need, int Count, LeftReason Reason);
+public sealed record ErrandLeft(Need Need, int Count, LeftReason Reason)
+{
+    /// <summary><see cref="LeftReason.Currency"/>: the currency vendor that has it.</summary>
+    public ExchangeOffer? Exchange { get; init; }
+}
 
 /// <summary>What the errand planner is told about you and the game.</summary>
 public sealed record ErrandOptions
@@ -292,6 +299,9 @@ public static class ErrandPlanner
                     break;
                 case SourceKind.Market when line.Market != null:
                     marketSoFar = MarketUnits(line, o, stack, units, left, marketSoFar);
+                    break;
+                case SourceKind.Craft or SourceKind.Unknown when line.Exchangeable != null:
+                    left.Add(new ErrandLeft(line.Need, line.Count, LeftReason.Currency) { Exchange = line.Exchangeable });
                     break;
                 case SourceKind.Craft:
                     left.Add(new ErrandLeft(line.Need, line.Count, LeftReason.Craft));
@@ -561,14 +571,25 @@ public static class MarketRule
         return list;
     }
 
+    /// <summary>
+    /// How far over the planned price a listing may be (a quarter): the plan's prices are Universalis's,
+    /// minutes or hours old, and the board's have moved by the time it's read (0.8.1 left a Hanging Planter
+    /// Branch at 9,798 gil, 1 more than planned). The run as a whole never goes past the gil agreed or the
+    /// ceiling (<paramref name="ceilingLeft"/> in <see cref="WhyNot"/>).
+    /// </summary>
+    public const double Leeway = 0.25;
+
+    /// <summary>The most a planned amount may become with <see cref="Leeway"/>.</summary>
+    public static long WithLeeway(long planned) => planned <= 0 ? 0 : (long)Math.Ceiling(planned * (1 + Leeway));
+
     /// <summary>Why a listing isn't bought, or null when it may be.</summary>
     public static string? WhyNot(uint unitPrice, int quantity, uint totalTax, uint maxUnitPrice, int stillWanted, long itemGilLeft, long ceilingLeft, long gilOnHand)
     {
         if (quantity <= 0) return "nothing listed";
         if (stillWanted <= 0) return "enough already";
-        if (unitPrice > maxUnitPrice) return $"{unitPrice:N0} gil each is above the planned {maxUnitPrice:N0}";
+        if (unitPrice > WithLeeway(maxUnitPrice)) return $"{unitPrice:N0} gil each is more than a quarter above the planned {maxUnitPrice:N0}";
         var cost = Cost(unitPrice, quantity, totalTax);
-        if (cost > itemGilLeft) return $"{cost:N0} gil for {quantity} is more than the {itemGilLeft:N0} gil planned for it";
+        if (cost > WithLeeway(itemGilLeft)) return $"{cost:N0} gil for {quantity} is more than the {itemGilLeft:N0} gil planned for it (and a quarter)";
         if (cost > ceilingLeft) return $"{cost:N0} gil would go past the market ceiling ({ceilingLeft:N0} gil left under it)";
         if (cost > gilOnHand) return $"{cost:N0} gil is more than you have ({gilOnHand:N0})";
         return null;

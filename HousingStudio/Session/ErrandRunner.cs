@@ -1809,7 +1809,8 @@ public sealed partial class ErrandRunner : IDisposable
                         listing = l.ListingId;
                         before = ErrandGame.BagCount(item.ItemId);
                         gilBefore = gil;
-                        log.Info($"  Buying {l.Quantity} × {name} at {l.UnitPrice:N0} gil each ({cost:N0} with tax), row {l.Row}.");
+                        log.Info($"  Buying {l.Quantity} × {name} at {l.UnitPrice:N0} gil each ({cost:N0} with tax), row {l.Row}"
+                                 + (l.UnitPrice > item.MaxUnitPrice ? $": above the {item.MaxUnitPrice:N0} planned (the board's price has moved), within a quarter more and the gil agreed." : "."));
                         firedAt = DateTime.UtcNow;
                         return GameUi.Fire(ErrandTable.ListingBuy, UiCallValues.Of(("index", l.Row))) ? StepOutcome.Done : StepOutcome.Halt($"{name}'s listings closed.");
                     }

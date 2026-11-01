@@ -285,10 +285,13 @@ public class ErrandPlannerTests
 public class MarketRuleTests
 {
     [Fact]
-    public void BuysOnlyAtOrUnderThePlan()
+    public void BuysUpToAQuarterOverThePlan()
     {
         Assert.Null(MarketRule.WhyNot(1000, 1, 50, 1000, 1, 1050, 10_000, 100_000));
-        Assert.Contains("above the planned", MarketRule.WhyNot(1001, 1, 50, 1000, 1, 5000, 10_000, 100_000));
+        // A little over the plan (Universalis's prices are old by the time the board is read): bought.
+        Assert.Null(MarketRule.WhyNot(1001, 1, 51, 1000, 1, 1050, 10_000, 100_000));
+        Assert.Null(MarketRule.WhyNot(1250, 1, 63, 1000, 1, 1050, 10_000, 100_000));
+        Assert.Contains("above the planned", MarketRule.WhyNot(1251, 1, 63, 1000, 1, 5000, 10_000, 100_000));
         Assert.Contains("ceiling", MarketRule.WhyNot(1000, 1, 50, 1000, 1, 5000, 1000, 100_000));
         Assert.Contains("more than you have", MarketRule.WhyNot(1000, 1, 50, 1000, 1, 5000, 10_000, 900));
         Assert.Contains("planned for it", MarketRule.WhyNot(1000, 3, 150, 1000, 1, 1050, 10_000, 100_000));
@@ -693,7 +696,15 @@ public class ExchangeTests
     public void ACurrencyNotAllowedIsNeverPlanned()
     {
         var shop = Plan(new[] { new Need(500, 1, NeedKind.Piece) }, new[] { Mgp(500, 30_000) }, mgp: 1_000_000, allowMgp: false);
-        Assert.Equal(SourceKind.Unknown, Assert.Single(shop.Lines).Source);
+        var line = Assert.Single(shop.Lines);
+        Assert.Equal(SourceKind.Unknown, line.Source);
+        // …but it says which currency would get it, and the errands leave it out for that reason.
+        Assert.Equal("MGP", line.Exchangeable?.CurrencyName);
+        var plan = ErrandPlanner.Build(shop, new ErrandOptions { FreeSlots = 10, MarketCeiling = 1000 });
+        var left = Assert.Single(plan.Left);
+        Assert.Equal(LeftReason.Currency, left.Reason);
+        var row = Assert.Single(HousingStudio.UI.Model.ErrandWords.LeftRows(plan.Left, _ => "Thing"));
+        Assert.Equal("1 for MGP", row.Title);
     }
 
     [Fact]

@@ -27,6 +27,7 @@ public static class ErrandWords
         LeftReason.OverCeiling => "past your market ceiling",
         LeftReason.NotListedHere => "not listed on the worlds the errands buy on",
         LeftReason.NoRoom => "no room in your bags",
+        LeftReason.Currency => "sold for a currency the errands may not spend, or you haven't enough of: allow it in Settings → Getting → Currencies",
         _ => "no way to get it is known",
     };
 
@@ -148,6 +149,7 @@ public static class ErrandWords
                     LeftReason.OverCeiling => $"{n} past the market ceiling",
                     LeftReason.NotListedHere => $"{n} not listed where it buys",
                     LeftReason.NoRoom => $"{n} with no room in your bags",
+                    LeftReason.Currency => $"{n} for {string.Join(", ", g.Select(l => l.Exchange?.CurrencyName).Where(c => !string.IsNullOrEmpty(c)).Distinct())}",
                     _ => $"{n} not known where from",
                 };
                 var what = string.Join(", ", g.GroupBy(l => l.Need.ItemId)

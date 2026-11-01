@@ -8,7 +8,19 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.8.1. Placing works in the game; the newer features haven't all been tried in it yet.**
+> **Status: 0.8.2. Placing works in the game; the newer features haven't all been tried in it yet.**
+> 0.8.2, from the Mist house's rehearsal. **Vendors**: a remodelled interior's zone ("h2i2") names no
+> district, so the house's district was read as none and its Housing Merchant as out of reach: nothing
+> was planned from vendors, and what only they sell was left out. The district now comes from the
+> house's own id (its ward's zone), else the game's original house zone. **The market**: a listing up
+> to a quarter above the planned price is bought (Universalis's prices are old by the time the board is
+> read: a Hanging Planter Branch 1 gil over was left), still never past the gil agreed or the ceiling;
+> the log says when. **Currencies**: something only a currency vendor has, for a currency not allowed
+> (or not enough of it), is said as "for Wolf Marks" and the like (allow it in Settings → Getting →
+> Currencies), not "to craft" or "not known". **Placing**: when the furnishing editor doesn't close
+> (the bar's close after a let-go did nothing, so the dye step stopped the run), its list is closed and
+> the bar's close pressed again, as by hand, then the bar closed outright; the Housing menu is opened if
+> it doesn't come back.
 > 0.8.1, from the company chambers' rehearsal and a stability scan. **The errands**: an NPC's items
 > are one stop, each of their shops opened in turn (the Housing Merchant's chairs, then their
 > partitions: one visit a run, not one a trip), and each item is checked against its own price (0.8.0
@@ -700,7 +712,8 @@ place") opens the same screen, **Get, before setting out**:
   here is kept under that name, as Ready's own start does. Later trips' placing doesn't clear out.
 - **Not got this way**, one row per reason: to craft (with **Teamcraft**), not known, vendors it doesn't
   go to (another residential district's, or a zone whose aetheryte you haven't), past the market
-  ceiling, not listed on the worlds it buys on, or no room.
+  ceiling, not listed on the worlds it buys on, no room, or sold for a currency not allowed or not
+  enough of ("2 for Wolf Marks": allow it in Settings → Getting → Currencies).
 - **Limits**, one line ("Market up to 100,000 · home world only · 2 slots spare") and **Change**,
   which opens them in place: the **market ceiling** (100,000 gil by default; the market's estimate, tax
   included, never goes past it, and neither does what's really spent), **other worlds** (off: your home

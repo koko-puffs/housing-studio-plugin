@@ -86,6 +86,12 @@ public sealed record ShoppingLine(Need Need, SourceKind Source, int Count)
     /// <summary><see cref="SourceKind.Craft"/> (and any other line for something craftable): the recipe.</summary>
     public CraftOption? Craft { get; init; }
 
+    /// <summary>
+    /// <see cref="SourceKind.Craft"/> and <see cref="SourceKind.Unknown"/>: a currency vendor that has it, for a
+    /// currency you don't allow (or haven't enough of): what to allow in Settings to get it (Wolf Marks…).
+    /// </summary>
+    public ExchangeOffer? Exchangeable { get; init; }
+
     /// <summary>Gil for this line: a vendor's price times the count, or the market's estimate; 0 otherwise.</summary>
     public long Gil { get; init; }
 
@@ -207,9 +213,12 @@ public static class ShoppingPlanner
             }
             if (left <= 0) continue;
 
+            // A currency vendor has it, but not for a currency allowed (or not enough of it): said, so the
+            // list says what to allow rather than "not known" (0.8.1: Wolf Marks' furnishings).
+            var exchangeable = exchanges != null ? ExchangeChoice.Ranked(exchanges(need.ItemId), _ => true).FirstOrDefault() : null;
             lines.Add(recipe != null
-                ? new ShoppingLine(need, SourceKind.Craft, left) { Craft = recipe }
-                : new ShoppingLine(need, SourceKind.Unknown, left));
+                ? new ShoppingLine(need, SourceKind.Craft, left) { Craft = recipe, Exchangeable = exchangeable }
+                : new ShoppingLine(need, SourceKind.Unknown, left) { Exchangeable = exchangeable });
         }
         return new ShoppingPlan(lines);
     }

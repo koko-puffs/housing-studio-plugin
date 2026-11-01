@@ -1,3 +1,4 @@
+using System;
 using Dalamud.Game.ClientState.Conditions;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using HousingStudio.Core;
@@ -60,6 +61,27 @@ public sealed record HousingContext(
         return (interior.Size, interior.District);
     }
 
+    private static (ulong House, string? District) houseDistrict;
+
+    /// <summary>The district of the house you're in, from its id's ward territory, else the game's original house territory (kept per house).</summary>
+    private static string? HouseDistrict(FFXIVClientStructs.FFXIV.Client.Game.HouseId id)
+    {
+        if (houseDistrict.House == id.Id && id.Id != 0) return houseDistrict.District;
+        string? district = null;
+        try
+        {
+            var ward = (uint)((id.Id >> 32) & 0xFFFF);
+            district = Districts.OfTerritoryName(GameData.TerritoryName(ward))
+                       ?? Districts.OfTerritoryName(GameData.TerritoryName(HousingManager.GetOriginalHouseTerritoryTypeId()));
+        }
+        catch (Exception ex)
+        {
+            Services.Log.Debug(ex, "Couldn't read the house's district");
+        }
+        houseDistrict = (id.Id, district);
+        return district;
+    }
+
     public static unsafe HousingContext Read(PlotTable plots)
     {
         if (!Services.ClientState.IsLoggedIn) return None;
@@ -80,6 +102,10 @@ public sealed record HousingContext(
         if (hm->IndoorTerritory != null)
         {
             var (size, district) = InteriorOf(territory, name);
+            // A remodelled interior's name says no district ("h2i2": 0.8.1's Mist house read none, so its
+            // district's Housing Merchant was out of reach and nothing was planned from vendors): the
+            // house's own id has its ward's territory ("s1h1"), and the game its original one.
+            district ??= HouseDistrict(hm->IndoorTerritory->HouseId);
             return new HousingContext(PlaceKind.Interior, territory, name, hm->IndoorTerritory->HouseId.Id, hm->HasHousePermissions(),
                 size, district, null, mode, open, busy);
         }

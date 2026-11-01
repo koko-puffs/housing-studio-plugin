@@ -2315,7 +2315,9 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     return StepOutcome.Halt($"{call.Addon} isn't open, so the editor couldn't be switched to {ModeWord(mode)}.");
                 }));
                 var waitFor = click == ModeClick.OpenFurnishings ? "The furnishing editor opens (in Rotate or Move)" : $"The editor is in {ModeWord(ModeRoute.After(click))}";
-                steps.Add(ModeRoute.LeadsToHousingMenu(click)
+                steps.Add(click == ModeClick.CloseEditor
+                    ? EditorCloses()
+                    : ModeRoute.LeadsToHousingMenu(click)
                     ? Step.Wait("The Housing menu comes back", () => GameUi.IsOpen(UiTable.HousingMenu), ClickWait)
                     : Step.Wait(waitFor, () =>
                     {
@@ -2328,6 +2330,50 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             return StepOutcome.Done;
         },
     };
+
+    /// <summary>
+    /// After the editor's close: the Housing menu comes back. When it doesn't (0.8.1's Mist rehearsal: the
+    /// bar's close alone, after a let-go in Move, did nothing for 5 s), the furnishing list is closed and
+    /// the bar's close pressed again, as closing it by hand does (HousingGoods [i:-1], then HousingLayout
+    /// [i:-2]); then the bar is closed outright.
+    /// </summary>
+    private Step EditorCloses()
+    {
+        var since = DateTime.MinValue;
+        var tries = 0;
+        return new Step
+        {
+            Label = "The Housing menu comes back",
+            Timeout = TimeSpan.FromSeconds(8),
+            TimeoutMessage = "The furnishing editor didn't close (its list and bar were closed twice).",
+            Run = () =>
+            {
+                editorMayCloseUntil = DateTime.UtcNow + TimeSpan.FromSeconds(2);
+                if (GameUi.IsOpen(UiTable.HousingMenu)) return StepOutcome.Done;
+                if (since == DateTime.MinValue) since = DateTime.UtcNow;
+                if (HousingEditor.Mode == EditorMode.None && !GameUi.IsOpen(UiTable.LayoutBar))
+                {
+                    // Closed, but the menu didn't come back by itself: opened as the run opens it.
+                    if (DateTime.UtcNow - since < TimeSpan.FromMilliseconds(800) || tries >= 3) return StepOutcome.Waiting;
+                    tries = 3;
+                    log.Info("  The editor closed, but the Housing menu didn't come back: opening it.");
+                    HousingActions.OpenHousingMenu();
+                    return StepOutcome.Waiting;
+                }
+                if (DateTime.UtcNow - since < TimeSpan.FromMilliseconds(1500) || tries >= 2) return StepOutcome.Waiting;
+                since = DateTime.UtcNow;
+                tries++;
+                log.Info($"  The editor didn't close: {(tries == 1 ? "closing its list, then its bar again (as by hand)" : "closing its bar outright")}.");
+                if (tries == 1)
+                {
+                    if (GameUi.IsOpen(UiTable.FurnishingList)) GameUi.Close(UiTable.FurnishingList);
+                    GameUi.Fire(UiTable.LayoutClose);
+                }
+                else GameUi.Close(UiTable.LayoutBar);
+                return StepOutcome.Waiting;
+            },
+        };
+    }
 
     private Step AskForMode(EditorMode mode)
     {

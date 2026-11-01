@@ -551,6 +551,7 @@ public sealed partial class MainWindow
         LeftReason.OverCeiling => Icon.Scale,
         LeftReason.NotListedHere => Icon.Scale,
         LeftReason.NoRoom => Icon.Backpack,
+        LeftReason.Currency => Icon.Store,
         _ => Icon.Info,
     };
 
