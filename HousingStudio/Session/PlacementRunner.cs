@@ -1205,7 +1205,13 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             {
                 Label = "It lands at its spot",
                 Key = "lands",
-                Run = () => Landed(key, job.Target) ? StepOutcome.Done : StepOutcome.Waiting,
+                Run = () =>
+                {
+                    if (Landed(key, job.Target)) return StepOutcome.Done;
+                    if (queue.Elapsed < TimeSpan.FromSeconds(4.5)) return StepOutcome.Waiting;
+                    // 0.9.11: where it ended up, so a piece the game keeps putting elsewhere says how.
+                    return StepOutcome.Skip(NotLandedWords(key, job.Target), ProblemKind.DidNotLand);
+                },
                 // 5 s: the server's answer can lag (0.8.0's 3 s counted a slow one as a failure, and a few in
                 // a row stop the run).
                 Timeout = TimeSpan.FromSeconds(5),
@@ -3790,6 +3796,25 @@ public sealed unsafe partial class PlacementRunner : IDisposable
 
     private static StepOutcome Fire(UiCall call, IReadOnlyDictionary<string, long>? blanks = null) =>
         GameUi.Fire(call, blanks) ? StepOutcome.Done : StepOutcome.Halt($"{call.Addon} isn't open.");
+
+    /// <summary>Why a set-down didn't count: where the game put the piece, against its spot.</summary>
+    private string NotLandedWords(int key, Target target)
+    {
+        if (FurnitureReader.Stored(side == Side.Garden, key) is not { } s)
+            return "It didn't end up at its spot (the game hasn't said where it is).";
+        var d = s.Position - target.Position;
+        var parts = new List<string>();
+        // The game's axes: Y is up (the files' third number).
+        if (MathF.Abs(d.Y) >= 0.01f) parts.Add($"{MathF.Abs(d.Y):0.000} {(d.Y > 0 ? "higher" : "lower")}");
+        var flat = MathF.Sqrt(d.X * d.X + d.Z * d.Z);
+        if (flat >= 0.01f) parts.Add($"{flat:0.000} to the side");
+        var turn = Transforms.AngleDiff(s.Yaw, target.Yaw);
+        if (turn > LandedYaw) parts.Add($"turned {turn * 180 / MathF.PI:0.0}° off");
+        var how = parts.Count == 0 ? "a little off its spot" : string.Join(", ", parts);
+        return config.PlaceAnywhere && anywhere.Active
+            ? $"The game set it down {how} (at {s.Position.X:0.000}, {s.Position.Z:0.000}, {s.Position.Y:0.000}; its spot is {target.Position.X:0.000}, {target.Position.Z:0.000}, {target.Position.Y:0.000}, as the design file has them), with Place anywhere on."
+            : $"The game set it down {how}. It refuses floating or overlapping pieces; \"Place anywhere\" in Settings allows them.";
+    }
 
     private bool Landed(int key, Target target, bool strict = false)
     {

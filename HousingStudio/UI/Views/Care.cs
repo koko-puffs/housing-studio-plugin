@@ -162,7 +162,7 @@ public sealed partial class MainWindow
         }
 
         var words = clashCache.Words;
-        // 0.9.10: only with Place anywhere off. With it on (the default) the game takes floating, sunk and
+        // 0.9.11: only with Place anywhere off. With it on (the default) the game takes floating, sunk and
         // overlapping pieces, so "N may be refused" was wrong, and said again under Pieces.
         if (words.Others > 0 && !config.PlaceAnywhere)
         {

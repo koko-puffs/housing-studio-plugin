@@ -8,11 +8,14 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.9.10. Placing works in the game; the newer features haven't all been tried in it yet.**
+> **Status: 0.9.11. Placing works in the game; the newer features haven't all been tried in it yet.**
+> 0.9.11: Ready's **"N may be refused"** only shows with Place anywhere off (with it on, the default, the
+> game takes those pieces, so it was wrong, and Pieces lists them anyway). A piece the game sets down
+> off its spot now says where it went ("0.126 higher", with both positions as the design file has
+> them), not that Place anywhere would help when it's already on.
 > 0.9.10: **Take a shot without the HUD.** Hiding the HUD (Scroll Lock) hid the plugin's windows and the
 > chat too, so there was nothing to press or type in. Take a shot now hides the HUD itself for the moment
-> the picture is taken, and brings it back after. Ready's "N may be refused" only shows with Place
-> anywhere off (with it on, the game takes those pieces).
+> the picture is taken, and brings it back after.
 > **Quicker dyeing, and Daring safe for it.** The dye window's own timing is kept as it is
 > (0.9.8's, which ended the crashes), at every pace: its clicks never closer than Quick's 0.2 s, and
 > its waits never shorter than Quick's, so Daring speeds up placing without bringing the crash back.
@@ -578,7 +581,7 @@ its exact spot, then dyes everything to match.
   0.05 of slack; between two floors isn't told, as the stairs run there), spots outside the
   house's walls (the box its model fills, by size), and an indoor furnishing in the garden or an
   outdoor one inside (the game's HousingFurniture and HousingYardObject sheets). Ready says so in a
-  check chip, "2 may be refused" (only with Place anywhere off since 0.9.10: with it on the game takes
+  check chip, "2 may be refused" (only with Place anywhere off since 0.9.11: with it on the game takes
   them, so the chip was wrong) and "1 can't go here" for the other side's furnishings, whose detail names them
   with **Show where**; Pieces lists each under **Pieces the game may refuse**, with Show where.
 - **Carry on after a crash or a disconnect** (`Core/RunProgress.cs`, `Session/Care.cs`): while a run
