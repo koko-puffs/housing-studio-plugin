@@ -110,8 +110,11 @@ public sealed class Care
         }
         catch (Exception ex)
         {
-            if (DateTime.UtcNow - failedAt > TimeSpan.FromSeconds(30)) Services.Log.Error(ex, "Housing Studio couldn't look after the home this frame");
-            failedAt = DateTime.UtcNow;
+            if (DateTime.UtcNow - failedAt > TimeSpan.FromSeconds(30))
+            {
+                Services.Log.Error(ex, "Housing Studio couldn't look after the home this frame");
+                failedAt = DateTime.UtcNow;
+            }
         }
     }
 

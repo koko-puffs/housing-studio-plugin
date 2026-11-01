@@ -94,8 +94,11 @@ public sealed partial class GameLink : IDisposable
         }
         catch (Exception ex)
         {
-            if (DateTime.UtcNow - failedAt > TimeSpan.FromSeconds(30)) Services.Log.Error(ex, "Housing Studio's site link failed this frame");
-            failedAt = DateTime.UtcNow;
+            if (DateTime.UtcNow - failedAt > TimeSpan.FromSeconds(30))
+            {
+                Services.Log.Error(ex, "Housing Studio's site link failed this frame");
+                failedAt = DateTime.UtcNow;
+            }
         }
     }
 
@@ -117,11 +120,12 @@ public sealed partial class GameLink : IDisposable
             tokenSeen = config.SiteToken;
             TokenChanged();
         }
+        // The shot first (1.0.0): it brings back a HUD it hid, whatever the others do this frame.
+        TickShot(ctx);
         var settled = Settled;
         TickInbox(ctx, settled);
         TickHome(ctx, settled);
         TickVisit(ctx, settled);
-        TickShot(ctx);
     }
 
     /// <summary>

@@ -73,9 +73,49 @@ public sealed unsafe class HousingEditor
         {
             if (!stateTrusted) return 0;
             var world = LayoutWorld.Instance();
-            return world == null ? 0 : *(nint*)((byte*)world + EditorStateOffset);
+            if (world == null) return 0;
+            var state = *(nint*)((byte*)world + EditorStateOffset);
+            if (state == 0) return 0;
+            // 1.0.0: read through only once the memory it points at is seen to be there and readable (checked
+            // each time it changes, which is rarely): after a game patch that moves the editor's state but not
+            // the two functions, a stale offset would otherwise crash the game in any home, every frame.
+            if (state != checkedState)
+            {
+                checkedState = state;
+                stateReadable = Readable(state, ActiveItemOffset + sizeof(nint));
+                if (!stateReadable) Services.Log.Warning($"Housing Studio: the furnishing editor's state at 0x{state:X} can't be read; the editor is taken as closed (the game may have been patched).");
+            }
+            return stateReadable ? state : 0;
         }
     }
+
+    private static nint checkedState;
+    private static bool stateReadable;
+
+    /// <summary>Is [address, address + bytes) committed memory the game can read (not a guard page)?</summary>
+    private static bool Readable(nint address, int bytes)
+    {
+        if (VirtualQuery(address, out var info, (nuint)sizeof(MemoryInfo)) == 0) return false;
+        const uint Commit = 0x1000, NoAccess = 0x01, Guard = 0x100;
+        if (info.State != Commit || (info.Protect & (NoAccess | Guard)) != 0 || info.Protect == 0) return false;
+        return (ulong)address + (ulong)bytes <= (ulong)info.BaseAddress + (ulong)info.RegionSize;
+    }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct MemoryInfo
+    {
+        public nint BaseAddress;
+        public nint AllocationBase;
+        public uint AllocationProtect;
+        public ushort PartitionId;
+        public nuint RegionSize;
+        public uint State;
+        public uint Protect;
+        public uint Type;
+    }
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    private static extern nuint VirtualQuery(nint address, out MemoryInfo info, nuint length);
 
     /// <summary>
     /// Is the furnishing editor open? The state can stay allocated after the editor closes, so

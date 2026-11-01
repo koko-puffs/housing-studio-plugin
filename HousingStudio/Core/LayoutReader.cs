@@ -23,6 +23,8 @@ public static class LayoutReader
 
     /// <summary>A file bigger than this isn't a layout (the biggest real ones are a few MB).</summary>
     public const int MaxBytes = 32 * 1024 * 1024;
+    /// <summary>The most pieces a side may have (1.0.0).</summary>
+    public const int MaxPiecesASide = 5_000;
 
     public static Layout Parse(string text)
     {
@@ -54,6 +56,9 @@ public static class LayoutReader
             if (hasFurniture) ReadPieces(inF, Side.Interior, interiorScale, interior);
             var garden = new List<LayoutPiece>();
             if (hasGarden) ReadPieces(outF, Side.Garden, exteriorScale, garden);
+            // 1.0.0: far more than any home holds (a few hundred) is not a layout; matching it would stall the game.
+            if (interior.Count > MaxPiecesASide || garden.Count > MaxPiecesASide)
+                throw new LayoutFormatException($"That file has more than {MaxPiecesASide:N0} pieces on one side, far more than a home holds.");
 
             var interiorFixtures = ReadFixtures(root, "interiorFixture", outside: false, out var districtName);
             var exteriorFixtures = ReadFixtures(root, "exteriorFixture", outside: true, out _);
@@ -141,7 +146,7 @@ public static class LayoutReader
             {
                 if (props.TryGetProperty("color", out var c) && c.ValueKind == JsonValueKind.String) dye = Dyes.HexOf(c.GetString());
                 if (props.TryGetProperty("material", out var m) && m.ValueKind == JsonValueKind.Object
-                    && m.TryGetProperty("itemId", out var mid) && TryNumber(mid, out var w) && w >= 1 && w == Math.Floor(w))
+                    && m.TryGetProperty("itemId", out var mid) && TryNumber(mid, out var w) && w >= 1 && w <= uint.MaxValue && w == Math.Floor(w))
                     wall = (uint)w;
             }
             var name = raw.TryGetProperty("name", out var n) && n.ValueKind == JsonValueKind.String ? (n.GetString() ?? string.Empty).Trim() : string.Empty;
@@ -199,7 +204,7 @@ public static class LayoutReader
                 district ??= Str(f, "name");
                 continue;
             }
-            if (!f.TryGetProperty("itemId", out var idEl) || !TryNumber(idEl, out var id) || id < 1 || id != Math.Floor(id)) continue;
+            if (!f.TryGetProperty("itemId", out var idEl) || !TryNumber(idEl, out var id) || id < 1 || id > uint.MaxValue || id != Math.Floor(id)) continue;
             var level = outside ? "Exterior" : (Str(f, "level") is { Length: > 0 } l ? l : "Main");
             var dedupe = $"{level}:{type}:{id}";
             if (!seen.Add(dedupe)) continue;

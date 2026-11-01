@@ -123,7 +123,13 @@ public sealed class Plugin : IDalamudPlugin
 
             // Reopen the last design, so it's there when you come back to your house.
             // (Safely: a file that fails to load mustn't leave the plugin half set up, its hooks in the game.)
-            if (config.RecentFiles.Count > 0 && System.IO.File.Exists(config.RecentFiles[0])) Safely(() => session.Load(config.RecentFiles[0]));
+            // On the framework thread (1.0.0): the constructor can run on a worker, with the frame's update
+            // (which reads the session) already going.
+            if (config.RecentFiles.Count > 0 && System.IO.File.Exists(config.RecentFiles[0]))
+            {
+                var last = config.RecentFiles[0];
+                Services.Framework.RunOnFrameworkThread(() => Safely(() => session.Load(last)));
+            }
         }
         catch
         {
@@ -169,8 +175,13 @@ public sealed class Plugin : IDalamudPlugin
         {
             // Dalamud stops drawing a plugin whose Draw throws; a run carrying on then has no window
             // to stop it from, so it pauses, and the error is logged (not every frame).
-            if (DateTime.UtcNow - drawFailedAt > TimeSpan.FromSeconds(10)) Services.Log.Error(ex, "Housing Studio couldn't draw its window");
-            drawFailedAt = DateTime.UtcNow;
+            // Logged at most every 10 s (1.0.0: the time was set on every failure, so one failing every
+            // frame was logged once and never again).
+            if (DateTime.UtcNow - drawFailedAt > TimeSpan.FromSeconds(10))
+            {
+                Services.Log.Error(ex, "Housing Studio couldn't draw its window");
+                drawFailedAt = DateTime.UtcNow;
+            }
             Safely(() => runner.Pause("The window couldn't be drawn (see /xllog); /hstudio resume or stop."));
             // Setting fixtures waits for Continue in the window: without it, it stops.
             Safely(() => FixtureRun.Stop("The window couldn't be drawn (see /xllog)."));
@@ -293,15 +304,17 @@ public sealed class Plugin : IDalamudPlugin
         switch (args.Trim().ToLowerInvariant())
         {
             case "stop":
-                Errands.Stop("Stopped by you (/hstudio stop).");
-                runner.Stop("Stopped by you (/hstudio stop).");
-                FixtureRun.Stop("Stopped by you (/hstudio stop).");
-                runner.CancelPending();
-                care.Cancel();
+                // Each on its own (1.0.0): one that throws doesn't leave the others going, nor place anywhere on.
+                Safely(() => Errands.Stop("Stopped by you (/hstudio stop)."));
+                Safely(() => runner.Stop("Stopped by you (/hstudio stop)."));
+                Safely(() => FixtureRun.Stop("Stopped by you (/hstudio stop)."));
+                Safely(runner.CancelPending);
+                Safely(care.Cancel);
+                Safely(anywhere.Disable);
                 break;
             case "pause":
-                runner.Pause("Paused by you (/hstudio pause).");
-                Errands.Pause("Paused by you (/hstudio pause).");
+                Safely(() => runner.Pause("Paused by you (/hstudio pause)."));
+                Safely(() => Errands.Pause("Paused by you (/hstudio pause)."));
                 break;
             case "resume":
                 runner.Resume();
