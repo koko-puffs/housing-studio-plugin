@@ -161,6 +161,13 @@ public sealed class GameData
 
     public uint? DyeRgb(byte stainId) => dyesById.TryGetValue(stainId, out var d) ? d.Rgb : null;
 
+    /// <summary>
+    /// The dye a design's piece wants: its colour's dye, or none for a furnishing the game doesn't let be
+    /// dyed (1.0.0: a colour on one became a dye job, its dye bought, then refused, and two of those
+    /// counted that dye as out for the pieces that could take it).
+    /// </summary>
+    public byte StainFor(uint itemId, string? hex) => items.ContainsKey(itemId) && !dyeable.Contains(itemId) ? (byte)0 : StainOf(hex);
+
     /// <summary>The game dye for a file's colour, 0 when undyed.</summary>
     public byte StainOf(string? hex)
     {

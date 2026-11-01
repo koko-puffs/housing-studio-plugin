@@ -245,7 +245,7 @@ public sealed class LayoutSession
         {
             var size = Context.HouseSize ?? Layout.HouseSize;
             foreach (var p in Layout.Interior)
-                list.Add(new Target(p.Index, p.ItemId, p.Position, p.Yaw, data.StainOf(p.DyeHex), Floors.Of(p.Position.Y, size),
+                list.Add(new Target(p.Index, p.ItemId, p.Position, p.Yaw, data.StainFor(p.ItemId, p.DyeHex), Floors.Of(p.Position.Y, size),
                     p.ParentIndex != null || data.GoesOnSomethingElse(p.ItemId)));
             return list;
         }
@@ -254,7 +254,7 @@ public sealed class LayoutSession
         {
             if (toList)
                 foreach (var p in Layout.Garden)
-                    list.Add(new Target(p.Index, p.ItemId, p.Position, p.Yaw, data.StainOf(p.DyeHex), Floor.Garden, p.ParentIndex != null || data.GoesOnSomethingElse(p.ItemId)));
+                    list.Add(new Target(p.Index, p.ItemId, p.Position, p.Yaw, data.StainFor(p.ItemId, p.DyeHex), Floor.Garden, p.ParentIndex != null || data.GoesOnSomethingElse(p.ItemId)));
             return list;
         }
         var designPlot = DesignPlot(plot);
@@ -265,7 +265,7 @@ public sealed class LayoutSession
             if (GardenInWard() && designPlot is { } dp)
                 (local, yaw) = Transforms.WardToPlot(p.Position, p.Yaw, dp);
             var (world, worldYaw) = Transforms.PlotToWard(local, yaw, plot);
-            list.Add(new Target(p.Index, p.ItemId, world, worldYaw, data.StainOf(p.DyeHex), Floor.Garden,
+            list.Add(new Target(p.Index, p.ItemId, world, worldYaw, data.StainFor(p.ItemId, p.DyeHex), Floor.Garden,
                 p.ParentIndex != null || data.GoesOnSomethingElse(p.ItemId)));
         }
         return list;

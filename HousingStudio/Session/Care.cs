@@ -361,14 +361,14 @@ public sealed class Care
         var was = new List<Target>();
         if (side == Side.Interior)
             foreach (var p in layout.Interior)
-                was.Add(new Target(p.Index, p.ItemId, p.Position, p.Yaw, data.StainOf(p.DyeHex), Floors.Of(p.Position.Y, ctx.HouseSize), false));
+                was.Add(new Target(p.Index, p.ItemId, p.Position, p.Yaw, data.StainFor(p.ItemId, p.DyeHex), Floors.Of(p.Position.Y, ctx.HouseSize), false));
         else
         {
             if ((plot ?? session.Plot) is not { } spot) return "Couldn't tell which plot you're on.";
             foreach (var p in layout.Garden)
             {
                 var (at, yaw) = Transforms.PlotToWard(p.Position, p.Yaw, spot);
-                was.Add(new Target(p.Index, p.ItemId, at, yaw, data.StainOf(p.DyeHex), Floor.Garden, false));
+                was.Add(new Target(p.Index, p.ItemId, at, yaw, data.StainFor(p.ItemId, p.DyeHex), Floor.Garden, false));
             }
         }
         var now = pieces.Select(p => new PlacedPiece(p.Key, p.ItemId, p.Position, p.Yaw, p.Stain)).ToList();

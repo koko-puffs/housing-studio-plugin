@@ -106,6 +106,9 @@ public sealed class StepQueue
 
     public StepQueue(Func<DateTime> now) => this.now = now;
 
+    /// <summary>When the last action (click) went, on this queue's clock (MinValue: none yet).</summary>
+    public DateTime LastActionAt => lastAction;
+
     public QueueState State { get; private set; } = QueueState.Idle;
 
     /// <summary>The least time between two actions (clicks), however quickly the waits between them finish.</summary>

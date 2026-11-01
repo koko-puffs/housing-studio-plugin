@@ -25,42 +25,41 @@ public static class Menus
         return -1;
     }
 
+    /// <summary>The most rows a dye palette's list has: its names are values first … first + 35, and from
+    /// first + 36 on the window lists the item each row would use (Recording 4: [239] Terebinth for "No
+    /// Color", [240] Standard Spectrum Dye for Snow White…).</summary>
+    public const int DyeListMost = 36;
+
     /// <summary>
-    /// A dye's row in the dye window's list, from the window's text values by index: the list's names
-    /// start at <paramref name="first"/> with "No Color" (row 0), so Snow White, at first + 1, is row 1
-    /// (recordings: Snow White [5, 1, 1, 0], Soot Black [5, 6, 6, 0]). The first match counts: the
-    /// window repeats the chosen dyes further down. Null when the dye isn't listed.
+    /// A dye's row in the dye window's list, from the window's text values by index: the palette's names
+    /// are the values from <paramref name="first"/> on, one a row, up to the first empty one (1.0.0, from
+    /// Recordings 3 and 4). The first palette starts with "No Color" (row 0), so Snow White is row 1
+    /// (recordings: Snow White [5, 1, 1, 0], Soot Black [5, 6, 6, 0]); the others start with a dye (the
+    /// browns' row 0 is Sunset Orange), which 0.9.x never found. Null when the dye isn't in the list.
     /// </summary>
     public static int? DyeRow(IReadOnlyDictionary<int, string> values, string dyeName, int first)
     {
-        // The list ends where its first entry's words ("No Color") come round again: after it the
-        // window shows the dyes chosen (Recording 2: [426] No Color … [432] Soot Black).
-        values.TryGetValue(first, out var head);
-        foreach (var (index, text) in values.OrderBy(kv => kv.Key))
+        var want = Clean(dyeName);
+        if (want.Length == 0) return null;
+        for (var row = 0; row < DyeListMost; row++)
         {
-            if (index <= first) continue;
-            if (head != null && string.Equals(Clean(text), Clean(head), StringComparison.OrdinalIgnoreCase)) break;
-            if (string.Equals(Clean(text), Clean(dyeName), StringComparison.OrdinalIgnoreCase)) return index - first;
+            if (!values.TryGetValue(first + row, out var text) || Clean(text).Length == 0) break;
+            if (string.Equals(Clean(text), want, StringComparison.OrdinalIgnoreCase)) return row;
         }
         return null;
     }
 
     /// <summary>
-    /// How many rows the dye window's list has: rows are numbered by their value's place after
-    /// <paramref name="first"/> ("No Color", row 0), up to the last before its words come round again;
-    /// 0 before it's loaded.
+    /// How many rows the dye window's list has: its names from <paramref name="first"/> on, up to the first
+    /// empty value (at most <see cref="DyeListMost"/>); 0 before it's loaded. 0.9.x counted on to the last
+    /// name before "No Color" came round again, which took in the items' names after the list (38 for a
+    /// palette of 7), so a row past the list's end wasn't caught.
     /// </summary>
     public static int DyeListCount(IReadOnlyDictionary<int, string> values, int first)
     {
-        if (!values.TryGetValue(first, out var head) || Clean(head).Length == 0) return 0;
-        var last = first;
-        foreach (var (index, text) in values.OrderBy(kv => kv.Key))
-        {
-            if (index <= first) continue;
-            if (string.Equals(Clean(text), Clean(head), StringComparison.OrdinalIgnoreCase)) break;
-            if (Clean(text).Length > 0) last = index;
-        }
-        return last - first + 1;
+        var n = 0;
+        while (n < DyeListMost && values.TryGetValue(first + n, out var text) && Clean(text).Length > 0) n++;
+        return n;
     }
 
     public static string Clean(string s) =>

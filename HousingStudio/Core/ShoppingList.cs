@@ -44,6 +44,9 @@ public static class ShoppingList
             sb.AppendLine().AppendLine("Dyes to apply");
             foreach (var d in dyeing) sb.Append(d.Count()).Append(" × ").AppendLine(dyeName(d.Key));
         }
+        // 1.0.0: pieces you have, dyed, that the design has undyed (Terebinth takes it off).
+        var undye = plan.Entries.Count(e => e.Target.Stain == 0 && e.State is not (PieceState.Missing or PieceState.FromInventory) && e.CurrentStain != 0);
+        if (undye > 0) sb.AppendLine().Append("Dyes to take off: ").Append(undye).AppendLine(undye == 1 ? " piece (one Terebinth)" : " pieces (one Terebinth each)");
         AppendDyesToBuy(sb, plan, dyeName, dyesOwned);
         return sb.ToString().TrimEnd();
     }
@@ -124,6 +127,9 @@ public static class ShoppingList
 
         var dyeing = plan.Entries.Where(e => e.Target.Stain != 0 && (e.State == PieceState.Missing || e.DyeDiffers || e.State == PieceState.FromInventory))
             .GroupBy(e => e.Target.Stain).OrderByDescending(g => g.Count()).ToList();
+        // 1.0.0: pieces you have, dyed, that the design has undyed (Terebinth takes it off).
+        var undyeing = plan.Entries.Count(e => e.Target.Stain == 0 && e.State is not (PieceState.Missing or PieceState.FromInventory) && e.CurrentStain != 0);
+        if (undyeing > 0) sb.Append("Dyes to take off: ").Append(undyeing).AppendLine(undyeing == 1 ? " piece (one Terebinth)" : " pieces (one Terebinth each)").AppendLine();
         if (dyeing.Count > 0)
         {
             sb.AppendLine("Dyes to apply");

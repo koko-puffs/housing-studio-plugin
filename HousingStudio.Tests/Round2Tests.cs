@@ -172,23 +172,40 @@ public class DyeRowTests
     [InlineData("Snow White", 1)] // Recording 2: [5, 1, 1, 0]
     [InlineData("Soot Black", 6)] // Recording 1: [5, 6, 6, 0]
     [InlineData("soot black", 6)]
-    [InlineData("Terebinth", 36)]
     public void ReadsADyesRowFromTheWindow(string dye, int row) => Assert.Equal(row, Menus.DyeRow(Window, dye, 203));
 
     [Fact]
     public void NoRowForADyeNotListed() => Assert.Null(Menus.DyeRow(Window, "Rose Pink", 203));
 
     [Fact]
-    public void NoColorIsntADye() => Assert.Null(Menus.DyeRow(Window, "No Color", 203));
+    public void TheItemsAfterTheListArentRows()
+    {
+        // [239] Terebinth and [240] Standard Spectrum Dye are the items rows 0 and 1 would use (Recording 4),
+        // not dyes in the list; nor are the chosen dyes further down.
+        Assert.Null(Menus.DyeRow(Window, "Terebinth", 203));
+        Assert.Null(Menus.DyeRow(Window, "Standard Spectrum Dye", 203));
+        Assert.Equal(0, Menus.DyeRow(Window, "No Color", 203));
+    }
 
     [Fact]
-    public void TheListsLengthEndsWhereNoColorComesRound()
+    public void TheListsLengthEndsAtItsFirstEmptyValue()
     {
-        // Rows 0 (No Color) to 37 (Standard Spectrum Dye at 240): every row read is under it.
-        Assert.Equal(38, Menus.DyeListCount(Window, 203));
-        Assert.True(Menus.DyeRow(Window, "Terebinth", 203) < Menus.DyeListCount(Window, 203));
+        // Rows 0 (No Color) to 6 (Soot Black): 1.0.0 (0.9.x counted 38, the items' names after the list too).
+        Assert.Equal(7, Menus.DyeListCount(Window, 203));
         // Not loaded yet: no rows.
         Assert.Equal(0, Menus.DyeListCount(new Dictionary<int, string> { [1] = "HOUSING" }, 203));
+        Assert.Equal(0, Menus.DyeListCount(new Dictionary<int, string> { [203] = "" }, 203));
+    }
+
+    [Fact]
+    public void AnotherPalettesFirstDyeIsRowZero()
+    {
+        // Recording 3's browns: [203] Sunset Orange … [221] Bright Orange, then the items from [239].
+        var browns = new Dictionary<int, string> { [203] = "Sunset Orange", [204] = "Mesa Red", [220] = "Loam Brown", [221] = "Bright Orange", [239] = "Standard Spectrum Dye", [257] = "Wide Spectrum #2 Dye" };
+        for (var i = 205; i < 220; i++) browns[i] = $"Brown {i}";
+        Assert.Equal(0, Menus.DyeRow(browns, "Sunset Orange", 203));
+        Assert.Equal(17, Menus.DyeRow(browns, "Loam Brown", 203));
+        Assert.Equal(19, Menus.DyeListCount(browns, 203));
     }
 }
 

@@ -697,7 +697,17 @@ public sealed unsafe partial class PlacementRunner : IDisposable
     public void Tick(HousingContext ctx)
     {
         liveThisFrame = null;
-        if (!Active) return;
+        if (!Active)
+        {
+            // 1.0.0: the dye window a run's clean-up couldn't close yet (too soon after its last click, or a
+            // question it mustn't say No to yet) is closed once its rules allow, for 10 s after the run.
+            if (DateTime.UtcNow < closeDyeUntil)
+            {
+                if (GameUi.IsOpen(UiTable.DyeConfirm) || GameUi.IsOpen(UiTable.DyeWindow)) CloseDyeWindows();
+                else closeDyeUntil = DateTime.MinValue;
+            }
+            return;
+        }
 
         if (ctx.Kind != startKind || ctx.TerritoryId != startTerritory || ctx.HouseId != startHouse)
         {
@@ -938,7 +948,16 @@ public sealed unsafe partial class PlacementRunner : IDisposable
     // ---------------------------------------------------------------------------------------------
     // Scripts: the steps for each kind of piece.
 
-    private (List<Step> Steps, List<Step> Cleanup) Script(RunJob job) => job.Kind switch
+    private (List<Step> Steps, List<Step> Cleanup) Script(RunJob job)
+    {
+        var (steps, cleanup) = ScriptOf(job);
+        // 1.0.0: a dye window (or its question) left up by the last dye job is closed before any other job,
+        // whose first click (the editor's mode) would otherwise go to the dye mode's list under it.
+        if (job.Kind != JobKind.Dye) steps = DyeWindowsClosedFirst().Concat(steps).ToList();
+        return (steps, cleanup);
+    }
+
+    private (List<Step> Steps, List<Step> Cleanup) ScriptOf(RunJob job) => job.Kind switch
     {
         JobKind.Move => (MoveSteps(job, job.Key!.Value), HeldCleanup()),
         JobKind.PlaceFromStoreroom when side == Side.Interior && config.StoreroomAutomatic => (StoreroomSteps(job), MenuCleanup().Concat(HeldCleanup()).ToList()),
@@ -2491,33 +2510,8 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         return new List<Step>
         {
             EnsureMode(EditorMode.Dye),
-            // Not an action (0.9.1): it clicks only when a window is open, and the click gap before it
-            // was spent for nothing on every piece.
-            new Step
-            {
-                Label = "Is the dye window still open?",
-                Run = () =>
-                {
-                    // The click, when there's one, is an action (the click gap before it, 0.9.1's crash).
-                    if (GameUi.IsOpen(UiTable.DyeConfirm) || GameUi.IsOpen(UiTable.DyeWindow))
-                        queue.InsertNext(new[]
-                        {
-                            new Step
-                            {
-                                Label = $"Close the dye window: {UiTable.DyeClose.Describe()}",
-                                IsAction = true,
-                                MinGap = DyeWindowGap,
-                                Run = () =>
-                                {
-                                    CloseDyeWindows();
-                                    return StepOutcome.Done;
-                                },
-                            },
-                        });
-                    return StepOutcome.Done;
-                },
-            },
-            Step.Wait("The dye window is closed", () => !GameUi.IsOpen(UiTable.DyeConfirm) && !GameUi.IsOpen(UiTable.DyeWindow) || CloseDyeWindowAgain(), WindowWait, StepStatus.SkipJob),
+            DyeWindowsClosedFirst()[0],
+            DyeWindowsClosedFirst(StepStatus.SkipJob)[1],
             Step.Act($"Pick {name}", () =>
             {
                 var live = ReadLive();
@@ -2737,7 +2731,18 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     }
                 },
             },
-            new Step { Label = $"Press Dye: {UiTable.DyeApply.Describe()}", IsAction = true, MinGap = DyeWindowGap, Run = () => FireOrSkip(UiTable.DyeApply) },
+            new Step
+            {
+                Label = $"Press Dye: {UiTable.DyeApply.Describe()}",
+                IsAction = true,
+                MinGap = DyeWindowGap,
+                Run = () =>
+                {
+                    // A new question comes: the last one's Yes no longer stands for it.
+                    yesOnOpenQuestion = false;
+                    return FireOrSkip(UiTable.DyeApply);
+                },
+            },
             new Step
             {
                 Label = $"Confirm: {UiTable.DyeConfirmYes.Describe()}",
@@ -2756,6 +2761,8 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                         if (remakePlaceLoaded && now - confirmSeen.Value < TimeSpan.FromMilliseconds(800)) return StepOutcome.Waiting;
                         log.Info($"  The game asks: {string.Join(" ", GameUi.TextValues(UiTable.DyeConfirm).Values.Where(v => v.Length > 0).Take(4))}");
                         yesSentAt = now;
+                        yesOnOpenQuestion = true;
+                        lastDyeClick = now;
                         GameUi.Fire(UiTable.DyeConfirmYes);
                         asked[0] = true;
                         return StepOutcome.Done;
@@ -2956,15 +2963,82 @@ public sealed unsafe partial class PlacementRunner : IDisposable
     private void CloseDyeWindows()
     {
         var now = DateTime.UtcNow;
-        dyeCloseAgainAt = now;
-        if (GameUi.IsOpen(UiTable.DyeConfirm))
+        var confirm = GameUi.IsOpen(UiTable.DyeConfirm);
+        if (!confirm)
         {
-            if (now - yesSentAt > TimeSpan.FromSeconds(5)) GameUi.Fire(UiTable.DyeConfirmNo);
+            yesOnOpenQuestion = false;
+            confirmUpSince = null;
         }
-        else if (GameUi.IsOpen(UiTable.DyeWindow)) GameUi.Fire(UiTable.DyeClose);
+        else confirmUpSince ??= now;
+        // 1.0.0: never within the dye window's gap of its last click (the clean-up's clicks went at once,
+        // under 0.2 s after Dye or Yes), nor within 1.5 s of the last close (two closes to a closing window).
+        var last = queue.LastActionAt > lastDyeClick ? queue.LastActionAt : lastDyeClick;
+        if (now - last < DyeWindowGap || now - dyeCloseAgainAt < TimeSpan.FromSeconds(1.5)) return;
+        if (confirm)
+        {
+            // Never No to the question Yes went to while it's still up (a client that stalls keeps it up
+            // past any time), and with ReMakePlace loaded, not before it's had 2 s to answer it itself.
+            if (yesOnOpenQuestion || now - yesSentAt < TimeSpan.FromSeconds(5)) return;
+            if (remakePlaceLoaded && now - confirmUpSince!.Value < TimeSpan.FromSeconds(2)) return;
+            dyeCloseAgainAt = now;
+            lastDyeClick = now;
+            GameUi.Fire(UiTable.DyeConfirmNo);
+        }
+        else if (GameUi.IsOpen(UiTable.DyeWindow))
+        {
+            dyeCloseAgainAt = now;
+            lastDyeClick = now;
+            GameUi.Fire(UiTable.DyeClose);
+        }
     }
 
+    /// <summary>
+    /// The steps before a job when a dye window (or its question) may be up: if one is, it's closed (an
+    /// action, the dye window's gap before it; <see cref="CloseDyeWindows"/> keeps to its rules) and waited
+    /// for, asked again every 1.5 s. Not an action when nothing's open (0.9.1: the gap was spent for nothing).
+    /// </summary>
+    private List<Step> DyeWindowsClosedFirst(StepStatus onTimeout = StepStatus.SkipJob) => new()
+    {
+        new Step
+        {
+            Label = "Is the dye window still open?",
+            Run = () =>
+            {
+                if (GameUi.IsOpen(UiTable.DyeConfirm) || GameUi.IsOpen(UiTable.DyeWindow))
+                    queue.InsertNext(new[]
+                    {
+                        new Step
+                        {
+                            Label = $"Close the dye window: {UiTable.DyeClose.Describe()}",
+                            IsAction = true,
+                            MinGap = DyeWindowGap,
+                            Run = () =>
+                            {
+                                // As soon as its rules allow (else the wait below asks again).
+                                CloseDyeWindows();
+                                return StepOutcome.Done;
+                            },
+                        },
+                    });
+                return StepOutcome.Done;
+            },
+        },
+        Step.Wait("The dye window is closed", () => !GameUi.IsOpen(UiTable.DyeConfirm) && !GameUi.IsOpen(UiTable.DyeWindow) || CloseDyeWindowAgain(), WindowWait, onTimeout),
+    };
+
     private DateTime dyeCloseAgainAt;
+
+    /// <summary>Until when a stopped run still closes the dye window its clean-up left (<see cref="Tick"/>).</summary>
+    private DateTime closeDyeUntil;
+
+    /// <summary>When the run last clicked in the dye window or its question outside the queue's own actions (its clean-up's).</summary>
+    private DateTime lastDyeClick;
+
+    /// <summary>Yes went to the dye question that's up now (until it closes, or Dye is pressed again).</summary>
+    private bool yesOnOpenQuestion;
+
+    /// <summary>Since when the dye question has been seen up by <see cref="CloseDyeWindows"/>.</summary>
+    private DateTime? confirmUpSince;
 
     /// <summary>When Yes was last sent to the dye confirmation.</summary>
     private DateTime yesSentAt;
@@ -3341,7 +3415,9 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             Run = () =>
             {
                 // No first, then the window once the question has gone (closing it under the question
-                // may leave the question up).
+                // may leave the question up). What its rules hold back now goes later: the next job's first
+                // steps, or after the run (Tick).
+                closeDyeUntil = DateTime.UtcNow + TimeSpan.FromSeconds(10);
                 CloseDyeWindows();
                 if (GameUi.IsOpen(UiTable.ContextMenu)) GameUi.Fire(UiTable.MenuCancel);
                 return StepOutcome.Done;
@@ -3727,7 +3803,9 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         // tried a third time.
         var live = ReadLive();
         var redye = jobs.Where(j => j.Kind == JobKind.Dye && j.Outcome == JobOutcome.Done && j.Key is { } k && !redyed.Contains(j)
-                                    && live != null && live.TryGetValue(k, out var p) && p.ItemId == j.Target.ItemId && StainOf(k) != j.Target.Stain)
+                                    && live != null && live.TryGetValue(k, out var p) && p.ItemId == j.Target.ItemId && StainOf(k) != j.Target.Stain
+                                    // 1.0.0: and still at its spot (after put-aways, a slot could hold another copy).
+                                    && Vector3.Distance(p.Position, j.Target.Position) <= 0.25f)
             .ToList();
         if (off.Count == 0 && redye.Count == 0)
         {
