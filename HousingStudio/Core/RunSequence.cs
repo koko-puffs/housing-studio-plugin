@@ -127,13 +127,17 @@ public static class RunSequence
         {
             foreach (var e in ordered.Where(e => e.Target.Late == late && e.State == PieceState.Move))
                 jobs.Add(new RunJob { Kind = JobKind.Move, Target = e.Target, Entry = e, Key = e.Placed?.Key });
-            foreach (var e in ordered.Where(e => e.Target.Late == late && e.State is PieceState.FromStoreroom or PieceState.FromInventory))
-                jobs.Add(new RunJob
-                {
-                    Kind = e.State == PieceState.FromStoreroom ? JobKind.PlaceFromStoreroom : JobKind.PlaceFromBags,
-                    Target = e.Target,
-                    Entry = e,
-                });
+            // The storeroom's pieces before the bags': each one placed frees a storeroom slot, and a bag
+            // piece is placed through the storeroom (0.8.5's chamber had a full storeroom, and the game
+            // won't take a held bag piece's set-down from the plugin).
+            foreach (var state in new[] { PieceState.FromStoreroom, PieceState.FromInventory })
+                foreach (var e in ordered.Where(e => e.Target.Late == late && e.State == state))
+                    jobs.Add(new RunJob
+                    {
+                        Kind = state == PieceState.FromStoreroom ? JobKind.PlaceFromStoreroom : JobKind.PlaceFromBags,
+                        Target = e.Target,
+                        Entry = e,
+                    });
         }
         return jobs;
     }

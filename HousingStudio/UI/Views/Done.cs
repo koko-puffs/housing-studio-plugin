@@ -234,8 +234,10 @@ public sealed partial class MainWindow
             return;
         var pieces = Words.Count(vm.LiveAtStart, "piece");
         Ask("Put them back?",
-            $"This loads the backup saved at {Clock(savedAt)} as the design and starts a run that moves the {pieces} you had back to where they were, " +
-            "then puts the pieces placed since (not in the backup) away in the storeroom.",
+            (vm.LiveAtStart > 0
+                ? $"This loads the backup saved at {Clock(savedAt)} as the design and starts a run that moves the {pieces} you had back to where they were, then puts the pieces placed since (not in the backup) away"
+                : $"Nothing was placed here when the backup was saved at {Clock(savedAt)}: this puts every piece placed since away")
+            + " in the storeroom, or in your bags while the storeroom is full.",
             "Put them back", "Keep it as it is", () =>
             {
                 OnFramework(() =>

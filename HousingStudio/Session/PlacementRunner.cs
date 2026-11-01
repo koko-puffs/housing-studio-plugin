@@ -323,6 +323,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         var dyedInDesign = DyeCounts.Dyed(entries);
         toPutAway = putAway?.ToList() ?? new List<PlacedPiece>();
         WasPuttingBack = toPutAway.Count > 0;
+        heldRefused = false;
         storeModeUsed = false;
         putAwayPlanned = toPutAway.Count == 0;
         if (jobs.Count == 0 && dyesExpected == 0 && toPutAway.Count == 0)
@@ -424,6 +425,9 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         StatusText = "Starting…";
     }
 
+    /// <summary>The game refused a held piece's set-down in this run: later bag pieces go straight to you.</summary>
+    private bool heldRefused;
+
     /// <summary>
     /// The last run put pieces back (Put them back, Swap back, or trying those again): Carry on, which
     /// starts on the design alone, wouldn't put away what's left, so Done doesn't offer it then.
@@ -520,10 +524,12 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             return;
         }
         // The backup is what was there: what's placed now and isn't in it (placed since) goes back to
-        // the storeroom; but a backup with nothing for here would put everything away, so it doesn't.
+        // the storeroom (or your bags when it's full). A backup of this home with nothing in it was an
+        // empty room (0.8.5's chamber: nothing was put away, and Put them back did nothing): everything
+        // placed since goes. CanRestore has checked it's this home's backup; you were asked first.
         var backupHas = session.PlanSide == Side.Interior ? session.Layout?.Interior.Count : session.Layout?.Garden.Count;
-        IReadOnlyList<PlacedPiece> putAway = backupHas > 0 ? session.Plan.Extras : Array.Empty<PlacedPiece>();
-        if (backupHas is not > 0) log.Warn("The backup has no pieces here, so nothing is put away.");
+        IReadOnlyList<PlacedPiece> putAway = session.Plan.Extras;
+        if (backupHas is not > 0) log.Info($"The backup had nothing placed here: the {putAway.Count} placed since are put away.");
         StartRestore(putAway);
         if (!Active) notice = StopReason ?? "Couldn't start putting them back.";
     }
@@ -1800,6 +1806,12 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         // Through the storeroom only when its picking is on (Settings): else straight from the bag (0.8.0
         // stored it, then picked it from the storeroom all the same).
         if (BagRoute.First(side == Side.Interior) == BagWay.Held || !config.StoreroomAutomatic) return HeldAttempt(job);
+        // The storeroom refused a piece and has no more room since: straight to the bag's own way.
+        if (StoreroomRefuses())
+        {
+            log.Info($"  The storeroom is full ({InventoryReader.StoreroomRoom(side)?.ToString() ?? "?"} free): {Name(job)} is placed from your bags.");
+            return HeldAttempt(job);
+        }
         var name = Name(job);
         var stock = job.Entry?.Stock;
         var storedBefore = -1;
@@ -1891,6 +1903,8 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                         return StepOutcome.Done;
                     }
                     log.Warn($"  It wasn't stored ({(refused ? $"the game said \"{lastToast}\"" : "nothing changed in 3.5 s")}; {stored} in the storeroom, {inBags} in your bags): placing it from the bag instead.");
+                    // Not asked again until the storeroom's room changes (a placed storeroom piece frees one).
+                    if (refused) refusedAtRoom = InventoryReader.StoreroomRoom(side) ?? 0;
                     if (GameUi.IsOpen(UiTable.ContextMenu)) GameUi.Fire(UiTable.MenuCancel);
                     queue.InsertNext(new[] { Step.Wait("Its menu closes", () => !GameUi.IsOpen(UiTable.ContextMenu), WindowWait, StepStatus.Done) }.Concat(HeldAttempt(job)));
                     return StepOutcome.Done;
@@ -1932,6 +1946,13 @@ public sealed unsafe partial class PlacementRunner : IDisposable
     private List<Step> HeldAttempt(RunJob job)
     {
         var name = Name(job);
+        // The game refused a held piece's set-down this run (0.3.0, and 0.8.5's chamber, every time):
+        // straight to you putting it down, without the try.
+        if (heldRefused)
+        {
+            log.Info($"  The game didn't take a held piece's set-down earlier in this run: you put {name} down, and it's then set at its spot.");
+            return ByHandSteps(job);
+        }
         var stock = job.Entry?.Stock;
         var steps = new List<Step>
         {
@@ -2005,7 +2026,9 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     var refused = lastToast != null && HousingEditor.Mode != EditorMode.Place;
                     if (!refused && queue.Elapsed < TimeSpan.FromSeconds(3.4)) return StepOutcome.Waiting;
                     EndAnywhereForOne();
-                    log.Warn($"  {name} wasn't set down{(lastToast != null ? $" (the game said \"{lastToast}\")" : string.Empty)}: you put it down, and it's then set at its spot.");
+                    if (refused) heldRefused = true;
+                    log.Warn($"  {name} wasn't set down{(lastToast != null ? $" (the game said \"{lastToast}\")" : string.Empty)}: you put it down, and it's then set at its spot."
+                             + (refused ? " The plugin places from your bags through the storeroom: with room for one piece there, it does the rest itself." : string.Empty));
                     queue.InsertNext(ByHandSteps(job));
                     return StepOutcome.Done;
                 },
@@ -2758,36 +2781,45 @@ public sealed unsafe partial class PlacementRunner : IDisposable
     /// recording showed); a yes/no is answered. Not yet seen to work from the plugin: if the piece doesn't
     /// go, it's skipped, to be put away by hand.
     /// </summary>
-    private List<Step> StoreSteps(RunJob job)
+    private List<Step> StoreSteps(RunJob job, bool toBags = false)
     {
         var name = Name(job);
         var key = job.Key!.Value;
+        // A full storeroom (0.8.5's chamber): the editor's "to your bags" instead, while the bags have room.
+        if (!toBags && StoreroomRefuses() && ErrandGame.FreeSlots() > 0)
+        {
+            toBags = true;
+            log.Info($"  The storeroom is full: {name} goes to your bags instead ({ErrandGame.FreeSlots()} free slots).");
+        }
+        var mode = toBags ? EditorMode.ToBags : EditorMode.Store;
+        var button = toBags ? UiTable.LayoutToBags : UiTable.LayoutStore;
+        var modeName = toBags ? "To your bags" : "Store";
         return new List<Step>
         {
-            // From the second piece on, the editor is in Store mode already: no Rotate and back.
-            HousingEditor.Mode == EditorMode.Store ? Step.Pause("Already in Store mode", TimeSpan.Zero) : EnsureMode(EditorMode.Rotate),
+            // From the second piece on, the editor is in that mode already: no Rotate and back.
+            HousingEditor.Mode == mode ? Step.Pause($"Already in {modeName} mode", TimeSpan.Zero) : EnsureMode(EditorMode.Rotate),
             new Step
             {
-                Label = "The editor is in Store mode",
+                Label = $"The editor is in {modeName} mode",
                 Run = () =>
                 {
-                    if (HousingEditor.Mode == EditorMode.Store) return StepOutcome.Done;
+                    if (HousingEditor.Mode == mode) return StepOutcome.Done;
                     queue.InsertNext(new[]
                     {
-                        Step.Act($"Press Store: {UiTable.LayoutStore.Describe()}", () =>
+                        Step.Act($"Press {modeName}: {button.Describe()}", () =>
                         {
                             editorMayCloseUntil = DateTime.UtcNow + ModeSwitchGrace;
                             storeModeUsed = true;
-                            return Fire(UiTable.LayoutStore);
+                            return Fire(button);
                         }),
-                        Step.Wait("The editor is in Store mode", () => HousingEditor.Mode == EditorMode.Store, ClickWait),
+                        Step.Wait($"The editor is in {modeName} mode", () => HousingEditor.Mode == mode, ClickWait),
                     });
                     return StepOutcome.Done;
                 },
             },
             new Step
             {
-                Label = $"Put {name} away (picked in Store mode)",
+                Label = $"Put {name} away (picked in {modeName} mode)",
                 Key = "store pick",
                 IsAction = true,
                 Run = () =>
@@ -2799,18 +2831,19 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                         || Vector3.Distance(piece.Position, job.Target.Position) > 0.25f)
                         return StepOutcome.Skip("It's no longer where it was (moved or put away already).", ProblemKind.NotFound);
                     if (piece.Instance == 0) return StepOutcome.Skip("The game hasn't loaded it (walk closer to it).", ProblemKind.NotLoaded);
-                    if (StoreroomRefuses()) return StepOutcome.Skip(StoreroomFullWords, ProblemKind.Other);
+                    if (!toBags && StoreroomRefuses()) return StepOutcome.Skip(StoreroomFullWords, ProblemKind.Other);
+                    if (toBags && ErrandGame.FreeSlots() <= 0) return StepOutcome.Skip("The storeroom is full and so are your bags: make room in one and Try again.", ProblemKind.Other);
                     // Picked in another mode it would be picked up, not put away (checked here too: a pause
                     // or Continue lets you change the mode after it was set).
-                    if (HousingEditor.Mode != EditorMode.Store)
-                        return StepOutcome.Skip($"The editor was in {ModeWord(HousingEditor.Mode)}, not Store, when it came to putting it away, so it wasn't picked (nothing changed). Try again puts it away.", ProblemKind.Other);
+                    if (HousingEditor.Mode != mode)
+                        return StepOutcome.Skip($"The editor was in {ModeWord(HousingEditor.Mode)}, not {modeName}, when it came to putting it away, so it wasn't picked (nothing changed). Try again puts it away.", ProblemKind.Other);
                     lastToast = null;
                     return editor.Select(piece.Instance) ? StepOutcome.Done : StepOutcome.Halt("Couldn't pick the piece (the editor closed?).");
                 },
             },
             new Step
             {
-                Label = "It goes to the storeroom",
+                Label = toBags ? "It goes to your bags" : "It goes to the storeroom",
                 Key = "stored away",
                 Timeout = TimeSpan.FromSeconds(4),
                 OnTimeout = StepStatus.SkipJob,
@@ -2832,14 +2865,21 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                         log.Warn($"  {name} wasn't put away ({(said ? $"the game said \"{lastToast}\"" : "nothing changed in 3.5 s")}; room for {room?.ToString() ?? "?"} in the storeroom).");
                         if (said || room is <= 0)
                         {
-                            refusedAtRoom = room;
+                            if (!toBags) refusedAtRoom = room;
+                            // The storeroom said no: your bags instead, while they have room.
+                            if (!toBags && ErrandGame.FreeSlots() > 0)
+                            {
+                                log.Info($"  Putting {name} in your bags instead ({ErrandGame.FreeSlots()} free slots).");
+                                queue.InsertNext(StoreSteps(job, toBags: true));
+                                return StepOutcome.Done;
+                            }
                             return StepOutcome.Skip(said
                                 ? $"It wasn't put away (the game said \"{lastToast}\"): make room in the storeroom and Try again, or put it in your bags by hand (the editor's inventory button)."
                                 : StoreroomFullWords, ProblemKind.Other);
                         }
                         return StepOutcome.Skip("It wasn't put away (Store mode didn't take it from the plugin). Put it in the storeroom by hand.", ProblemKind.Other);
                     }
-                    job.Note = "Put away in the storeroom.";
+                    job.Note = toBags ? "Put away in your bags (the storeroom was full)." : "Put away in the storeroom.";
                     return StepOutcome.Done;
                 },
             },

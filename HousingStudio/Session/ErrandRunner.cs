@@ -2761,9 +2761,17 @@ public sealed partial class ErrandRunner : IDisposable
             Run = () =>
             {
                 if (readAfter < DateTime.UtcNow - TimeSpan.FromMinutes(1)) readAfter = DateTime.UtcNow + TimeSpan.FromSeconds(1.5);
-                return session.ReadAt > readAfter && session.Plan != null && session.Context.HouseId == home!.HouseId ? StepOutcome.Done : StepOutcome.Waiting;
+                if (!(session.ReadAt > readAfter && session.Plan != null && session.Context.HouseId == home!.HouseId)) return StepOutcome.Waiting;
+                // Inside, the storeroom too: read before it had come in, its pieces counted as missing and
+                // weren't placed (0.8.5's chamber: "0 from the storeroom"). Given up on after 15 s.
+                if (session.PlanSide == Side.Interior && !session.StoreroomLoaded)
+                {
+                    if (DateTime.UtcNow - readAfter < TimeSpan.FromSeconds(15)) return StepOutcome.Waiting;
+                    log.Warn("  The storeroom hasn't come in after 15 s: its pieces are left for a later run (open Housing → Indoor Furnishings once, then start placing from Ready).");
+                }
+                return StepOutcome.Done;
             },
-            Timeout = TimeSpan.FromSeconds(30),
+            Timeout = TimeSpan.FromSeconds(45),
             TimeoutMessage = "Your home couldn't be read again (open Housing → Indoor Furnishings once, and start again).",
         },
     };

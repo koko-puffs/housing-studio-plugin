@@ -185,6 +185,19 @@ public class RunSequenceTests
         };
 
     [Fact]
+    public void TheStoreroomsPiecesComeBeforeTheBagsSoTheyFreeRoom()
+    {
+        var jobs = RunSequence.Build(new[]
+        {
+            E(0, PieceState.FromInventory),
+            E(1, PieceState.FromStoreroom),
+            E(2, PieceState.FromInventory),
+            E(3, PieceState.FromStoreroom),
+        });
+        Assert.Equal(new[] { JobKind.PlaceFromStoreroom, JobKind.PlaceFromStoreroom, JobKind.PlaceFromBags, JobKind.PlaceFromBags }, jobs.Select(j => j.Kind));
+    }
+
+    [Fact]
     public void MovesThenPlacesFloorPiecesBeforeWhatSitsOnThem()
     {
         var jobs = RunSequence.Build(new[]
