@@ -1774,7 +1774,9 @@ public sealed partial class ErrandRunner : IDisposable
             {
                 Label = $"Exchange {ex.CurrencyName} for {Name(item.ItemId)} at {v.NpcName} ({ErrandTable.ExchangeCurrencyBuy.Describe()})",
                 IsAction = true,
-                Key = Guess,
+                // 1.0.0: the currency exchange's click is recorded (Recording 4); the item exchange's isn't yet,
+                // so only it waits for Continue.
+                Key = ExchangeWindow() == ErrandTable.ExchangeItem ? Guess : null,
                 Run = () =>
                 {
                     guessByHand = null;

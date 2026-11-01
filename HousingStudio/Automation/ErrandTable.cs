@@ -54,11 +54,13 @@ public static class ErrandTable
     public static readonly string[] ExchangeWindows = { ExchangeCurrency, ExchangeItem };
 
     /// <summary>
-    /// Exchange for <c>count</c> of the item in row <c>row</c> (the list's first is 0, as shown). [Guess:
-    /// what other plugins send, [i:0, i:row, i:count]; not seen in a recording yet, so it waits for Continue
-    /// until "Trust the new clicks" is on. A recording of one exchange by hand confirms it.]
+    /// Exchange for <c>count</c> of the item in row <c>row</c> (the list's first is 0, as shown). The game
+    /// then asks "Exchange 2,000 MGP for the following item?" (Yes / No), answered yes when it names the
+    /// cost planned. [Recording 4, 1.0.0: [i:0, i:30, i:1, empty] for a Dance Pole at the Gold Saucer's
+    /// Prize Exchange (Music/Furnishings); 0.7.14 guessed it without the last value. Its close is
+    /// [i:-1, i:0].]
     /// </summary>
-    public static readonly UiCall ExchangeCurrencyBuy = new(ExchangeCurrency, "i:0 i:{row} i:{count}", false, "Guess (other plugins)", Verified: false);
+    public static readonly UiCall ExchangeCurrencyBuy = new(ExchangeCurrency, "i:0 i:{row} i:{count} empty", true, "Recording 4");
 
     public static readonly UiCall ExchangeItemBuy = new(ExchangeItem, "i:0 i:{row} i:{count}", false, "Guess (other plugins)", Verified: false);
 

@@ -140,11 +140,11 @@ public static class UiTable
     /// <summary>Choose a menu entry ("Place" is entry 0 for a storeroom row and a bag item, "Paint" for a dye-list row). [Recordings 1 and 2]</summary>
     public static readonly UiCall MenuChoose = new(ContextMenu, "i:0 i:{entry} u:0 empty empty", true, "Recording 1");
 
-    /// <summary>Close a menu without choosing. [Refurnish's learned cancel]</summary>
-    public static readonly UiCall MenuCancel = new(ContextMenu, "i:0 i:-1 u:0 empty empty", true, "Refurnish", Verified: false);
+    /// <summary>Close a menu without choosing. [Refurnish's learned cancel; Recording 4: ContextMenu ← [i:0, i:-1, u:0, empty, empty]]</summary>
+    public static readonly UiCall MenuCancel = new(ContextMenu, "i:0 i:-1 u:0 empty empty", true, "Recording 4");
 
-    /// <summary>Press Yes. [ECommons]</summary>
-    public static readonly UiCall YesNoYes = new(YesNo, "i:0", true, "ECommons", Verified: false);
+    /// <summary>Press Yes. [ECommons; Recording 4: SelectYesno ← [i:0] on "Exchange 2,000 MGP…?" and "Enter the estate hall?"]</summary>
+    public static readonly UiCall YesNoYes = new(YesNo, "i:0", true, "Recording 4");
 
     // ---------- the dye window ----------
 
@@ -168,8 +168,8 @@ public static class UiTable
     /// <summary>Yes on "dye the selected item?". [Recording 1]</summary>
     public static readonly UiCall DyeConfirmYes = new(DyeConfirm, "i:0", true, "Recording 1");
 
-    /// <summary>No on "dye the selected item?" (clean-up). [ReMakePlace]</summary>
-    public static readonly UiCall DyeConfirmNo = new(DyeConfirm, "i:-1", true, "ReMakePlace", Verified: false);
+    /// <summary>No on "dye the selected item?" (clean-up). [ReMakePlace; Recording 4: MiragePrismMiragePlateConfirm ← [i:-1]]</summary>
+    public static readonly UiCall DyeConfirmNo = new(DyeConfirm, "i:-1", true, "Recording 4");
 
     /// <summary>The dye window's list of dye names starts at this AtkValue ("No Color"). [Recording 1: values 203–209 were No Color … Soot Black]</summary>
     public const int DyeListFirstValue = 203;
