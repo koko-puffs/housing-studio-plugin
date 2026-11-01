@@ -361,8 +361,7 @@ public sealed partial class ErrandRunner : IDisposable
                  + (keepAsFirst != null ? $" The first placing swaps: what's here is kept as “{keepAsFirst}”, and {ClearOutFirst} pieces not in the design are put away first."
                      : clearOutFirst != null ? $" The first placing clears out {ClearOutFirst} pieces not in the design first." : string.Empty));
         if (!HasWayFor(home))
-            log.Warn($"No way to your front door is recorded for plot {home.Plot}: vnavmesh's map of a ward has no houses in it, so its way to your door can run into walls. "
-                     + "If it does, you're asked to walk in (Settings → Getting → Way to your door records the way once, to be followed after).");
+            log.Info($"No way to your front door is known for plot {home.Plot} yet: the first time home, you're asked to walk to your door once, and that walk is remembered.");
         if (plan.CurrencyCosts.Count > 0)
             log.Info($"Currency vendors: {string.Join(", ", plan.CurrencyCosts.Select(c => $"{c.Cost:N0} {c.Currency} (you have {ErrandGame.CurrencyCount(c.CurrencyItem):N0})"))} agreed, no more.");
         if (rehearse) RehearsalStarted(plan);
@@ -919,6 +918,50 @@ public sealed partial class ErrandRunner : IDisposable
         };
     }
 
+    /// <summary>
+    /// You're free to use something: landed, not mounted, and the game not busy with a bell, an event or
+    /// a menu still closing (0.7.13: the board used right after leaving a retainer said "Cannot execute
+    /// at this time", and nothing tried again).
+    /// </summary>
+    private static bool FreeToUse()
+    {
+        var c = Services.Condition;
+        return Movement.Landed && !c[ConditionFlag.OccupiedSummoningBell] && !c[ConditionFlag.OccupiedInEvent]
+               && !c[ConditionFlag.OccupiedInQuestEvent] && !c[ConditionFlag.Occupied] && !c[ConditionFlag.Occupied30]
+               && !c[ConditionFlag.Occupied33] && !c[ConditionFlag.Occupied38] && !c[ConditionFlag.Occupied39] && !c[ConditionFlag.Casting];
+    }
+
+    /// <summary>
+    /// Uses something (a bell, a board) once you're free to, and waits for its window
+    /// (<paramref name="opened"/>); used again every 2.5 s it hasn't opened, four times at most, as a
+    /// person would click it again.
+    /// </summary>
+    private Step UseUntil(string what, Func<Dalamud.Game.ClientState.Objects.Types.IGameObject?> find, string window, Func<bool> opened)
+    {
+        var uses = 0;
+        var usedAt = DateTime.MinValue;
+        return new Step
+        {
+            Label = $"Use {what} ({window} opens)",
+            IsAction = true,
+            Timeout = TimeSpan.FromSeconds(20),
+            TimeoutMessage = $"{window} didn't open.",
+            Run = () =>
+            {
+                if (opened()) return StepOutcome.Done;
+                if (uses > 0 && DateTime.UtcNow - usedAt < TimeSpan.FromSeconds(2.5)) return StepOutcome.Waiting;
+                if (!FreeToUse()) return StepOutcome.Waiting;
+                if (uses >= 4) return StepOutcome.Halt($"{window} didn't open (used {what} {uses} times).");
+                if (find() is not { } o) return StepOutcome.Halt($"Couldn't find {what} within reach. Near you: {ErrandGame.NamesNear(15)}.");
+                if (uses > 0) log.Info($"  {window} didn't open: using {what} again.");
+                uses++;
+                usedAt = DateTime.UtcNow;
+                ErrandGame.Interact(o);
+                return StepOutcome.Waiting;
+            },
+        };
+    }
+
     /// <summary>Talks to (or uses) the object <paramref name="find"/> finds, near you.</summary>
     private static Step Use(string what, Func<Dalamud.Game.ClientState.Objects.Types.IGameObject?> find, string? key = null) => new()
     {
@@ -1013,8 +1056,8 @@ public sealed partial class ErrandRunner : IDisposable
         bool MenuOpen() => ErrandGame.MenuEntries()?.Addon == ErrandTable.SelectString;
         return new List<Step>
         {
-            Use("the summoning bell", () => ErrandGame.Me is { } me ? ErrandGame.Nearest(Bells(), me, Reach + 2, UsableKinds) : null),
-            Step.Wait("The list of retainers opens", () => GameUi.IsOpen(ErrandTable.RetainerList), WindowWait),
+            UseUntil("the summoning bell", () => ErrandGame.Me is { } me ? ErrandGame.Nearest(Bells(), me, Reach + 2, UsableKinds) : null,
+                "The list of retainers", () => GameUi.IsOpen(ErrandTable.RetainerList)),
             new Step
             {
                 Label = $"Choose {r.Name} ({ErrandTable.RetainerPick.Describe()})",
@@ -1026,7 +1069,9 @@ public sealed partial class ErrandRunner : IDisposable
                     return GameUi.Fire(ErrandTable.RetainerPick, UiCallValues.Of(("index", row))) ? StepOutcome.Done : StepOutcome.Halt("The list of retainers closed.");
                 },
             },
-            Step.Wait($"{r.Name} comes", MenuOpen, TimeSpan.FromSeconds(8), StepStatus.Done),
+            // Their greeting (a Talk window) or their menu: 0.7.13 waited 8 s for the menu with the
+            // greeting up, before clicking it through.
+            Step.Wait($"{r.Name} comes", () => MenuOpen() || GameUi.IsOpen(ErrandTable.Talk), TimeSpan.FromSeconds(8), StepStatus.Done),
             ClickThrough(r.Name, MenuOpen),
             new Step
             {
@@ -1570,8 +1615,8 @@ public sealed partial class ErrandRunner : IDisposable
         }
         steps.AddRange(HubSteps(Boards()));
         steps.AddRange(WalkSteps("a market board", () => ErrandGame.Me is { } p ? ErrandGame.Nearest(Boards(), p, 150, UsableKinds)?.Position : null));
-        steps.Add(Use("the market board", () => ErrandGame.Me is { } me ? ErrandGame.Nearest(Boards(), me, Reach + 2, UsableKinds) : null));
-        steps.Add(Step.Wait("The board's search opens", () => GameUi.IsOpen(ErrandTable.ItemSearch) || GameUi.IsOpen(ErrandTable.ItemSearchResult), WindowWait));
+        steps.Add(UseUntil("the market board", () => ErrandGame.Me is { } me ? ErrandGame.Nearest(Boards(), me, Reach + 2, UsableKinds) : null,
+            "The board's search", () => GameUi.IsOpen(ErrandTable.ItemSearch) || GameUi.IsOpen(ErrandTable.ItemSearchResult)));
         return steps;
     }
 
@@ -1678,6 +1723,10 @@ public sealed partial class ErrandRunner : IDisposable
     private List<Step> SearchSteps(uint itemId, string name)
     {
         var index = -1;
+        var picks = 0;
+        var searches = 1;
+        var pickedAt = DateTime.MinValue;
+        DateTime? redoAt = null;
         DateTime? searchedAt = null;
         // The listings window open for the item, and its listings come (or none, 6 s after it opened:
         // an item nobody sells there has none to send).
@@ -1737,10 +1786,13 @@ public sealed partial class ErrandRunner : IDisposable
                 IsAction = true,
                 Run = () =>
                 {
-                    if (Opened() || index < 0) return StepOutcome.Done;
+                    if (Opened()) return StepOutcome.Done;
+                    if (index < 0) index = 0;
                     BoardListings.Expect(itemId);
                     if (!GameUi.Fire(ErrandTable.SearchResultPick, UiCallValues.Of(("index", index))))
                         queue.InsertNext(new[] { YouOpen("Search the board for") });
+                    pickedAt = DateTime.UtcNow;
+                    picks = 1;
                     return StepOutcome.Done;
                 },
             },
@@ -1750,17 +1802,65 @@ public sealed partial class ErrandRunner : IDisposable
                 Run = () =>
                 {
                     if (Opened()) return StepOutcome.Done;
-                    if (GameUi.IsOpen(ErrandTable.ItemSearchResult) && ErrandGame.ListingsItem() is var other && other != 0 && other != itemId)
+                    var now = DateTime.UtcNow;
+                    var resultOpen = GameUi.IsOpen(ErrandTable.ItemSearchResult);
+                    // The window's title is the item's name ([2] in it); the proxy's item when it isn't there yet.
+                    var title = resultOpen && GameUi.TextValues(ErrandTable.ItemSearchResult).TryGetValue(2, out var t) ? t.Trim() : null;
+                    var other = resultOpen ? ErrandGame.ListingsItem() : 0;
+                    var wrong = resultOpen && ((title is { Length: > 0 } && !string.Equals(title, name, StringComparison.OrdinalIgnoreCase))
+                                               || (other != 0 && other != itemId));
+                    if (wrong)
                     {
-                        // Another item's listings: nothing of theirs is bought; back to the search, and you.
-                        log.Info($"  Result {index + 1} opened another item's listings ({Name(other)}): you open {name}'s.");
+                        // The previous search's results were still showing (0.7.13: result 1 opened the last
+                        // item): closed, and the search made again, twice, before it's left to you.
                         GameUi.Close(ErrandTable.ItemSearchResult);
-                        queue.InsertNext(new[] { YouOpen("In the board's results, find") });
-                        return StepOutcome.Done;
+                        if (searches >= 3)
+                        {
+                            log.Info($"  Result {index + 1} opened another item's listings ({title ?? Name(other)}) again: you open {name}'s.");
+                            queue.InsertNext(new[] { YouOpen("In the board's results, find") });
+                            return StepOutcome.Done;
+                        }
+                        log.Info($"  Result {index + 1} opened another item's listings ({title ?? Name(other)}): the search's results hadn't come yet. Searching again.");
+                        redoAt = now + TimeSpan.FromMilliseconds(600);
+                        return StepOutcome.Waiting;
                     }
-                    return StepOutcome.Waiting;
+                    if (redoAt is { } r && now >= r)
+                    {
+                        // The search again, then (once its results have had time) the first result.
+                        redoAt = null;
+                        searches++;
+                        if (!GameUi.FireValues(ErrandTable.ItemSearch, true, ErrandTable.SearchByWords, null, null, name, name, null, null, null))
+                        {
+                            queue.InsertNext(new[] { YouOpen("Search the board for") });
+                            return StepOutcome.Done;
+                        }
+                        pickedAt = now + TimeSpan.FromMilliseconds(Math.Max(1200, 2000 * Speed.WaitScale));
+                        picks = 0;
+                        return StepOutcome.Waiting;
+                    }
+                    if (redoAt != null || resultOpen) return StepOutcome.Waiting;
+                    // Nothing opened: the pick went before the results were there (0.7.13: three items
+                    // waited 15 s and were left). Picked again every 2.5 s, three times, then searched again.
+                    if (now < pickedAt + TimeSpan.FromMilliseconds(picks == 0 ? 0 : 2500)) return StepOutcome.Waiting;
+                    if (picks < 3 && GameUi.IsOpen(ErrandTable.ItemSearch))
+                    {
+                        if (picks > 0) log.Info($"  {name}'s listings didn't open: picking result {index + 1} again.");
+                        BoardListings.Expect(itemId);
+                        GameUi.Fire(ErrandTable.SearchResultPick, UiCallValues.Of(("index", index)));
+                        picks++;
+                        pickedAt = now;
+                        return StepOutcome.Waiting;
+                    }
+                    if (searches < 3 && GameUi.IsOpen(ErrandTable.ItemSearch))
+                    {
+                        redoAt = now;
+                        return StepOutcome.Waiting;
+                    }
+                    log.Info($"  {name}'s listings didn't open after {searches} searches: you open them.");
+                    queue.InsertNext(new[] { YouOpen("In the board's results, find") });
+                    return StepOutcome.Done;
                 },
-                Timeout = TimeSpan.FromSeconds(15),
+                Timeout = TimeSpan.FromSeconds(30),
                 TimeoutMessage = $"{name}'s listings didn't come.",
             },
         };
@@ -1868,6 +1968,23 @@ public sealed partial class ErrandRunner : IDisposable
                 followWay = null;
                 log.Warn($"  {why} Walk to your door and go in; the errands carry on once you're inside{(way == null ? " (recording the way once, in Settings → Getting, saves this next time)" : string.Empty)}.");
                 queue.InsertNext(new[] { Arriving(You("Walk to your door and go in", In)) });
+            }
+            if (way == null)
+            {
+                // No way known to this door yet (0.8.0): you walk it once, and it's remembered as you go;
+                // vnavmesh's own way runs into the walls (its map of a ward has no houses in it).
+                steps.Add(Step.Act("Remember the way to your door as you walk it", () =>
+                {
+                    var why = StartRecordingWay(errands: true);
+                    log.Info(why == null
+                        ? "  This once, walk from here to your door and go in: the way is remembered, and from then on the errands walk it themselves."
+                        : $"  Walk to your door and go in (the way couldn't be remembered: {why}).");
+                    return StepOutcome.Done;
+                }));
+                steps.Add(Arriving(You("Walk to your door and go in (this once: the way is remembered)", In)));
+                if (home is { Chamber: true }) steps.AddRange(ChamberSteps());
+                steps.AddRange(ReadAgainSteps());
+                return steps;
             }
             var end = way?.End ?? spot!.Value;
             steps.AddRange(ApproachSteps(way != null, end, door.Value, HandOver, () => handed, () =>

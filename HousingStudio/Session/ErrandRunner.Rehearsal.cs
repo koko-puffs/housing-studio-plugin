@@ -252,8 +252,10 @@ public sealed partial class ErrandRunner
                     log.Info($"  Choosing {l.Quantity} × {name} at {l.UnitPrice:N0} gil each ({cost:N0} with tax), row {l.Row}.");
                     return GameUi.Fire(ErrandTable.ListingBuy, UiCallValues.Of(("index", l.Row))) ? StepOutcome.Done : StepOutcome.Halt($"{name}'s listings closed.");
                 }
-                log.Warn($"  No listing of {name} a real run would buy here ({firstWhy ?? "none listed"}).");
-                Rehearsals.Report.Issue(where, $"No listing a real run would buy here ({firstWhy ?? "none listed"}).", RehearsalTrouble.WouldStop);
+                // A real run leaves the item for now and plans another world for it: not a stop, a note.
+                log.Warn($"  No listing of {name} a real run would buy here ({firstWhy ?? "none listed"}): it would be left for now and looked for on another world.");
+                Rehearsals.Report.Note($"{where}: no listing a real run would buy here ({firstWhy ?? "none listed"}); it would look on another world.");
+                if (emptyBoards.Add((item.ItemId, ErrandGame.CurrentWorld()))) emptiedThisTrip++;
                 return Finished();
             },
         });

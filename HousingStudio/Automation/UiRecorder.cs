@@ -21,8 +21,25 @@ namespace HousingStudio.Automation;
 /// </summary>
 public sealed unsafe class UiRecorder : IDisposable
 {
-    private const int MaxLines = 1500;
-    private static readonly TimeSpan MaxDuration = TimeSpan.FromMinutes(10);
+    private const int MaxLines = 8000;
+
+    /// <summary>Long enough for a whole errands run (0.7.13 stopped after 10 minutes, mid-run).</summary>
+    private static readonly TimeSpan MaxDuration = TimeSpan.FromMinutes(60);
+
+    /// <summary>
+    /// Windows whose clicks say nothing about housing or errands: other plugins' overlays and the HUD's
+    /// own bits (0.7.13's recordings were half BMR_Overlay_Back and CursorAddon). A name starting with
+    /// "_" is the HUD's.
+    /// </summary>
+    private static readonly HashSet<string> Noise = new(StringComparer.Ordinal)
+    {
+        "BMR_Overlay_Back", "CursorAddon", "Tooltip", "ItemDetail", "ActionDetail", "TooltipDetail", "ScreenFrameSystem",
+    };
+
+    private static bool IsNoise(string name) => name.Length == 0 || name[0] == '_' || Noise.Contains(name) || name.StartsWith("BMR_", StringComparison.Ordinal);
+
+    /// <summary>A window's words are cut to this many characters each (the world visit window's rules ran to pages).</summary>
+    private const int WordsAtMost = 160;
 
     /// <summary>True while the plugin itself is firing a callback, so the log can tell its clicks from yours.</summary>
     internal static bool OurClick { get; set; }
@@ -98,7 +115,7 @@ public sealed unsafe class UiRecorder : IDisposable
         if (!Recording) return;
         if (DateTime.UtcNow - started > MaxDuration)
         {
-            Add("Stopped after 10 minutes.");
+            Add($"Stopped after {MaxDuration.TotalMinutes:0} minutes.");
             Stop();
             return;
         }
@@ -138,7 +155,7 @@ public sealed unsafe class UiRecorder : IDisposable
     {
         try
         {
-            if (Recording && self != null)
+            if (Recording && self != null && !(IsNoise(self->NameString) && !OurClick))
             {
                 var who = OurClick ? "plugin" : "you";
                 var name = self->NameString;
@@ -148,7 +165,13 @@ public sealed unsafe class UiRecorder : IDisposable
                     var entries = GameUi.MenuEntries();
                     if (entries != null) Add($"  menu entries: {string.Join(" | ", entries.Select((e, i) => $"{i}:{e}"))}");
                 }
-                Add("  " + DescribeState());
+                // The housing state after it, only when it changed (it was written after every click).
+                var state = DescribeState();
+                if (state != lastState)
+                {
+                    lastState = state;
+                    Add("  " + state);
+                }
             }
         }
         catch
@@ -160,18 +183,19 @@ public sealed unsafe class UiRecorder : IDisposable
 
     private void OnOpen(AddonEvent type, AddonArgs args)
     {
-        if (!Recording) return;
+        if (!Recording || IsNoise(args.AddonName)) return;
         var a = (AtkUnitBase*)args.Addon.Address;
         // The windows the automation reads get all their words written down (the dye window's list,
         // the furnishing list's rows); the rest, the first few.
         var full = args.AddonName is UiTable.DyeWindow or UiTable.FurnishingList or UiTable.DyeList or UiTable.ContextMenu or ErrandTable.Shop;
         var strings = a != null ? GameUi.Strings(a, full ? 600 : 12) : new List<string>();
-        Add($"OPEN {args.AddonName}{(strings.Count > 0 ? " " + string.Join(" ", strings) : string.Empty)}");
+        var words = strings.Select(w => w.Length > WordsAtMost ? w[..WordsAtMost] + "…" : w);
+        Add($"OPEN {args.AddonName}{(strings.Count > 0 ? " " + string.Join(" ", words) : string.Empty)}");
     }
 
     private void OnClose(AddonEvent type, AddonArgs args)
     {
-        if (Recording) Add($"CLOSE {args.AddonName}");
+        if (Recording && !IsNoise(args.AddonName)) Add($"CLOSE {args.AddonName}");
     }
 
     private void OnErrorToast(ref Dalamud.Game.Text.SeStringHandling.SeString message, ref bool isHandled) => Add($"ERROR TOAST {message.TextValue}");

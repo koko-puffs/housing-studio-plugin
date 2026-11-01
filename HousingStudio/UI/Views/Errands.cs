@@ -342,19 +342,12 @@ public sealed partial class MainWindow
             Kit.Gap(14);
         }
 
-        // No way to the front door recorded for this plot (none yet, or you've moved): asked for here,
-        // before setting out, with the way to record it.
+        // No way to the front door known for this plot (none yet, or you've moved): said here, before
+        // setting out. Nothing to set up: the first time home, you walk in once and it's remembered.
         if (!plan.IsEmpty && !Errands.HasWayFor(here))
         {
-            AlertNote($"Record the way to your door once: no way is recorded for plot {here!.Plot} yet. vnavmesh's map of a ward has no houses in it, so its own way can run into walls, "
-                      + "and you'd be asked to walk in. Outside, where the home teleport lands you: Record, walk to your door, go in.", Palette.Brass, Icon.Alert, Palette.Text);
-            Kit.Gap(8);
-            const string record = "Way to your door";
-            var rw = Kit.ButtonWidth(record, BtnSize.Tiny, Icon.MapPin);
-            var rp = Kit.At;
-            if (Kit.Button("##errand-record-way", rp, record, Btn.Glass, BtnSize.Tiny, Icon.MapPin, rw, false, "Settings → Getting, where the way is recorded"))
-                OpenSettings(SettingsTab.Getting);
-            Kit.Reserve(rp, rw, Kit.ButtonHeight(BtnSize.Tiny));
+            AlertNote($"The first time it comes home, you'll be asked to walk from where you land to your door (plot {here!.Plot}) once. "
+                      + "That walk is remembered, and from then on the errands walk to your door themselves.", Palette.Brass, Icon.Info, Palette.Text);
             Kit.Gap(14);
         }
 

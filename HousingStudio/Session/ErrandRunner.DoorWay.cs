@@ -38,9 +38,14 @@ public sealed partial class ErrandRunner
     private DateTime WayNoteAt { get; set; }
 
     /// <summary>Starts recording; null when it started, else why not.</summary>
-    public string? RecordWay()
+    public string? RecordWay() => Active ? "Not while the errands run." : StartRecordingWay(errands: false);
+
+    /// <summary>
+    /// Starts recording from where you stand (Settings' Record, or the errands' first walk to a door
+    /// they don't know the way to, <paramref name="errands"/>); null when it started, else why not.
+    /// </summary>
+    private string? StartRecordingWay(bool errands)
     {
-        if (Active) return "Not while the errands run.";
         if (ErrandGame.Me is not { } me || !ErrandGame.Settled) return "Not now (between zones?).";
         if (here.Kind == PlaceKind.Interior) return "Go outside first: stand where the home teleport lands you (outside your home).";
         waySpots.Clear();
@@ -50,7 +55,7 @@ public sealed partial class ErrandRunner
         wayInsideBy = null;
         RecordingWay = true;
         WayNote = "Recording: walk to your front door and go in.";
-        log.Info("Recording the way to your door: walk to it and go in (going in saves it).");
+        if (!errands) log.Info("Recording the way to your door: walk to it and go in (going in saves it).");
         return null;
     }
 
