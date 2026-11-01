@@ -32,17 +32,17 @@ public sealed partial class MainWindow
 
     private void DrawStart()
     {
-        // Header: the pill for where you are above the title, Settings on the right.
+        // Header (0.9.3): the title at the top, the pill for where you are under it, Settings on the right.
         // 20 on every screen (0.9.3): the round buttons at the top sit at one height from screen to screen.
         Frame.BeginHeader(20);
         var at = Kit.At;
         var w = Kit.Width;
-        var (where, tone) = WherePill();
-        Kit.StatusPill(at, where, tone, maxWidth: w - S(56));
-        var titleY = at.Y + S(28) + S(8);
-        var titleH = Title(new Vector2(at.X, titleY), "Housing", "Studio", w - S(56));
+        var titleH = Title(at, "Housing", "Studio", w - S(56));
         SettingsButton(new Vector2(at.X + w - S(40), at.Y));
-        Kit.Reserve(at, w, titleY + titleH - at.Y);
+        var (where, tone) = WherePill();
+        var pillY = at.Y + MathF.Max(titleH, S(40)) + S(8);
+        Kit.StatusPill(new Vector2(at.X, pillY), where, tone, maxWidth: w);
+        Kit.Reserve(at, w, pillY + S(28) - at.Y);
         Frame.EndHeader();
 
         Frame.BeginBody("##start", null, 20, 22);
