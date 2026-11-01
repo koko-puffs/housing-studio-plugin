@@ -15,9 +15,11 @@ namespace HousingStudio.UI;
 /// "Get everything for me", as the 0.6 flow mock-up draws it (docs/mockups/flow.html):
 /// "Get, before setting out" (the plugins as check chips, the route trip by trip, what isn't got this
 /// way, the Limits, and one brass button naming the gil, which is the confirmation), then Running (the
-/// journey Bell → Vendors → Market → Home → Place, where it is in words, what it's doing, Got and
-/// Spent, the log, Pause and Stop; the usual placing figure and phases while it places), then a summary
-/// like Done. Reached from Ready's brass button ("Get 12, then place") and Shopping's foot.
+/// journey in the trip's own order, Shops → Bell → Board → Home → Place as 0.8.1's trips go, where it
+/// is in words, what it's doing, Got and Spent, the log from the run's start, Pause and Stop; the usual
+/// placing figure and phases while it places), then a summary like Done (0.9.0: Got and Spent as while
+/// running, Not got first, Got folded). Reached from Ready's brass button ("Get 12, then place") and
+/// Shopping's foot.
 /// </summary>
 public sealed partial class MainWindow
 {
@@ -187,13 +189,20 @@ public sealed partial class MainWindow
     {
         public ErrandPlan? Plan;
         public Plan? From;
+        public ShoppingPlan? Shop;
+        public bool Rehearse;
+        public int Spare = -1;
         public string Eyebrow = string.Empty;
-        public string EyebrowUpper = string.Empty;
         public string For = string.Empty;
         public string TitlePlain = string.Empty;
         public string? TitleItalic;
         public string Button = string.Empty;
-        public string Have = string.Empty;
+
+        /// <summary>The line under the brass button: the expected gil and why "up to" is more (0.9.0).</summary>
+        public string Hint = string.Empty;
+
+        /// <summary>"Already here" as four figures (0.9.0), or null with no design worked out.</summary>
+        public (int Value, string Label)[]? Have;
         public string? Currencies;
         public List<RouteTrip> Route = new();
         public string[] RouteIds = Array.Empty<string>();
@@ -202,24 +211,36 @@ public sealed partial class MainWindow
 
     private readonly GetScreenWords getScreen = new();
 
-    private GetScreenWords GetScreen(ErrandPlan plan, string title)
+    /// <param name="shortTitle">The design's short name, for the eyebrow ("Solution9Loft · errands").</param>
+    private GetScreenWords GetScreen(ErrandPlan plan, ShoppingPlan shop, string shortTitle, bool rehearse)
     {
         var g = getScreen;
         var p = session.Plan;
-        if (ReferenceEquals(g.Plan, plan) && ReferenceEquals(g.From, p) && g.For == title) return g;
+        var spare = config.ErrandsSpareSlots;
+        if (ReferenceEquals(g.Plan, plan) && ReferenceEquals(g.From, p) && ReferenceEquals(g.Shop, shop) && g.For == shortTitle && g.Rehearse == rehearse
+            && g.Spare == spare)
+            return g;
         g.Plan = plan;
         g.From = p;
-        g.For = title;
-        g.Eyebrow = $"{title} · get";
-        g.EyebrowUpper = g.Eyebrow.ToUpperInvariant();
+        g.Shop = shop;
+        g.For = shortTitle;
+        g.Rehearse = rehearse;
+        g.Spare = spare;
+        g.Eyebrow = rehearse ? $"{shortTitle} · rehearsal" : $"{shortTitle} · errands";
         (g.TitlePlain, g.TitleItalic) = ErrandWords.Title(plan);
         g.Button = ErrandWords.SetOut(plan.TotalGil, plan.CurrencyCosts);
+        g.Hint = rehearse ? "You can stop at any time. Nothing is bought or taken."
+            : ErrandWords.SetOutHint(ErrandWords.Expected(shop, plan), plan.TotalGil, plan.Needs(StopKind.Market));
         g.Currencies = ErrandWords.CurrencyLine(plan.CurrencyCosts, Plugin.Shop.Balance);
-        g.Route = ErrandWords.Route(plan, data.AnyItemName, ErrandRunner.BellNearby(), ErrandGame.HomeWorld(), ErrandWords.City(config.ErrandsHub));
+        var route = ErrandWords.Route(plan, data.AnyItemName, ErrandRunner.BellNearby(), ErrandGame.HomeWorld(), ErrandWords.City(config.ErrandsHub));
+        // "fills 28 bag slots, 6 spare" (0.9.0: "28 of 28 bag slots" read as full bags).
+        for (var i = 0; i < route.Count && i < plan.Trips.Count; i++)
+            route[i] = route[i] with { Rest = ErrandWords.TripSlots(plan.Trips[i], plan.FreeSlots, spare) };
+        g.Route = route;
         g.RouteIds = g.Route.Select((_, i) => $"##errand-trip{i}").ToArray();
         g.Left = ErrandWords.LeftRows(plan.Left, data.AnyItemName);
-        g.Have = p == null ? string.Empty
-            : ErrandWords.Have(p.Entries.Count(e => e.State is PieceState.InPlace or PieceState.Move), p.Entries.Count(e => e.State == PieceState.FromStoreroom),
+        g.Have = p == null ? null
+            : ErrandWords.HaveFigures(p.Entries.Count(e => e.State is PieceState.InPlace or PieceState.Move), p.Entries.Count(e => e.State == PieceState.FromStoreroom),
                 p.Entries.Count(e => e.State == PieceState.FromInventory), plan.Stops(StopKind.Retainer).Sum(s => s.Count));
         return g;
     }
@@ -309,24 +330,17 @@ public sealed partial class MainWindow
     private void DrawErrandsEstimate()
     {
         var (plan, here) = ErrandEstimate();
-        var g = GetScreen(plan, session.Title);
         var rehearse = errandsRehearse;
+        var g = GetScreen(plan, errandEstimate.Shop ?? ShoppingPlan.Empty, session.ShortTitle, rehearse);
         var blocked = rehearse ? ErrandsRehearsalBlocked(plan) : ErrandsBlocked(plan);
 
-        // Header: "<design> · GET", the title, Back on the right.
+        // Header (0.9.0, one header): Back at the top left, "<short name> · ERRANDS", the title.
         Frame.BeginHeader(20);
-        var at = Kit.At;
-        var w = Kit.Width;
-        var leftW = w - S(40) - S(12);
-        var eyebrowH = Txt.Natural(Face.Mono, 12);
-        Kit.Eyebrow(at, g.Eyebrow, null, leftW);
-        var titleH = FitTitle(new Vector2(at.X, at.Y + eyebrowH + S(8)), g.TitlePlain, g.TitleItalic, leftW);
-        if (Kit.IconButton("##errands-back", new Vector2(at.X + w - S(40), at.Y), Icon.ArrowLeft, "Back"))
+        if (ScreenHeader("Back", g.Eyebrow, g.TitlePlain, g.TitleItalic))
         {
             errandsOpen = false;
             errandsRehearse = false;
         }
-        Kit.Reserve(at, w, MathF.Max(S(40), eyebrowH + S(8) + titleH));
         Frame.EndHeader();
 
         Frame.BeginBody("##errands", "errands-foot", 18, 22);
@@ -362,10 +376,13 @@ public sealed partial class MainWindow
                 break;
             }
 
-        if (g.Have.Length > 0)
+        // Already here: four small figures (0.9.0; the one dim line was cut off).
+        if (g.Have != null)
         {
-            Kit.Gap(12);
-            DimLine("##errand-have", Icon.Backpack, g.Have);
+            Kit.Gap(14);
+            SectionLabel("ALREADY HERE", null);
+            Kit.Gap(6);
+            Kit.StatCells(g.Have, 20);
         }
         if (g.Currencies != null)
         {
@@ -421,24 +438,11 @@ public sealed partial class MainWindow
         Frame.EndBody();
 
         // The brass button names the most it spends: it is the confirmation. It starts the very plan shown.
+        // One footer (0.9.0): the brass button bottom left, the other way on to its right, the line under them.
         Frame.BeginFooter("errands-foot", 16, 20);
         var row = Kit.At;
         var fw = Kit.Width;
         var button = rehearse ? RehearsalWords.ErrandsButton : g.Button;
-        // Can't set out: placing what you have is the other way on (as Ready's button did before).
-        if (blocked != null && !rehearse && placeInstead is { } place)
-        {
-            const string instead = "Place what I have";
-            var iw = Kit.ButtonWidth(instead, BtnSize.Lg, null, Btn.Glass);
-            if (Kit.Button("##errands-place-instead", row, instead, Btn.Glass, BtnSize.Lg, null, iw, false, "Places what's in your storeroom and bags now, without getting the rest"))
-            {
-                errandsOpen = false;
-                place();
-            }
-            Kit.Reserve(row, iw, S(46));
-            Kit.Gap(10);
-            row = Kit.At;
-        }
         var bw = MathF.Min(fw, Kit.ButtonWidth(button, BtnSize.Lg, Icon.Play, Btn.Primary));
         if (Kit.Button("##errands-start", row, button, Btn.Primary, BtnSize.Lg, Icon.Play, bw, blocked != null,
                 blocked ?? (rehearse ? "Sets out now on the trips shown: nothing is bought or taken, teleports are real." : (clear is { Count: > 0 } ? "Asks about the clear out first, then sets out: no question after that." : "Sets out now: no question after this.") + " It spends no more than this in all, and stops at anything it didn't expect.")))
@@ -452,24 +456,27 @@ public sealed partial class MainWindow
                     "Set out", "Not now", () => SetOut(plan, ChosenClearOut(), SwapKeepAs, rehearse));
             else SetOut(plan, clear, keep, rehearse);
         }
-        const string hint1 = "You can stop at any time.";
-        var hint2 = rehearse ? "Nothing is bought or taken." : "Nothing is bought above the price shown.";
-        var hints = hint1 + " " + hint2;
-        var hw = MathF.Max(Txt.Measure(hint1, Face.Sans, 12).X, Txt.Measure(hint2, Face.Sans, 12).X);
-        if (blocked == null && bw + S(16) + hw <= fw)
+        var rowH = S(46);
+        // Can't set out: placing what you have is the other way on (as Ready's button did before), to the
+        // brass button's right (under it when there's no room).
+        if (blocked != null && !rehearse && placeInstead is { } place)
         {
-            var dl = Kit.Dl;
-            var top = row.Y + (S(46) - S(36)) / 2;
-            Txt.Line(dl, new Vector2(row.X + fw - Txt.Measure(hint1, Face.Sans, 12).X, top), hint1, Face.Sans, 12, Palette.Dim, 18);
-            Txt.Line(dl, new Vector2(row.X + fw - Txt.Measure(hint2, Face.Sans, 12).X, top + S(18)), hint2, Face.Sans, 12, Palette.Dim, 18);
-            Kit.Reserve(row, fw, S(46));
+            const string instead = "Place what I have";
+            var iw = Kit.ButtonWidth(instead, BtnSize.Lg, null, Btn.Glass);
+            var beside = bw + S(10) + iw <= fw;
+            var ip = beside ? new Vector2(row.X + bw + S(10), row.Y) : new Vector2(row.X, row.Y + S(46) + S(10));
+            if (Kit.Button("##errands-place-instead", ip, instead, Btn.Glass, BtnSize.Lg, null, MathF.Min(fw, iw), false,
+                    "Places what's in your storeroom and bags now, without getting the rest"))
+            {
+                errandsOpen = false;
+                place();
+            }
+            if (!beside) rowH = S(46) * 2 + S(10);
         }
-        else
-        {
-            Kit.Reserve(row, fw, S(46));
-            Kit.Gap(10);
-            Txt.Para(new[] { Run.Note(blocked ?? hints, blocked != null ? Palette.Text : Palette.Dim) });
-        }
+        Kit.Reserve(row, fw, rowH);
+        // The line under them: why it can't set out, or the gil expected and why "up to" is more.
+        Kit.Gap(10);
+        Txt.Para(new[] { Run.Note(blocked ?? g.Hint, blocked != null ? Palette.Text : Palette.Dim) });
         Frame.EndFooter();
     }
 
@@ -672,8 +679,11 @@ public sealed partial class MainWindow
         public string Eyebrow = string.Empty;
         public string Plain = string.Empty;
         public string Italic = string.Empty;
+
+        /// <summary>The journey's steps in the trip's own order (0.9.0), with "Board · 3"; <see cref="StopsShort"/> with "Board" when that doesn't fit.</summary>
         public (Icon Icon, string Label)[] Stops = Array.Empty<(Icon, string)>();
-        public List<ErrandLeg> Legs = new();
+        public (Icon Icon, string Label)[] StopsShort = Array.Empty<(Icon, string)>();
+        public List<JourneyStep> Steps = new();
         public int At;
         public string Doing = string.Empty;
         public string? Note;
@@ -689,27 +699,35 @@ public sealed partial class MainWindow
         var seg = e.SegmentIndex;
         var step = e.StepLabel;
         var tripNow = e.CurrentTrip;
-        if (r.Segment == seg && r.Trip == e.Trip && ReferenceEquals(r.Step, step) && ReferenceEquals(r.ForTrip, tripNow) && r.Title == session.Title) return r;
+        var shortTitle = session.ShortTitle;
+        if (r.Segment == seg && r.Trip == e.Trip && ReferenceEquals(r.Step, step) && ReferenceEquals(r.ForTrip, tripNow) && r.Title == shortTitle) return r;
         if (!ReferenceEquals(r.ForTrip, tripNow) || r.Stops.Length == 0)
         {
-            r.Legs = ErrandWords.Journey(tripNow);
-            r.Stops = r.Legs.Select(l => (LegIcon(l), ErrandWords.JourneyLabel(l))).ToArray();
+            // The trip's own order (0.9.0: the fixed Bell, Vendors, Market showed the bell done on the way to the shops).
+            r.Steps = ErrandWords.JourneySteps(tripNow);
+            r.Stops = r.Steps.Select(s => (LegIcon(s.Leg), s.Label)).ToArray();
+            r.StopsShort = r.Steps.Select(s => (LegIcon(s.Leg), s.Short)).ToArray();
         }
         r.Segment = seg;
         r.Trip = e.Trip;
         r.Step = step;
         r.ForTrip = tripNow;
-        r.Title = session.Title;
-        r.Eyebrow = $"Getting {session.Title} · trip {Math.Max(1, e.Trip)} of {Math.Max(e.Trip, e.TripsAtStart)}";
+        r.Title = shortTitle;
+        r.Eyebrow = $"{shortTitle} · trip {Math.Max(1, e.Trip)} of {Math.Max(e.Trip, e.TripsAtStart)}";
         var leg = seg < 0 ? ErrandLeg.Bell : e.Leg;
         (r.Plain, r.Italic) = seg < 0 ? ("Setting", "out") : ErrandWords.Where(leg, e.Going, e.Who, e.Replanning);
-        r.At = seg < 0 ? 0 : ErrandWords.JourneyAt(r.Legs, leg);
+        // Done and now by where the runner is: the trip's stop it's at, else home or placing.
+        var stopAt = seg < 0 ? -1 : e.StopIndex;
+        r.At = seg < 0 ? 0 : ErrandWords.JourneyIndex(r.Steps, leg, stopAt);
+        var stopNow = tripNow != null && stopAt >= 0 && stopAt < tripNow.Stops.Count ? tripNow.Stops[stopAt] : null;
         var item = e.CurrentItem;
         var name = item != null ? data.AnyItemName(item.ItemId) : string.Empty;
-        r.Doing = ErrandWords.Doing(leg, item, name, e.Who) ?? e.Doing ?? "Starting";
+        // The card (0.9.0): what's in hand, else where it is (no map coordinates); under it, what it's doing now.
+        var place = seg < 0 ? null : ErrandWords.Place(stopNow, leg, e.HouseBell, ErrandGame.HomeWorld(), ErrandWords.City(config.ErrandsHub));
+        r.Doing = ErrandWords.Doing(leg, item, name, e.Who) ?? place ?? ErrandWords.NoMapPosition(e.Doing ?? "Starting");
         var answering = step != null && step.StartsWith("Answer yes", StringComparison.Ordinal);
         r.Note = ErrandWords.DoingNote(leg, item, answering)
-                 ?? (step != null && !step.StartsWith("You:", StringComparison.Ordinal) ? step : null);
+                 ?? (step != null && !step.StartsWith("You:", StringComparison.Ordinal) ? ErrandWords.Now(step) : null);
         r.ItemIcon = item != null ? data.ItemIcon(item.ItemId) : 0;
         r.Icon = LegIcon(leg);
         return r;
@@ -727,11 +745,13 @@ public sealed partial class MainWindow
         var waiting = e.AwaitingContinue || e.WaitingForYou || (placing && (runner.AwaitingContinue || runner.WaitingForYou));
         var paused = e.State == RunState.Paused || (placing && runner.State == RunState.Paused);
         var (pill, tone) = waiting ? ("Waiting for you", Tone.Waiting) : paused ? ("Paused", Tone.Neutral) : ("Running", Tone.Live);
+        // A rehearsal is marked once, by the small brass Rehearsal pill (0.9.0: the eyebrow said it too, and
+        // was cut off); the footer's line says nothing is bought or taken. While it waits or is paused, that's said instead.
         var rehearsing = e.Rehearsal && tone == Tone.Live;
-        if (rehearsing) pill = RehearsalWords.Pill(placing ? Words.About(runner.TimeLeft) : null);
+        if (rehearsing) pill = "Rehearsal";
         var r = ErrandRunWords(e);
 
-        // Header: the eyebrow and the live pill on one row, where it is in words under them.
+        // Header: "<short name> · trip 1 of 2" and the live pill on one row, where it is in words under them.
         Frame.BeginHeader(20);
         var at = Kit.At;
         var w = Kit.Width;
@@ -739,7 +759,7 @@ public sealed partial class MainWindow
         if (rehearsing) RehearsalPill(new Vector2(at.X + w - pw, at.Y), pill);
         else Kit.StatusPill(new Vector2(at.X + w - pw, at.Y), pill, tone, tone == Tone.Live);
         var eyebrowH = Txt.Natural(Face.Mono, 12);
-        Kit.Eyebrow(new Vector2(at.X, at.Y + (S(28) - eyebrowH) / 2), e.Rehearsal ? $"{RehearsalWords.Eyebrow} · trip {Math.Max(1, e.Trip)} of {Math.Max(e.Trip, e.TripsAtStart)}" : r.Eyebrow, null, w - pw - S(12));
+        Kit.Eyebrow(new Vector2(at.X, at.Y + (S(28) - eyebrowH) / 2), r.Eyebrow, null, w - pw - S(12));
         var titleH = FitTitle(new Vector2(at.X, at.Y + S(28) + S(6)), r.Plain, r.Italic, w);
         Kit.Reserve(at, w, S(28) + S(6) + titleH);
         Frame.EndHeader();
@@ -751,7 +771,8 @@ public sealed partial class MainWindow
             DrawErrandCallout(placing);
             Kit.Gap(14);
         }
-        Kit.Journey(r.Stops, placing ? r.Stops.Length - 1 : r.At);
+        var stops = JourneyFits(r.Stops) ? r.Stops : r.StopsShort;
+        Kit.Journey(stops, placing ? stops.Length - 1 : r.At);
         Kit.Gap(14);
         if (placing)
         {
@@ -772,7 +793,8 @@ public sealed partial class MainWindow
         Kit.Gap(14);
         DrawErrandCards(e);
         Kit.Gap(14);
-        DrawLog("errands-run-bottom");
+        // The log from this run's start (0.9.0): the lines before it behind "Earlier lines".
+        DrawLog("errands-run-bottom", since: e.StartedAt);
         Frame.BeginBottom("errands-run-bottom");
         Txt.Note(e.Rehearsal ? "Leave the keyboard and mouse alone while it walks. Nothing is bought or taken; teleports are real." : "Leave the keyboard and mouse alone while it walks and buys.", center: true);
         Frame.EndBottom();
@@ -813,7 +835,17 @@ public sealed partial class MainWindow
         Frame.EndFooter();
     }
 
-    /// <summary>The thing in hand (mock-up's card): its icon (or the stop's), "Buying Riviera Table ×2", and the price or the step.</summary>
+    /// <summary>Whether every step's words fit its share of the journey's width ("Board · 7"; else the short ones, "Board").</summary>
+    private static bool JourneyFits((Icon Icon, string Label)[] stops)
+    {
+        if (stops.Length == 0) return true;
+        var cell = Kit.Width / stops.Length - S(4);
+        foreach (var s in stops)
+            if (Txt.Measure(s.Label, Face.Sans, 12).X > cell) return false;
+        return true;
+    }
+
+    /// <summary>The thing in hand (mock-up's card): its icon (or the stop's), "Buying Riviera Table ×2" or where it is, and the price or what it's doing now.</summary>
     private void DrawErrandCurrent(RunWords r)
     {
         Kit.BeginPanel("##errand-current", 14, 16, 14);
@@ -850,7 +882,8 @@ public sealed partial class MainWindow
         if (c.Got != got || c.Of != of || c.Spent != e.Spent || c.Agreed != e.AgreedGil)
         {
             var (gv, go) = ErrandWords.Of(got, of, false);
-            var (sv, so) = ErrandWords.Of(e.Spent, e.AgreedGil, true);
+            // "of up to 61,400": set against the cap agreed to (0.9.0).
+            var (sv, so) = ErrandWords.SpentOf(e.Spent, e.AgreedGil);
             errandCards = c = (got, of, e.Spent, e.AgreedGil, gv, go, sv, so);
         }
         var at = Kit.At;
@@ -947,10 +980,38 @@ public sealed partial class MainWindow
     }
 
     // ---------------------------------------------------------------------------------------------
-    // The summary, as Done: the mark, one line of what happened, Got, Not got.
+    // The summary, as Done: the mark, one line of what happened, Got and Spent, Not got, Got (folded).
 
-    private (int Got, int Trip, ErrandPlan? Plan, long Spent, string? Why, string Sentence, List<(uint ItemId, string Words)> Rows, List<LeftRow> Left) errandSummary =
-        (-1, 0, null, 0, null, string.Empty, new(), new());
+    /// <summary>The summary's words, made again only when what it says changes.</summary>
+    private sealed class SummaryWords
+    {
+        public int Got = -1;
+        public int Trip;
+        public ErrandPlan? Plan;
+        public long Spent;
+        public string? Why;
+        public string Sentence = string.Empty;
+        public List<(uint ItemId, string Words)> Rows = new();
+
+        /// <summary>A row per thing not got, with why (0.9.0).</summary>
+        public List<NotGotRow> NotGot = new();
+        public int NotGotCount;
+        public string NotGotLabel = string.Empty;
+
+        /// <summary>"Got · 100 things", the fold's title (0.9.0: a hundred rows pushed Not got off the screen).</summary>
+        public string GotTitle = string.Empty;
+
+        /// <summary>The got list as text, for Copy.</summary>
+        public string GotText = string.Empty;
+
+        /// <summary>"The 2 not got stay on the shopping list.", or null.</summary>
+        public string? Hint;
+    }
+
+    private readonly SummaryWords summaryWords = new();
+
+    /// <summary>The summary's Got is folded until opened (0.9.0); closed again when the summary is put away.</summary>
+    private bool errandGotOpen;
 
     private readonly Run[] summaryLine = new Run[1];
 
@@ -959,14 +1020,25 @@ public sealed partial class MainWindow
         var e = Errands;
         var stopped = e.State == RunState.Stopped;
         var byYou = e.StopReason?.StartsWith("Stopped by you", StringComparison.Ordinal) == true;
-        var s = errandSummary;
+        var s = summaryWords;
         // The sentence says why it stopped, unless you stopped it.
         var why = stopped && !byYou ? e.StopReason : null;
         if (s.Got != e.GotCount || s.Trip != e.Trip || !ReferenceEquals(s.Plan, e.Plan) || s.Spent != e.Spent || s.Why != why)
         {
             var said = ErrandWords.Summary(e.GotCount, e.Trip, e.Spent);
-            errandSummary = s = (e.GotCount, e.Trip, e.Plan, e.Spent, why, why != null ? $"{said}. {why}" : said + ".",
-                ErrandWords.GotList(e.Got, data.AnyItemName), ErrandWords.LeftRows(e.Plan.Left, data.AnyItemName));
+            s.Got = e.GotCount;
+            s.Trip = e.Trip;
+            s.Plan = e.Plan;
+            s.Spent = e.Spent;
+            s.Why = why;
+            s.Sentence = why != null ? $"{said}. {why}" : said + ".";
+            s.Rows = ErrandWords.GotList(e.Got, data.AnyItemName);
+            s.NotGot = ErrandWords.NotGot(e.Plan.Left, data.AnyItemName);
+            s.NotGotCount = e.Plan.Left.Sum(l => l.Count);
+            s.NotGotLabel = s.NotGotCount.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            s.GotTitle = s.Rows.Count > 0 ? $"Got · {Words.Count(e.GotCount, "thing")}" : "Got · nothing";
+            s.GotText = string.Join("\n", s.Rows.Select(g => g.Words));
+            s.Hint = ErrandWords.NotGotHint(s.NotGotCount);
         }
 
         Frame.BeginHeader(28);
@@ -985,44 +1057,145 @@ public sealed partial class MainWindow
         Frame.EndHeader();
 
         Frame.BeginBody("##errands-done-body", "errands-done-foot", 22, 22);
-        SectionLabel("GOT", s.Rows.Count > 0 ? Words.Count(e.GotCount, "thing") : null);
-        Kit.Gap(8);
-        Kit.BeginPanel("##errand-got", 0, 0, 0);
-        if (s.Rows.Count == 0)
-        {
-            var p = Kit.At;
-            Txt.Line(Kit.Dl, new Vector2(p.X + S(14), p.Y + S(12)), "Nothing.", Face.Sans, 13, Palette.Dim, 19.5f);
-            Kit.Reserve(p, Kit.Width, S(12) * 2 + S(19.5f));
-        }
-        for (var i = 0; i < s.Rows.Count; i++) GotRow(i, s.Rows[i].ItemId, s.Rows[i].Words);
-        Kit.EndPanel();
+        // Got and Spent as the same two cards as while running, now final (0.9.0).
+        DrawErrandCards(e);
 
-        if (s.Left.Count > 0)
+        // Not got first, open, each with why (0.9.0: a hundred got rows pushed these off the screen).
+        if (s.NotGot.Count > 0)
         {
             Kit.Gap(14);
-            SectionLabel("NOT GOT", null);
+            SectionLabel("NOT GOT", s.NotGotLabel);
             Kit.Gap(8);
             Kit.BeginPanel("##errand-left-end", 0, 0, 0);
-            for (var i = 0; i < s.Left.Count; i++) LeftRowDraw(i, s.Left[i]);
+            for (var i = 0; i < s.NotGot.Count; i++) NotGotRowDraw(i, s.NotGot[i]);
             Kit.EndPanel();
         }
+
+        // Got, folded behind its count, with Copy.
         Kit.Gap(14);
-        DrawLog();
+        Kit.BeginPanel("##errand-got", 0, 0, 0);
+        const string copy = "Copy";
+        Action<Vector2, float>? copyButton = null;
+        if (s.Rows.Count > 0)
+            copyButton = (p, _) =>
+            {
+                if (Kit.Button("##errand-got-copy", p, copy, Btn.Quiet, BtnSize.Tiny, null, 0, false, "Copies the list of what was got"))
+                {
+                    ImGui.SetClipboardText(s.GotText);
+                    Notify("List copied");
+                }
+            };
+        Disclosure("##errand-got-row", ref errandGotOpen, s.GotTitle, null, 14, copyButton != null ? Kit.ButtonWidth(copy, BtnSize.Tiny, null, Btn.Quiet) : 0,
+            S(30), copyButton, true);
+        if (errandGotOpen)
+        {
+            if (s.Rows.Count == 0)
+            {
+                var p = Kit.At;
+                Kit.Divider(Kit.Panel.Start.X, Kit.Panel.Start.X + Kit.Panel.Width, p.Y - 0.5f);
+                Txt.Line(Kit.Dl, new Vector2(p.X + S(14), p.Y + S(12)), "Nothing.", Face.Sans, 13, Palette.Dim, 19.5f);
+                Kit.Reserve(p, Kit.Width, S(12) * 2 + S(19.5f));
+            }
+            // From 1: the faint line under the fold's row too.
+            for (var i = 0; i < s.Rows.Count; i++) GotRow(i + 1, s.Rows[i].ItemId, s.Rows[i].Words);
+        }
+        Kit.EndPanel();
+        Kit.Gap(14);
+        DrawLog(since: e.StartedAt);
         Frame.EndBody();
 
+        // One footer (0.9.0): the brass button bottom left, Shopping list beside it, the line under them.
         Frame.BeginFooter("errands-done-foot", 18, 22);
         var row = Kit.At;
+        var fw = Kit.Width;
         // Done goes on to the placing run's own result (what needs you, Put them back, the fixtures)
         // when the errands placed something: it used to skip it, and with it the only undo.
         var placingResult = vm.ResultWaiting && runner.State is RunState.Finished or RunState.Stopped;
         var finish = placingResult ? "See what was placed" : "Done";
-        if (Kit.Button("##errands-finish", row, finish, Btn.Primary, BtnSize.Lg, Icon.Check, Kit.Width))
+        var finishIcon = placingResult ? Icon.Play : Icon.Check;
+        var bw = MathF.Min(fw, Kit.ButtonWidth(finish, BtnSize.Lg, finishIcon, Btn.Primary));
+        if (Kit.Button("##errands-finish", row, finish, Btn.Primary, BtnSize.Lg, finishIcon, bw))
         {
             e.Dismiss();
             errandsOpen = false;
+            errandGotOpen = false;
         }
-        Kit.Reserve(row, Kit.Width, S(46));
+        var rowH = S(46);
+        // The shopping list, where what wasn't got is (as Done's rows open it).
+        if (session.Plan != null)
+        {
+            const string list = "Shopping list";
+            var lw = MathF.Min(fw, Kit.ButtonWidth(list, BtnSize.Lg, Icon.List, Btn.Glass));
+            var beside = bw + S(10) + lw <= fw;
+            var lp = beside ? new Vector2(row.X + bw + S(10), row.Y) : new Vector2(row.X, row.Y + S(46) + S(10));
+            if (Kit.Button("##errands-list", lp, list, Btn.Glass, BtnSize.Lg, Icon.List, lw, false, "What's still missing, and where it comes from"))
+            {
+                e.Dismiss();
+                errandsOpen = false;
+                errandGotOpen = false;
+                OpenShopping(Sub.None);
+            }
+            if (!beside) rowH = S(46) * 2 + S(10);
+        }
+        Kit.Reserve(row, fw, rowH);
+        if (s.Hint != null)
+        {
+            Kit.Gap(10);
+            Txt.Note(s.Hint, Palette.Dim);
+        }
         Frame.EndFooter();
+    }
+
+    /// <summary>
+    /// A thing not got (0.9.0, the summary's Not got): its icon, its name ×count, why in a dim line (all of
+    /// it as a tooltip when cut), and where it would have come from on the right ("board"), or Teamcraft
+    /// for a crafted one. Offscreen rows only take their room.
+    /// </summary>
+    private void NotGotRowDraw(int index, NotGotRow row)
+    {
+        var at = Kit.At;
+        var w = Kit.Width;
+        var h = S(10) * 2 + MathF.Max(S(34), S(20) + S(18));
+        var clipTop = ImGui.GetWindowPos().Y;
+        if (at.Y > clipTop + ImGui.GetWindowHeight() || at.Y + h < clipTop)
+        {
+            Kit.Reserve(at, w, h);
+            return;
+        }
+        var dl = Kit.Dl;
+        if (index > 0) Kit.Divider(Kit.Panel.Start.X, Kit.Panel.Start.X + Kit.Panel.Width, at.Y - 0.5f);
+        var mid = at.Y + h / 2;
+        Kit.Thumb(new Vector2(at.X + S(14), mid - S(17)), S(34), S(8), data.ItemIcon(row.ItemId), S(16));
+        var x = at.X + S(14 + 34 + 12);
+        var right = at.X + w - S(14);
+        const string teamcraft = "Teamcraft";
+        var craft = row.Reason == LeftReason.Craft;
+        var endW = craft ? Kit.ButtonWidth(teamcraft, BtnSize.Tiny) : row.Kind.Length > 0 ? Txt.Measure(row.Kind, Face.Mono, 12).X : 0;
+        var textW = right - (endW > 0 ? endW + S(12) : 0) - x;
+        var top = mid - (S(20) + S(18)) / 2;
+        Txt.Line(dl, new Vector2(x, top), Txt.Fit(row.Name, Face.SansMedium, 14, textW), Face.SansMedium, 14, Palette.Ivory, 20);
+        var shown = Txt.Fit(row.Why, Face.Sans, 12, textW);
+        Txt.Line(dl, new Vector2(x, top + S(20)), shown, Face.Sans, 12, Palette.Dim, 18);
+        if (!ReferenceEquals(shown, row.Why) && ImGui.IsWindowHovered() && ImGui.IsMouseHoveringRect(new Vector2(x, at.Y), new Vector2(x + textW, at.Y + h)))
+            Kit.Tooltip(row.Why);
+        if (craft)
+        {
+            if (Kit.Button($"##errand-notgot-teamcraft{index}", new Vector2(right - endW, mid - S(15)), teamcraft, Btn.Glass, BtnSize.Tiny, null, 0, false,
+                    "Opens ffxivteamcraft.com in your browser with this in a new list"))
+            {
+                var url = Teamcraft.ImportUrl(new[] { (row.ItemId, row.Count) });
+                if (url != null)
+                {
+                    Dalamud.Utility.Util.OpenLink(url);
+                    Notify("Opening Teamcraft");
+                }
+            }
+        }
+        else if (endW > 0)
+        {
+            Txt.Line(dl, new Vector2(right - endW, top), row.Kind, Face.Mono, 12, Palette.Dim, 20);
+        }
+        Kit.Reserve(at, w, h);
     }
 
     /// <summary>A thing got: its icon and name ×count (offscreen rows only take their room).</summary>

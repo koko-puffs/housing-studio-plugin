@@ -59,11 +59,18 @@ public sealed partial class ErrandRunner : IDisposable
     private readonly HashSet<(uint Item, string World)> emptyBoards = new();
     private readonly StepQueue queue = new(() => DateTime.UtcNow);
 
-    /// <summary>A part of a trip: its words, its steps, and where it is (for the window's journey and title).</summary>
-    private readonly record struct Segment(string Title, Func<List<Step>> Steps, Func<List<Step>> Cleanup, ErrandLeg Leg, bool Going, string? Who, ErrandItem? Item);
+    /// <summary>
+    /// A part of a trip: its words, its steps, and where it is (for the window's journey and title);
+    /// <see cref="Stop"/> is the trip's stop it belongs to (its index in the trip, -1 for home and placing).
+    /// </summary>
+    private readonly record struct Segment(string Title, Func<List<Step>> Steps, Func<List<Step>> Cleanup, ErrandLeg Leg, bool Going, string? Who, ErrandItem? Item,
+        int Stop = -1);
 
     private readonly List<Segment> segments = new();
     private int segment = -1;
+
+    /// <summary>The trip's stop whose segments are being added (-1: none).</summary>
+    private int addingStop = -1;
     private ErrandTrip? pendingTrip;
     private bool finishPending;
     private ErrandTrip? trip;
@@ -165,6 +172,12 @@ public sealed partial class ErrandRunner : IDisposable
 
     /// <summary>The thing being taken or bought now, or null.</summary>
     public ErrandItem? CurrentItem => Active && segment >= 0 && segment < segments.Count ? segments[segment].Item : null;
+
+    /// <summary>The trip's stop it's at or on its way to (its index in <see cref="CurrentTrip"/>'s stops), or -1 (home, placing, between trips).</summary>
+    public int StopIndex => Active && segment >= 0 && segment < segments.Count ? segments[segment].Stop : -1;
+
+    /// <summary>The run's home has a summoning bell (its retainers are visited there).</summary>
+    public bool HouseBell => houseBell;
 
     /// <summary>The segment in hand (it changes as the run moves on; the window caches by it).</summary>
     public int SegmentIndex => Active ? segment : -1;
@@ -631,8 +644,11 @@ public sealed partial class ErrandRunner : IDisposable
                      StopKind.Exchange => $"{s.Vendor?.Where() ?? "a vendor"} (for {string.Join(" + ", s.Items.Where(i => i.Exchange != null).GroupBy(i => i.Exchange!.CurrencyName).Select(g => $"{g.Sum(i => i.CurrencyCost):N0} {g.Key}"))})",
                      _ => $"the market board on {s.World}",
                  })) + ".");
-        foreach (var stop in next.Stops)
+        // Each stop's segments know which stop they are (the window's journey follows the trip's own order).
+        for (var stopAt = 0; stopAt < next.Stops.Count; stopAt++)
         {
+            var stop = next.Stops[stopAt];
+            addingStop = stopAt;
             switch (stop.Kind)
             {
                 case StopKind.Retainer:
@@ -649,6 +665,7 @@ public sealed partial class ErrandRunner : IDisposable
                     break;
             }
         }
+        addingStop = -1;
         Add("Going home", GoHomeSteps, NoCleanup, ErrandLeg.Home, true);
         Add("Going in", EnterSteps, NoCleanup, ErrandLeg.Home);
         if (Rehearsal)
@@ -666,7 +683,7 @@ public sealed partial class ErrandRunner : IDisposable
     }
 
     private void Add(string title, Func<List<Step>> steps, Func<List<Step>> cleanup, ErrandLeg leg, bool going = false, string? who = null, ErrandItem? item = null) =>
-        segments.Add(new Segment(title, steps, cleanup, leg, going, who, item));
+        segments.Add(new Segment(title, steps, cleanup, leg, going, who, item, addingStop));
 
     private static List<Step> NoCleanup() => new();
 

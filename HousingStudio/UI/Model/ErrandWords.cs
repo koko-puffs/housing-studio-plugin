@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text.RegularExpressions;
 using HousingStudio.Core;
 
 namespace HousingStudio.UI.Model;
@@ -14,6 +15,18 @@ public sealed record RouteTrip(string Label, string Rest, IReadOnlyList<RouteLeg
 
 /// <summary>A reason things aren't got this way: "1 to craft", the things, why in a sentence, and the items (for Teamcraft).</summary>
 public sealed record LeftRow(LeftReason Reason, string Title, string What, string Why, IReadOnlyList<(uint ItemId, int Count)> Items);
+
+/// <summary>
+/// One step of the running screen's journey (0.9.0): the trip's stops of one kind in a row (its shops,
+/// its bell, its boards), in the trip's own order, then Home and Place. <see cref="FirstStop"/> to
+/// <see cref="LastStop"/> are the trip's stops it covers (-1 for Home and Place).
+/// </summary>
+/// <param name="Label">Its words: "Shops", "Bell", "Board · 7", "Home", "Place".</param>
+/// <param name="Short">Its words when they don't fit: "Board" for "Board · 7".</param>
+public sealed record JourneyStep(ErrandLeg Leg, string Label, string Short, int FirstStop, int LastStop);
+
+/// <summary>A thing the errands didn't get, with why (the summary's Not got, 0.9.0): "Wine Glass ×2", the reason, "board".</summary>
+public sealed record NotGotRow(uint ItemId, int Count, LeftReason Reason, string Name, string Why, string Kind);
 
 /// <summary>The errands' screens in words: a stop, a reason, the gil. Pure, so it's tested.</summary>
 public static class ErrandWords
@@ -145,7 +158,7 @@ public static class ErrandWords
                 var title = g.Key switch
                 {
                     LeftReason.Craft => $"{n} to craft",
-                    LeftReason.NoVendorReachable => $"{n} from vendors it doesn't go to",
+                    LeftReason.NoVendorReachable => $"{n} from shops it doesn't go to",
                     LeftReason.OverCeiling => $"{n} past the market ceiling",
                     LeftReason.NotListedHere => $"{n} not listed where it buys",
                     LeftReason.NoRoom => $"{n} with no room in your bags",
@@ -180,10 +193,158 @@ public static class ErrandWords
         return onRetainers > 0 ? $"{words} · {onRetainers} on your retainers, fetched first" : words;
     }
 
+    /// <summary>
+    /// "Already here" as four small figures (0.9.0; the one line was cut off): in your storeroom, in your
+    /// bags, on a retainer ("on retainers" for more), placed.
+    /// </summary>
+    public static (int Value, string Label)[] HaveFigures(int placed, int storeroom, int bags, int onRetainers) => new[]
+    {
+        (storeroom, "in storeroom"),
+        (bags, "in your bags"),
+        (onRetainers, onRetainers == 1 ? "on a retainer" : "on retainers"),
+        (placed, "placed"),
+    };
+
+    /// <summary>
+    /// A trip's label's right side (0.9.0): "fills 28 bag slots, 6 spare", the spare being the slots still
+    /// empty after it (those kept free in Limits too); a later one is worked out again after the one before.
+    /// </summary>
+    /// <param name="freeSlots">The slots a trip may fill (<see cref="ErrandPlan.FreeSlots"/>: your empty ones less those kept free).</param>
+    /// <param name="keptFree">The slots kept free (Limits' "2 slots spare").</param>
+    public static string TripSlots(ErrandTrip trip, int freeSlots, int keptFree) =>
+        trip.Number <= 1
+            ? $"fills {Words.Count(trip.Slots, "bag slot")}, {Math.Max(0, freeSlots - trip.Slots) + Math.Max(0, keptFree)} spare"
+            : $"worked out again after trip {trip.Number - 1}";
+
+    /// <summary>
+    /// The gil the errands are expected to spend, as the shopping list says it (Ready's "about"): the
+    /// vendors' fixed prices, and the shopping list's market estimate for what the trips buy on the board.
+    /// </summary>
+    public static long Expected(ShoppingPlan shop, ErrandPlan plan)
+    {
+        var market = new HashSet<Need>(plan.Stops(StopKind.Market).SelectMany(s => s.Items).Select(i => i.Need));
+        return plan.VendorGil + shop.Lines.Where(l => l.Source == SourceKind.Market && market.Contains(l.Need)).Sum(l => l.Gil);
+    }
+
+    /// <summary>
+    /// The line under Set out (0.9.0): the expected gil and why the button's "up to" is more ("Expected
+    /// about 2,098,460. “Up to” leaves room for board prices that moved, at most a quarter more per item.
+    /// You can stop at any time."); without the board, or with nothing expected below the cap, as before.
+    /// </summary>
+    /// <param name="market">The trips buy on the market board.</param>
+    public static string SetOutHint(long expected, long cap, bool market)
+    {
+        const string stop = "You can stop at any time.";
+        if (!market || expected <= 0 || expected >= cap) return $"Nothing is bought above the price shown. {stop}";
+        return $"Expected about {Number(expected)}. “Up to” leaves room for board prices that moved, at most a quarter more per item. {stop}";
+    }
+
     // ---------------------------------------------------------------------------------------------
     // Running: the journey, where it is in words, what it's doing.
 
-    /// <summary>The journey bar's stops for a trip: Bell, Vendors, Market (those it has), then Home and Place always.</summary>
+    /// <summary>
+    /// The journey bar's steps for a trip, in the trip's own order (0.9.0; since 0.8.1 a trip goes to the
+    /// shops first and the bell second, unless the bell is in your home, but the bar kept Bell, Vendors,
+    /// Market, so Bell showed done on the way to the shops): each run of stops of one kind is one step
+    /// ("Shops", "Bell", "Board", "Board · 3" for three worlds' boards), then Home and Place always.
+    /// </summary>
+    public static List<JourneyStep> JourneySteps(ErrandTrip? trip)
+    {
+        var steps = new List<JourneyStep>();
+        if (trip != null)
+        {
+            for (var i = 0; i < trip.Stops.Count; i++)
+            {
+                var leg = trip.Stops[i].Kind switch
+                {
+                    StopKind.Retainer => ErrandLeg.Bell,
+                    StopKind.Market => ErrandLeg.Market,
+                    _ => ErrandLeg.Vendor,
+                };
+                if (steps.Count > 0 && steps[^1].Leg == leg)
+                {
+                    steps[^1] = steps[^1] with { LastStop = i };
+                    continue;
+                }
+                var label = leg switch { ErrandLeg.Bell => "Bell", ErrandLeg.Market => "Board", _ => "Shops" };
+                steps.Add(new JourneyStep(leg, label, label, i, i));
+            }
+            for (var s = 0; s < steps.Count; s++)
+            {
+                if (steps[s].Leg != ErrandLeg.Market) continue;
+                var boards = steps[s].LastStop - steps[s].FirstStop + 1;
+                if (boards > 1) steps[s] = steps[s] with { Label = $"Board · {boards}" };
+            }
+        }
+        steps.Add(new JourneyStep(ErrandLeg.Home, "Home", "Home", -1, -1));
+        steps.Add(new JourneyStep(ErrandLeg.Place, "Place", "Place", -1, -1));
+        return steps;
+    }
+
+    /// <summary>
+    /// The step in hand, by where the runner is: the step holding the trip's stop it's at
+    /// (<paramref name="stop"/>, its index in the trip), else the first of its leg (Home, Place), else the first.
+    /// </summary>
+    public static int JourneyIndex(IReadOnlyList<JourneyStep> steps, ErrandLeg leg, int stop)
+    {
+        if (stop >= 0)
+            for (var i = 0; i < steps.Count; i++)
+                if (steps[i].FirstStop >= 0 && stop >= steps[i].FirstStop && stop <= steps[i].LastStop) return i;
+        for (var i = 0; i < steps.Count; i++)
+            if (steps[i].Leg == leg) return i;
+        return 0;
+    }
+
+    /// <summary>
+    /// Where it is, for the current card's first line (0.9.0, no map coordinates): "Housing Merchant · The
+    /// Lavender Beds", "Bell in your house", "Ul'dah · Summoning bell", "Ul'dah · Market board · Phoenix",
+    /// "Home"; null when it's placing or between stops.
+    /// </summary>
+    /// <param name="stop">The trip's stop it's at (null for Home and Place).</param>
+    public static string? Place(ErrandStop? stop, ErrandLeg leg, bool houseBell, string homeWorld, string city)
+    {
+        if (stop != null)
+        {
+            switch (stop.Kind)
+            {
+                case StopKind.Retainer:
+                    return houseBell ? "Bell in your house" : $"{city} · Summoning bell";
+                case StopKind.Vendor or StopKind.Exchange:
+                    var v = stop.Vendor;
+                    return v == null ? null : v.PlaceName.Length > 0 ? $"{v.NpcName} · {v.PlaceName}" : v.NpcName;
+                case StopKind.Market:
+                    var world = !string.IsNullOrEmpty(stop.World) && stop.World != homeWorld ? $" · {stop.World}" : string.Empty;
+                    return $"{city} · Market board{world}";
+            }
+        }
+        return leg == ErrandLeg.Home ? "Home" : null;
+    }
+
+    /// <summary>A map position as the game's words give it, in either culture's decimals: " (10.9, 11.4)", " (11,8, 8,4)".</summary>
+    private static readonly Regex MapPosition = new(@"\s*\(\d+[.,]\d,\s*\d+[.,]\d\)", RegexOptions.CultureInvariant);
+
+    /// <summary>The words without a map position ("Housing Merchant, Mist (11,8, 8,4)" → "Housing Merchant, Mist").</summary>
+    public static string NoMapPosition(string text) => text.IndexOf('(') < 0 ? text : MapPosition.Replace(text, string.Empty);
+
+    /// <summary>The steps' first words that start a sentence (a name doesn't: "Momo's bags" keeps its capital).</summary>
+    private static readonly HashSet<string> StepWords = new(StringComparer.Ordinal)
+    {
+        "Aethernet", "Answer", "Arrive", "Ask", "Away", "Buy", "Check", "Choose", "Click", "Close", "Enter", "Exchange", "Find", "Get", "Go",
+        "In", "Its", "Leave", "Mount", "Note", "On", "Open", "Placing", "Press", "Remember", "Say", "Search", "Start", "Take", "Talk",
+        "Teleport", "The", "To", "Use", "Wait", "Walk", "Work", "Your",
+    };
+
+    /// <summary>The current card's second line: the step in hand, in words ("Now: teleport to Mist (Lifestream, aetheryte 72)").</summary>
+    public static string Now(string step)
+    {
+        var s = NoMapPosition(step).Trim();
+        if (s.Length == 0) return s;
+        var space = s.IndexOf(' ');
+        if (StepWords.Contains(space < 0 ? s : s[..space])) s = char.ToLowerInvariant(s[0]) + s[1..];
+        return "Now: " + s;
+    }
+
+    /// <summary>The journey bar's stops for a trip in the old fixed order: Bell, Vendors, Market (those it has), then Home and Place. The window uses <see cref="JourneySteps"/>.</summary>
     public static List<ErrandLeg> Journey(ErrandTrip? trip)
     {
         var stops = new List<ErrandLeg>();
@@ -266,6 +427,9 @@ public static class ErrandWords
         return leg == ErrandLeg.Vendor ? $"{price} · the game asked, and the price matched" : $"{price} · the game asked: its price is checked before yes";
     }
 
+    /// <summary>"4,000" "of up to 61,400": the Spent card's figure and its words (0.9.0: set against the cap agreed to).</summary>
+    public static (string Value, string Of) SpentOf(long spent, long agreed) => (Number(spent), $"of up to {Number(agreed)}");
+
     /// <summary>"6" "of 12": a Got or Spent card's figure and its words.</summary>
     public static (string Value, string Of) Of(long value, long of, bool gil) =>
         gil ? (Number(value), $"of {Number(of)}") : (value.ToString(CultureInfo.InvariantCulture), $"of {of.ToString(CultureInfo.InvariantCulture)}");
@@ -284,6 +448,41 @@ public static class ErrandWords
             .OrderBy(g => g.Name, StringComparer.OrdinalIgnoreCase)
             .Select(g => (g.Key, g.Value == 1 ? g.Name : $"{g.Name} ×{g.Value}"))
             .ToList();
+
+    /// <summary>
+    /// What wasn't got, a row per thing with why (the summary's Not got, 0.9.0): "Wine Glass ×2", "Past your
+    /// market ceiling.", and where it would have come from ("board", "shop", "craft", "bags"); by reason, then name.
+    /// </summary>
+    public static List<NotGotRow> NotGot(IReadOnlyList<ErrandLeft> left, Func<uint, string> name) =>
+        left.Where(l => l.Count > 0)
+            .GroupBy(l => (l.Need.ItemId, l.Reason))
+            .Select(g =>
+            {
+                var n = g.Sum(l => l.Count);
+                var thing = name(g.Key.ItemId);
+                var currency = g.Select(l => l.Exchange?.CurrencyName).FirstOrDefault(c => !string.IsNullOrEmpty(c));
+                var why = g.Key.Reason == LeftReason.Currency && currency != null
+                    ? $"Sold for {currency}, which the errands may not spend or you haven't enough of: allow it in Settings → Getting → Currencies."
+                    : Words.Capital(Reason(g.Key.Reason)) + ".";
+                return new NotGotRow(g.Key.ItemId, n, g.Key.Reason, n == 1 ? thing : $"{thing} ×{n}", why, NotGotKind(g.Key.Reason));
+            })
+            .OrderBy(r => r.Reason)
+            .ThenBy(r => r.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    /// <summary>Where a thing not got would have come from, in a word: "board", "shop", "craft", "bags".</summary>
+    public static string NotGotKind(LeftReason reason) => reason switch
+    {
+        LeftReason.Craft => "craft",
+        LeftReason.OverCeiling or LeftReason.NotListedHere => "board",
+        LeftReason.NoVendorReachable or LeftReason.Currency => "shop",
+        LeftReason.NoRoom => "bags",
+        _ => string.Empty,
+    };
+
+    /// <summary>The line under the summary's buttons: "The 2 not got stay on the shopping list."; null when everything was got.</summary>
+    public static string? NotGotHint(int notGot) =>
+        notGot <= 0 ? null : notGot == 1 ? "The 1 not got stays on the shopping list." : $"The {notGot} not got stay on the shopping list.";
 
     /// <summary>The most gil a character can hold, so the most a ceiling can be.</summary>
     public const long GilCap = 999_999_999;
