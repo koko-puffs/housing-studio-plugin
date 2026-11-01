@@ -293,12 +293,16 @@ me" off, the run waits for you to put each down and then sets it.
    window closes without Dye. So the dye before is read with the window closed, and the dye after only
    counts with the window closed and the reading steady for 0.3 s (`DyeHeld`; 0.7 s before 0.9.1).
 
-   **Speed (0.9.1, made safer in 0.9.2).** Nothing goes into the dye window until its list has come in
-   and held for three frames and 80 ms (0.9.1 switched the shade 70 ms after the window opened, and the
-   game crashed once filling the window's text). The interact, pick, Dye, Yes and close wait half the
-   pace's click gap after the last action (`Step.Gap`, `DyeGap`: never under 100 ms, RemakePlace/plugin's
-   wait between its window's clicks); the shade switch takes the whole click gap, as it fills the
-   window again. "Close the dye window if it's open" clicks (as an action) only when it's open, and "If
+   **Timing (0.9.8: 0.9.0's again).** 0.9.1 cut the dye window's waits (clicks a third of the click gap
+   apart, the preview checked from the first frame), and from then on the game crashed on the Yes to
+   the confirmation, filling the dye window's text from a bad pointer: Dye went in before the window had
+   finished its preview. Every dye-window click takes the whole click gap again, the preview is checked
+   after 0.25 s (at Steady; scaled by the pace), the shade's list read 0.3 s after a switch, and Yes sent
+   once the question is up. Nothing goes into the dye window until its list has come in and held for
+   three frames and 80 ms. Before Dye, the window is read as RemakePlace/plugin reads it
+   (`DyeWindowRefuses`: the Dye button's nine-grid 1/64/68/3 tinted 0xFFFFFFB2 means greyed out; the
+   image node 1/22/34/(place)/2/4 shown means the dye's red cross), and the piece is skipped instead of
+   pressing Dye; a node that can't be read changes nothing. "Close the dye window if it's open" clicks (as an action) only when it's open, and "If
    it didn't, open it from the list" isn't an action, so no click gap is spent on them; the dye shown is
    checked from the first frame after the pick (no 250 ms delay first).
 

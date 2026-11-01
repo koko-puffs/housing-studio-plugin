@@ -2459,8 +2459,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         nint instance = 0;
         // The dye window's list, held steady for a few frames before anything goes into it (this piece's own).
         var windowFilled = new Settle(3, TimeSpan.FromMilliseconds(80));
-        // The dye confirmation, open and the same for a few frames before Yes (this piece's own).
-        var confirmSettled = new Settle(4, TimeSpan.FromMilliseconds(200));
+        // When the dye confirmation was first seen up (this piece's own).
         DateTime? confirmSeen = null;
         return new List<Step>
         {
@@ -2517,7 +2516,6 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 // Furnishing Color, then picked list rows one by one (about 20 s a piece).
                 Label = "Open the dye window on it (the game's \"interact\" with the picked piece)",
                 IsAction = true,
-                Gap = DyeGap,
                 Delay = Speed.Wait(100),
                 Timeout = TimeSpan.FromSeconds(1),
                 OnTimeout = StepStatus.Done, // not picked: the list's way, below
@@ -2583,8 +2581,8 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                         var values = UiCallValues.Of(("shade", shade));
                         log.Info($"  {dye} isn't in the list shown: {UiTable.DyeShade.Describe(values)}");
                         GameUi.Fire(UiTable.DyeShade, values);
-                        // 0.9.1: as soon as the shade's list shows it (0.9.0 waited 300 ms whatever; the list
-                        // comes in the next frame or two), else its place in the dye sheet after half a second.
+                        // The shade's list, 0.3 s after the switch as 0.9.0 read it (0.9.1's 0.1 s is undone with
+                        // the other dye timings, 0.9.8); not in it after 0.4 s more: none of it to use.
                         queue.InsertNext(new[]
                         {
                             new Step
@@ -2594,12 +2592,12 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                                 Run = () =>
                                 {
                                     if (Menus.DyeRow(GameUi.TextValues(UiTable.DyeWindow), dye, UiTable.DyeListFirstValue) is { } found
-                                        && queue.Elapsed >= Speed.Wait(150))
+                                        && queue.Elapsed >= Speed.Wait(300))
                                     {
                                         row[0] = found;
                                         return StepOutcome.Done;
                                     }
-                                    if (queue.Elapsed < Speed.Wait(600)) return StepOutcome.Waiting;
+                                    if (queue.Elapsed < Speed.Wait(900)) return StepOutcome.Waiting;
                                     row[0] = Fallback();
                                     return StepOutcome.Done;
                                 },
@@ -2624,7 +2622,6 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             {
                 Label = $"Choose {dye}",
                 IsAction = true,
-                Gap = DyeGap,
                 Run = () =>
                 {
                     // Never a row past the list's end (a row guessed from the dye sheet when the name
@@ -2663,42 +2660,30 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     }
                 },
             },
-            new Step { Label = $"Press Dye: {UiTable.DyeApply.Describe()}", IsAction = true, Gap = DyeGap, Run = () => FireOrSkip(UiTable.DyeApply) },
+            Step.Act($"Press Dye: {UiTable.DyeApply.Describe()}", () => FireOrSkip(UiTable.DyeApply)),
             new Step
             {
                 Label = $"Confirm: {UiTable.DyeConfirmYes.Describe()}",
-                // The whole click gap after Dye, and the question open and steady for a moment before Yes
-                // (0.9.3): Yes in the frame the question came up crashed the game twice in 0.9.1 and 0.9.2
-                // (the dye window's text filled from a bad pointer, in AgentColorant's answer to Yes).
+                // The whole click gap after Dye, then Yes once the question is up, as 0.9.0 did (0.9.3's
+                // wait for it to settle changed nothing: the crash came from Dye pressed too soon, 0.9.8).
                 IsAction = true,
                 Run = () =>
                 {
-                    var values = GameUi.IsOpen(UiTable.DyeConfirm) ? GameUi.TextValues(UiTable.DyeConfirm) : null;
-                    var state = values != null ? $"open:{values.Count}" : null;
                     var now = DateTime.UtcNow;
-                    if (values != null) confirmSeen ??= now;
-                    if (!confirmSettled.Update(state, now))
+                    if (GameUi.IsOpen(UiTable.DyeConfirm))
                     {
-                        if (state != null) return StepOutcome.Waiting;
-                    }
-                    // 0.9.7: ReMakePlace (loaded with this plugin) answers this question itself when its
-                    // "auto-confirm dye" is on, the moment it opens; a second Yes from here then went to a
-                    // question already answered, and the game crashed (three times). With it loaded, the
-                    // question is given 0.8 s to close by itself first; only if it's still up is Yes sent.
-                    else if (remakePlaceLoaded && now - confirmSeen!.Value < TimeSpan.FromMilliseconds(800))
-                    {
-                        return StepOutcome.Waiting;
-                    }
-                    else
-                    {
-                        log.Info($"  The game asks: {string.Join(" ", values!.Values.Where(v => v.Length > 0).Take(4))}");
+                        confirmSeen ??= now;
+                        // ReMakePlace, when loaded, answers this question itself the moment it opens (its
+                        // "auto-confirm dye"); a second Yes from here crashed the game (0.9.7): 0.8 s for it first.
+                        if (remakePlaceLoaded && now - confirmSeen.Value < TimeSpan.FromMilliseconds(800)) return StepOutcome.Waiting;
+                        log.Info($"  The game asks: {string.Join(" ", GameUi.TextValues(UiTable.DyeConfirm).Values.Where(v => v.Length > 0).Take(4))}");
                         GameUi.Fire(UiTable.DyeConfirmYes);
                         asked[0] = true;
                         return StepOutcome.Done;
                     }
                     // Up, and gone without a click from here: answered (ReMakePlace's auto-confirm). The
                     // dye is checked after the window closes, as for a Yes from here.
-                    if (confirmSeen != null && values == null)
+                    if (confirmSeen != null)
                     {
                         log.Info("  The question closed without a click from here (answered by ReMakePlace's auto-confirm, it seems).");
                         asked[0] = true;
@@ -2728,7 +2713,6 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             {
                 Label = "Close the dye window",
                 IsAction = true,
-                Gap = DyeGap,
                 Run = () =>
                 {
                     if (GameUi.IsOpen(UiTable.DyeWindow)) GameUi.Fire(UiTable.DyeClose);
@@ -2785,15 +2769,6 @@ public sealed unsafe partial class PlacementRunner : IDisposable
     private static readonly TimeSpan DyeSettle = TimeSpan.FromMilliseconds(300);
 
     /// <summary>
-    /// The least time between two of the dye window's clicks: half the pace's click gap, never under
-    /// 100 ms (RemakePlace/plugin's wait between its window's clicks). 0.9.1 had a third, down to 40 ms,
-    /// and the game crashed once; the shade switch takes the whole click gap.
-    /// </summary>
-    private TimeSpan DyeGap => TimeSpan.FromMilliseconds(Math.Max(100, Speed.ClickGapMs / 2));
-
-
-
-    /// <summary>
     /// Before Dye is pressed: the window must be on this piece and, once its preview shows, show the dye
     /// chosen. While the window is open the game shows its preview in the piece's dye (0.8.2's rehearsal):
     /// another dye there means the pick chose another dye (or row), and Dye isn't pressed. When no
@@ -2808,7 +2783,10 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         return new Step
         {
             Label = $"The dye window shows {dye} on {name}",
-            // (No delay first, 0.9.1: it's done as soon as the preview shows the dye.)
+            // 0.9.8: 0.9.0's delay first again. 0.9.1 checked from the first frame, and Dye then went in as
+            // little as 0.1 s after the pick, before the window had finished its preview; every crash since
+            // came on the Yes after that. (0.9.0 never crashed.)
+            Delay = Speed.Wait(250),
             Timeout = TimeSpan.FromSeconds(3),
             OnTimeout = StepStatus.SkipJob,
             TimeoutProblem = ProblemKind.DyeFailed,

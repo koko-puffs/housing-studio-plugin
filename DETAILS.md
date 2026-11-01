@@ -8,7 +8,15 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.9.7. Placing works in the game; the newer features haven't all been tried in it yet.**
+> **Status: 0.9.8. Placing works in the game; the newer features haven't all been tried in it yet.**
+> 0.9.8: **the dye crash, without ReMakePlace too.** Every crash since 0.9.1 came on the Yes to the dye
+> confirmation, and 0.9.0 never crashed: 0.9.1 had cut the waits in the dye window (Dye could go in
+> 0.1 s after the pick, before the window had finished its preview). The dye window's timings are 0.9.0's
+> again: the whole click gap before each of its clicks, 0.25 s before the preview is checked, 0.3 s
+> after a shade switch, and Yes once the question is up. Kept from since: dyes you don't have skipped
+> before the window opens, no row guessed, the window's list in before the first click, and (as
+> RemakePlace/plugin does) a greyed-out Dye button or the dye's red cross read before Dye, to skip at
+> once rather than press it.
 > 0.9.7: **the dye crash, with ReMakePlace loaded.** ReMakePlace answers the dye confirmation itself
 > the moment it opens (its "auto-confirm dye") and picks its last dye in a dye window as it opens (its
 > "select previous dye"), even when it isn't dyeing; this plugin's Yes then went to a question already
