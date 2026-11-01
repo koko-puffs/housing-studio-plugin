@@ -641,6 +641,23 @@ public static class MarketRule
     }
 
     /// <summary>
+    /// A looser <see cref="NamesItem"/>, for a question whose price is already the one planned (1.0.0): each
+    /// of the name's words of 3 letters or more has its first 3 in the question (so "leaves" says "leaf",
+    /// "knives" "knife"); a name with no such word (two kanji) says nothing against it.
+    /// </summary>
+    public static bool MentionsItem(string? question, string itemName)
+    {
+        if (string.IsNullOrEmpty(question)) return false;
+        var asked = string.Join(' ', Words(question));
+        var words = Words(itemName).Where(w => w.Length >= 3).ToList();
+        return words.Count == 0 || words.All(w => asked.Contains(w[..3], StringComparison.Ordinal));
+
+        static IEnumerable<string> Words(string text) =>
+            new string(text.ToLowerInvariant().Select(c => char.IsLetter(c) ? c : ' ').ToArray())
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries);
+    }
+
+    /// <summary>
     /// The gil a shop's question asks for <paramref name="quantity"/> of something ("Purchase 1 stage panel
     /// for 4,000 gil?" → 4,000), or null when it doesn't read so (no quantity in it, or nothing else).
     /// The largest number besides the quantity: the price, in any order the language puts them.

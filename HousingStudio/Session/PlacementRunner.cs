@@ -329,7 +329,9 @@ public sealed unsafe partial class PlacementRunner : IDisposable
 
         // The last run as it ended, put back if this one has nothing to do (1.0.0: its results, Needs you and
         // Swap back were gone after a Start that didn't go).
-        var before = (Entries: entries, Jobs: jobs.ToList(), Version: jobsVersion, KeptAs, Swap: swapDesign, PutAwayTo: putAwayTo);
+        var before = (Entries: entries, Jobs: jobs.ToList(), Version: jobsVersion, KeptAs, Swap: swapDesign, PutAwayTo: putAwayTo,
+            ToPutAway: toPutAway, WasPuttingBack, PutAwayPlanned: putAwayPlanned, ClearOutCount: clearOutCount,
+            ClearOutLater: clearOutLater.ToList(), PendingClearOut: pendingClearOut, DyesExpected: dyesExpected);
         putAwayTo = to;
         entries = shown.ToList();
         jobs.Clear();
@@ -371,6 +373,14 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             KeptAs = before.KeptAs;
             swapDesign = before.Swap;
             putAwayTo = before.PutAwayTo;
+            // (And what Done's buttons go by: a putting-back run isn't carried on, a clear out is again.)
+            toPutAway = before.ToPutAway;
+            WasPuttingBack = before.WasPuttingBack;
+            putAwayPlanned = before.PutAwayPlanned;
+            clearOutCount = before.ClearOutCount;
+            clearOutLater = before.ClearOutLater;
+            pendingClearOut = before.PendingClearOut;
+            dyesExpected = before.DyesExpected;
             return;
         }
 
@@ -2429,7 +2439,15 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 // Only a piece the editor is placing right now: never one already in the room.
                 var held = HousingEditor.Mode == EditorMode.Place ? HousingEditor.ActiveItem : 0;
                 // 1.0.0: only this piece (Esc, or the game dropped it): the run goes on with the next.
-                if (held == 0) return StepOutcome.Skip($"The editor wasn't holding the piece to set it down (mode {HousingEditor.Mode}): it wasn't placed.", ProblemKind.DidNotLand);
+                if (held == 0)
+                {
+                    // Set down after all (a click of yours)? Then it has its slot, and trying again moves it,
+                    // never places another copy.
+                    var found = FindNewPiece(job);
+                    return StepOutcome.Skip(found
+                        ? "The piece was set down before the run could set it at its spot."
+                        : $"The editor wasn't holding the piece to set it down (mode {HousingEditor.Mode}): it wasn't placed.", ProblemKind.DidNotLand);
+                }
                 if (!anywhere.Active)
                 {
                     if (anywhere.Enable())
@@ -2623,7 +2641,9 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     if (remakePlaceLoaded && queue.Elapsed < TimeSpan.FromMilliseconds(350)) return StepOutcome.Waiting;
                     var values = GameUi.TextValues(UiTable.DyeWindow);
                     var count = Menus.DyeListCount(values, UiTable.DyeListFirstValue);
-                    return windowFilled.Update(count > 1 ? $"{values.Count}:{count}" : null, DateTime.UtcNow) ? StepOutcome.Done : StepOutcome.Waiting;
+                    // (1.0.0: one row is a list too, now that only the palette's rows are counted: "No Color" alone,
+                    // when none of the first palette's dyes are yours.)
+                    return windowFilled.Update(count > 0 ? $"{values.Count}:{count}" : null, DateTime.UtcNow) ? StepOutcome.Done : StepOutcome.Waiting;
                 },
             },
             new Step
@@ -2769,8 +2789,9 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 MinGap = DyeWindowGap,
                 Run = () =>
                 {
-                    // A new question comes: the last one's Yes no longer stands for it.
+                    // A new question comes: the last one's Yes no longer stands for it, nor when it was seen up.
                     yesOnOpenQuestion = false;
+                    confirmUpSince = null;
                     return FireOrSkip(UiTable.DyeApply);
                 },
             },
@@ -3054,7 +3075,24 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 return StepOutcome.Done;
             },
         },
-        Step.Wait("The dye window is closed", () => !GameUi.IsOpen(UiTable.DyeConfirm) && !GameUi.IsOpen(UiTable.DyeWindow) || CloseDyeWindowAgain(), WindowWait, onTimeout),
+        new Step
+        {
+            Label = "The dye window is closed",
+            Timeout = WindowWait,
+            OnTimeout = onTimeout,
+            TimeoutMessage = "The dye window didn't close.",
+            Run = () =>
+            {
+                var confirm = GameUi.IsOpen(UiTable.DyeConfirm);
+                if (!confirm && !GameUi.IsOpen(UiTable.DyeWindow)) return StepOutcome.Done;
+                // A question Yes went to, still up: never No to it, so it's yours (1.0.0: each later piece
+                // waited 6 s and was skipped, and three of those stopped the run with the wrong reason).
+                if (confirm && yesOnOpenQuestion && queue.Elapsed > TimeSpan.FromSeconds(4))
+                    return StepOutcome.Halt("The dye question is still up after Yes: answer it in the game, then Carry on.");
+                CloseDyeWindowAgain();
+                return StepOutcome.Waiting;
+            },
+        },
     };
 
     private DateTime dyeCloseAgainAt;

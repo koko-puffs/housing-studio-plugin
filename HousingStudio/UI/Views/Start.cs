@@ -352,7 +352,7 @@ public sealed partial class MainWindow
                 ImGui.OpenPopup("##recent-menu");
             }
             if (hovered || rowHovered) dl.AddRectFilled(at, at + new Vector2(w, h), Palette.U32(Palette.LineFaint), S(Palette.RadiusMd));
-            if (hovered && !row.Exists) Kit.Tooltip("This file isn't there any more. Right-click to take it off the list.");
+            if (rowHovered && !row.Exists) Kit.Tooltip("This file isn't there any more. Right-click to take it off the list.");
             if (rowHovered && row.Exists) StarButton($"##recent-pin-draw{i}", starAt, starSize, false, null, drawOnly: true);
 
             var x = at.X + S(14);

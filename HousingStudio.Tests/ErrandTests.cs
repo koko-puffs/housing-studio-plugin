@@ -612,6 +612,18 @@ public class MarketQuestionTests
     }
 
     [Fact]
+    public void AQuestionAtThePricePlannedMentionsTheItem()
+    {
+        // 1.0.0: irregular plurals, and names with no word of 3 letters, still pass; another item doesn't.
+        Assert.True(MarketRule.MentionsItem("Purchase 3 oak leaves for 300 gil?", "Oak Leaf"));
+        Assert.True(MarketRule.MentionsItem("Purchase 2 paring knives for 400 gil?", "Paring Knife"));
+        Assert.True(MarketRule.MentionsItem("Purchase 1 riviera table for 2,000 gil?", "Riviera Table"));
+        Assert.True(MarketRule.MentionsItem("椅子を1個、2,000ギルで購入しますか？", "椅子"));
+        Assert.False(MarketRule.MentionsItem("Purchase 1 riviera chair for 2,000 gil?", "Riviera Table"));
+        Assert.False(MarketRule.MentionsItem(null, "Riviera Table"));
+    }
+
+    [Fact]
     public void NumbersAreReadWithTheirGrouping()
     {
         Assert.Equal(new long[] { 1234567, 3 }, MarketRule.Numbers("1,234,567 gil for 3."));

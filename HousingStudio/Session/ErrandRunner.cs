@@ -1297,6 +1297,7 @@ public sealed partial class ErrandRunner : IDisposable
 
     private List<Step> BellSteps()
     {
+        var autoRetainerAsked = false;
         var steps = new List<Step>
         {
             // 1.0.0: AutoRetainer kept out at every bell (a trip a replan added wasn't covered), and one of its
@@ -1306,11 +1307,19 @@ public sealed partial class ErrandRunner : IDisposable
                 Label = "AutoRetainer keeps out of the way",
                 Run = () =>
                 {
-                    shop.AutoRetainer.KeepOut();
+                    if (!autoRetainerAsked)
+                    {
+                        autoRetainerAsked = true;
+                        shop.AutoRetainer.KeepOut();
+                        // Waited for only if it's busy as the bell comes (not a while it's merely on).
+                        if (!shop.AutoRetainer.Busy) return StepOutcome.Done;
+                        log.Info("  AutoRetainer is busy: waiting for it (15 s at most).");
+                    }
                     return shop.AutoRetainer.Busy ? StepOutcome.Waiting : StepOutcome.Done;
                 },
-                Timeout = TimeSpan.FromSeconds(60),
+                Timeout = TimeSpan.FromSeconds(15),
                 OnTimeout = StepStatus.Done,
+                TimeoutMessage = "AutoRetainer was still busy after 15 s; carrying on.",
             },
         };
         var near = ErrandGame.Me is { } me && ErrandGame.Nearest(Bells(), me, houseBell ? 60 : 120, UsableKinds) != null;
@@ -1321,6 +1330,7 @@ public sealed partial class ErrandRunner : IDisposable
 
     private List<Step> OpenRetainerSteps(RetainerStock r)
     {
+        DateTime? bagsLoadedAt = null;
         bool MenuOpen() => ErrandGame.MenuEntries()?.Addon == ErrandTable.SelectString;
         return new List<Step>
         {
@@ -1361,9 +1371,11 @@ public sealed partial class ErrandRunner : IDisposable
                     if (!ErrandGame.RetainerBagsOpen) return StepOutcome.Waiting;
                     var active = ErrandGame.ActiveRetainer();
                     if (active != r.RetainerId) return StepOutcome.Halt("Another retainer's bags opened.");
-                    // 1.0.0: and what's in them sent, and a moment for all of it (read before it came, a
+                    // 1.0.0: and what's in them sent, and 0.3 s from then for all of it (read before it came, a
                     // retainer looked empty and the item was left).
-                    return ErrandGame.RetainerPagesLoaded() && queue.Elapsed >= TimeSpan.FromMilliseconds(300) ? StepOutcome.Done : StepOutcome.Waiting;
+                    if (!ErrandGame.RetainerPagesLoaded()) return StepOutcome.Waiting;
+                    bagsLoadedAt ??= DateTime.UtcNow;
+                    return DateTime.UtcNow - bagsLoadedAt.Value >= TimeSpan.FromMilliseconds(300) ? StepOutcome.Done : StepOutcome.Waiting;
                 },
                 Timeout = WindowWait,
             },
@@ -1724,7 +1736,7 @@ public sealed partial class ErrandRunner : IDisposable
                         // riviera table for 2,000 gil?"; the item's name in it may be a plural or "lump of …").
                         // 1.0.0: the price alone isn't enough (many of a housing merchant's things cost the same, and a
                         // row miscounted by one would buy the next); the question has to name the item too.
-                        if (!MarketRule.QuestionMatches(question, v.Price, n, (long)v.Price * n) || !MarketRule.NamesItem(question, Name(item.ItemId)))
+                        if (!MarketRule.QuestionMatches(question, v.Price, n, (long)v.Price * n) || !MarketRule.MentionsItem(question, Name(item.ItemId)))
                         {
                             // Another price than the game's data has (0.7.6: "Purchase 1 stage panel for 4,000
                             // gil?" with 1,000 planned): yes when the whole run still stays within the gil you
@@ -2132,12 +2144,12 @@ public sealed partial class ErrandRunner : IDisposable
                         return GameUi.Fire(ErrandTable.ListingBuy, UiCallValues.Of(("index", l.Row))) ? StepOutcome.Done : StepOutcome.Halt($"{name}'s listings closed.");
                     }
                     boardWhy.TryAdd(item.ItemId, $"{ErrandGame.CurrentWorld()}: {firstWhy ?? "none listed"}");
-                    if (heldBack)
-                    {
-                        log.Warn($"  No listing of {name} to buy here now ({firstWhy}): {wanted - bought} left for now.");
-                        return Finished();
-                    }
-                    log.Warn($"  No listing of {name} to buy here ({firstWhy ?? "none listed"}): {wanted - bought} left for now; this world isn't planned for it again this run.");
+                    // (Held back by the ceiling, the gil or your bags' room, none of which comes back in a run, or
+                    // none fits on price: either way this world isn't planned for it again, so no trip comes back
+                    // to it for nothing.)
+                    log.Warn(heldBack
+                        ? $"  No listing of {name} to buy here now ({firstWhy}): {wanted - bought} left for now; this world isn't planned for it again this run."
+                        : $"  No listing of {name} to buy here ({firstWhy ?? "none listed"}): {wanted - bought} left for now; this world isn't planned for it again this run.");
                     if (emptyBoards.Add((item.ItemId, ErrandGame.CurrentWorld()))) emptiedThisTrip++;
                     return Finished();
                 },

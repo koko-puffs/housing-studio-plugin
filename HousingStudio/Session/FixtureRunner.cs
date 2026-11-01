@@ -460,10 +460,14 @@ public sealed unsafe partial class FixtureRunner
                         return StepOutcome.Done;
                     }
                     // 1.0.0: a slot from an earlier run (kept for another home) past this window's end, or
-                    // holding another part now, isn't moved to: you put this one in, and its slot is learnt.
+                    // holding a part of another level or type now, isn't moved to: you put this one in, and its
+                    // slot is learnt. (The part being replaced, this level's and type's now, is what it holds
+                    // as a rule: that's the slot.)
                     var size = ContainerSize();
                     if (size is not { } n || slot < 0 || slot >= n
-                        || (ContainerItems() is { } held && held.TryGetValue(slot, out var there) && there != task.Fixture.ItemId))
+                        || (ContainerItems() is { } held && held.TryGetValue(slot, out var there) && there != task.Fixture.ItemId
+                            && !(Current(side, session.Context) ?? new List<CurrentFixture>()).Any(c => c.ItemId == there
+                                && FixtureJobs.Norm(c.Level) == FixtureJobs.Norm(task.Fixture.Level) && FixtureJobs.Norm(c.Type) == FixtureJobs.Norm(task.Fixture.Type))))
                     {
                         log.Info($"  The {where} slot ({slot}) isn't free in this window ({(size is { } m ? $"{m} slots" : "not read")}): you put {name} in.");
                         queue.InsertNext(new[] { YouPut(task) });
