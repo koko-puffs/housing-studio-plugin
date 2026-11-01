@@ -8,7 +8,14 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.9.9. Placing works in the game; the newer features haven't all been tried in it yet.**
+> **Status: 0.9.10. Placing works in the game; the newer features haven't all been tried in it yet.**
+> 0.9.10: **quicker dyeing, and Daring safe for it.** The dye window's own timing is kept as it is
+> (0.9.8's, which ended the crashes), at every pace: its clicks never closer than Quick's 0.2 s, and
+> its waits never shorter than Quick's, so Daring speeds up placing without bringing the crash back.
+> Time is cut around it instead: looking for the dye in the window's list isn't a click (only switching
+> the shade is), so it no longer waits a click gap; and each piece's new dye is watched for 0.1 s after
+> the window closes, not 0.3 s, as the check pass at the end of the run now also reads every dyed piece
+> and dyes again any whose dye didn't hold.
 > 0.9.9: **an empty storeroom.** The game sends nothing for a storeroom with nothing in it, so a run
 > that opened the furnishing editor to read it waited 15 s and stopped, every time. Now the furnishing
 > window open for 5 s with nothing from the storeroom counts as an empty storeroom (until a piece goes

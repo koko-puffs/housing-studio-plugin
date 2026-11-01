@@ -397,6 +397,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         storeDeferrals.Clear();
         storeRefusals = default;
         triedAgainLater.Clear();
+        redyed.Clear();
         checkPasses = 0;
         checkAt = null;
         remakePlaceLoaded = Services.PluginInterface.InstalledPlugins.Any(p => p.IsLoaded && string.Equals(p.InternalName, "ReMakePlacePlugin", StringComparison.OrdinalIgnoreCase));
@@ -2492,11 +2493,17 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     if (GameUi.IsOpen(UiTable.DyeConfirm) || GameUi.IsOpen(UiTable.DyeWindow))
                         queue.InsertNext(new[]
                         {
-                            Step.Act($"Close the dye window: {UiTable.DyeClose.Describe()}", () =>
+                            new Step
                             {
-                                CloseDyeWindows();
-                                return StepOutcome.Done;
-                            }),
+                                Label = $"Close the dye window: {UiTable.DyeClose.Describe()}",
+                                IsAction = true,
+                                MinGap = DyeWindowGap,
+                                Run = () =>
+                                {
+                                    CloseDyeWindows();
+                                    return StepOutcome.Done;
+                                },
+                            },
                         });
                     return StepOutcome.Done;
                 },
@@ -2532,6 +2539,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 // Furnishing Color, then picked list rows one by one (about 20 s a piece).
                 Label = "Open the dye window on it (the game's \"interact\" with the picked piece)",
                 IsAction = true,
+                MinGap = DyeWindowGap,
                 Delay = Speed.Wait(100),
                 Timeout = TimeSpan.FromSeconds(1),
                 OnTimeout = StepStatus.Done, // not picked: the list's way, below
@@ -2586,9 +2594,9 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             },
             new Step
             {
-                // The full click gap: it may switch the shade, which fills the window again.
+                // 0.9.10: not an action itself (it only reads the list; the click gap before it was spent
+                // for nothing on most pieces): switching the shade is, with the whole gap before it.
                 Label = $"Find {dye} in the dye window's list",
-                IsAction = true,
                 Run = () =>
                 {
                     var r = Menus.DyeRow(GameUi.TextValues(UiTable.DyeWindow), dye, UiTable.DyeListFirstValue);
@@ -2596,11 +2604,17 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     {
                         var values = UiCallValues.Of(("shade", shade));
                         log.Info($"  {dye} isn't in the list shown: {UiTable.DyeShade.Describe(values)}");
-                        GameUi.Fire(UiTable.DyeShade, values);
-                        // The shade's list, 0.3 s after the switch as 0.9.0 read it (0.9.1's 0.1 s is undone with
-                        // the other dye timings, 0.9.8); not in it after 0.4 s more: none of it to use.
                         queue.InsertNext(new[]
                         {
+                            new Step
+                            {
+                                Label = $"Switch the shade: {UiTable.DyeShade.Describe(values)}",
+                                IsAction = true,
+                                MinGap = DyeWindowGap,
+                                Run = () => FireOrSkip(UiTable.DyeShade, values),
+                            },
+                            // The shade's list, 0.3 s after the switch as 0.9.0 read it (0.9.1's 0.1 s is undone with
+                            // the other dye timings, 0.9.8); not in it after 0.4 s more: none of it to use.
                             new Step
                             {
                                 Label = $"Find {dye} in the shade's list",
@@ -2608,12 +2622,12 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                                 Run = () =>
                                 {
                                     if (Menus.DyeRow(GameUi.TextValues(UiTable.DyeWindow), dye, UiTable.DyeListFirstValue) is { } found
-                                        && queue.Elapsed >= Speed.Wait(300))
+                                        && queue.Elapsed >= DyeWait(300))
                                     {
                                         row[0] = found;
                                         return StepOutcome.Done;
                                     }
-                                    if (queue.Elapsed < Speed.Wait(900)) return StepOutcome.Waiting;
+                                    if (queue.Elapsed < DyeWait(900)) return StepOutcome.Waiting;
                                     row[0] = Fallback();
                                     return StepOutcome.Done;
                                 },
@@ -2638,6 +2652,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             {
                 Label = $"Choose {dye}",
                 IsAction = true,
+                MinGap = DyeWindowGap,
                 Run = () =>
                 {
                     // Never a row past the list's end (a row guessed from the dye sheet when the name
@@ -2676,13 +2691,14 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     }
                 },
             },
-            Step.Act($"Press Dye: {UiTable.DyeApply.Describe()}", () => FireOrSkip(UiTable.DyeApply)),
+            new Step { Label = $"Press Dye: {UiTable.DyeApply.Describe()}", IsAction = true, MinGap = DyeWindowGap, Run = () => FireOrSkip(UiTable.DyeApply) },
             new Step
             {
                 Label = $"Confirm: {UiTable.DyeConfirmYes.Describe()}",
                 // The whole click gap after Dye, then Yes once the question is up, as 0.9.0 did (0.9.3's
                 // wait for it to settle changed nothing: the crash came from Dye pressed too soon, 0.9.8).
                 IsAction = true,
+                MinGap = DyeWindowGap,
                 Run = () =>
                 {
                     var now = DateTime.UtcNow;
@@ -2730,6 +2746,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             {
                 Label = "Close the dye window",
                 IsAction = true,
+                MinGap = DyeWindowGap,
                 Run = () =>
                 {
                     if (GameUi.IsOpen(UiTable.DyeWindow))
@@ -2741,7 +2758,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 },
             },
             Step.Wait("The dye window is closed", () => !GameUi.IsOpen(UiTable.DyeWindow), WindowWait, StepStatus.Done),
-            DyeHeld(key, job.Target.Stain, $"{name} turns {dye}", TimeSpan.FromSeconds(4), () =>
+            DyeHeld(key, job.Target.Stain, $"{name} turns {dye}", TimeSpan.FromSeconds(4), DyeSettleQuick, () =>
             {
                 job.Note ??= $"Dyed {dye}.";
                 return StepOutcome.Done;
@@ -2756,7 +2773,10 @@ public sealed unsafe partial class PlacementRunner : IDisposable
     /// window closed (the game puts a preview back a moment after the window closes), then runs
     /// <paramref name="done"/>; after <paramref name="wait"/>, <paramref name="late"/>.
     /// </summary>
-    private Step DyeHeld(int key, byte stain, string label, TimeSpan wait, Func<StepOutcome> done, Func<StepOutcome> late)
+    private Step DyeHeld(int key, byte stain, string label, TimeSpan wait, Func<StepOutcome> done, Func<StepOutcome> late) =>
+        DyeHeld(key, stain, label, wait, DyeSettle, done, late);
+
+    private Step DyeHeld(int key, byte stain, string label, TimeSpan wait, TimeSpan settle, Func<StepOutcome> done, Func<StepOutcome> late)
     {
         DateTime? from = null;
         DateTime? since = null;
@@ -2774,7 +2794,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 if (!GameUi.IsOpen(UiTable.DyeWindow) && StainOf(key) == stain)
                 {
                     since ??= now;
-                    if (now - since.Value >= DyeSettle) return done();
+                    if (now - since.Value >= settle) return done();
                 }
                 else since = null;
                 // Right and settling: let it settle (the queue's own timeout still bounds it).
@@ -2788,6 +2808,27 @@ public sealed unsafe partial class PlacementRunner : IDisposable
     /// frame or two of closing; 0.9.0 waited 700 ms after every piece).
     /// </summary>
     private static readonly TimeSpan DyeSettle = TimeSpan.FromMilliseconds(300);
+
+    /// <summary>
+    /// The same after a piece is dyed (0.9.10): a dye that didn't hold is found by the check pass at the
+    /// end of the run and dyed again, so each piece needn't wait the whole 0.3 s.
+    /// </summary>
+    private static readonly TimeSpan DyeSettleQuick = TimeSpan.FromMilliseconds(100);
+
+    /// <summary>
+    /// The least time between two of the dye window's clicks, whatever the pace: Quick's click gap, as
+    /// 0.9.0 and 0.9.8 had it (0.9.10). 0.9.1 went quicker, and the game crashed on the Yes after Dye;
+    /// Daring's 0.12 s would come close to that again.
+    /// </summary>
+    private static readonly TimeSpan DyeWindowGap = TimeSpan.FromMilliseconds(Pacing.Profile(Pace.Quick).ClickGapMs);
+
+    /// <summary>A dye-window wait at this pace, never shorter than at Quick (as <see cref="DyeWindowGap"/>).</summary>
+    private TimeSpan DyeWait(int quickMs)
+    {
+        var floor = Pacing.Profile(Pace.Quick).Wait(quickMs);
+        var here = Speed.Wait(quickMs);
+        return here > floor ? here : floor;
+    }
 
     /// <summary>
     /// Before Dye is pressed: the window must be on this piece and, once its preview shows, show the dye
@@ -2807,7 +2848,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             // 0.9.8: 0.9.0's delay first again. 0.9.1 checked from the first frame, and Dye then went in as
             // little as 0.1 s after the pick, before the window had finished its preview; every crash since
             // came on the Yes after that. (0.9.0 never crashed.)
-            Delay = Speed.Wait(250),
+            Delay = DyeWait(250),
             Timeout = TimeSpan.FromSeconds(3),
             OnTimeout = StepStatus.SkipJob,
             TimeoutProblem = ProblemKind.DyeFailed,
@@ -3634,22 +3675,39 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         var wanted = jobs.Where(j => j.Outcome == JobOutcome.Done && j.Kind != JobKind.Dye && j.Kind != JobKind.Store)
             .Select(j => (j.Target.Key, j.Target.ItemId)).ToHashSet();
         var off = session.Plan.Entries.Where(e => e.State == PieceState.Move && wanted.Contains((e.Target.Key, e.Target.ItemId))).ToList();
-        if (off.Count == 0)
+        // 0.9.10: the pieces this run dyed whose dye doesn't read as dyed now (each piece's dye is only
+        // watched for 0.1 s after its window closes): dyed again. A piece already redone this way isn't
+        // tried a third time.
+        var live = ReadLive();
+        var redye = jobs.Where(j => j.Kind == JobKind.Dye && j.Outcome == JobOutcome.Done && j.Key is { } k && !redyed.Contains(j)
+                                    && live != null && live.TryGetValue(k, out var p) && p.ItemId == j.Target.ItemId && StainOf(k) != j.Target.Stain)
+            .ToList();
+        if (off.Count == 0 && redye.Count == 0)
         {
-            log.Info("Checked: every piece of this run is at its spot (within 0.01 yalm).");
+            log.Info("Checked: every piece of this run is at its spot (within 0.01 yalm) and in its dye.");
             checkPasses = CheckPassesMost;
             return false;
         }
         var moves = RunSequence.Build(off).Select(m => new RunJob { Kind = m.Kind, Target = m.Target, Entry = m.Entry, Key = m.Key, Strict = true }).ToList();
-        foreach (var m in moves) triedAgainLater.Add(m);
+        var dyes = redye.Select(j => new RunJob { Kind = JobKind.Dye, Target = j.Target, Entry = j.Entry, Key = j.Key, FromStain = StainOf(j.Key!.Value) }).ToList();
+        foreach (var j in redye) redyed.Add(j);
+        foreach (var d in dyes) redyed.Add(d);
+        foreach (var m in moves.Concat(dyes)) triedAgainLater.Add(m);
         jobs.AddRange(moves);
+        jobs.AddRange(dyes);
         jobsVersion++;
         knownKeys = session.Live.Keys.ToHashSet();
-        log.Info($"Check {checkPasses} of {CheckPassesMost}: {moves.Count} piece{(moves.Count == 1 ? " is" : "s are")} a little off {(moves.Count == 1 ? "its" : "their")} spot: moved again.");
+        if (moves.Count > 0)
+            log.Info($"Check {checkPasses} of {CheckPassesMost}: {moves.Count} piece{(moves.Count == 1 ? " is" : "s are")} a little off {(moves.Count == 1 ? "its" : "their")} spot: moved again.");
+        if (dyes.Count > 0)
+            log.Info($"Check {checkPasses} of {CheckPassesMost}: {dyes.Count} piece{(dyes.Count == 1 ? "'s dye" : "s' dyes")} didn't hold: dyed again.");
         index--;
         nextJobAt = now;
         return true;
     }
+
+    /// <summary>The dye jobs the check pass added (each piece is dyed again once at most).</summary>
+    private readonly HashSet<RunJob> redyed = new();
 
     /// <summary>The pieces given one more go at the end of the run (<see cref="TryAgainLater"/>).</summary>
     private readonly HashSet<RunJob> triedAgainLater = new();

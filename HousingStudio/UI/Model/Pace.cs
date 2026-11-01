@@ -25,7 +25,7 @@ public static class PaceSetting
     public static string Note(Pace pace) => pace switch
     {
         Pace.Steady => "Gives the game more time between clicks: for a slow connection, or if pieces get skipped",
-        Pace.Daring => "As fast as the plugin goes, placing and on errands: back to Quick if pieces get skipped or a click is missed",
+        Pace.Daring => "As fast as the plugin goes, placing and on errands (the dye window keeps Quick's timing): back to Quick if pieces get skipped or a click is missed",
         _ => "Quick and sure: what most homes want",
     };
 }

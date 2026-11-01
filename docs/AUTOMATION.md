@@ -333,6 +333,12 @@ and it only rechecks pieces this run placed or moved. A piece
 the game wouldn't set at its spot, or refused when picked, is tried once more at the end
 (`TryAgainLater`), not counted as a failure in a row.
 
+**The dye window's least gap** (0.9.10, `Step.MinGap`): its clicks (open, switch the shade, choose,
+Dye, Yes, close) never come closer than Quick's click gap (0.2 s), and its waits (the preview check, the
+shade's list) never shorter than Quick's, whatever the pace: Daring's 0.12 s would come close to 0.9.1's
+timing, which crashed the game. Finding the dye in the list isn't a click (only a shade switch is), and a
+piece's dye is watched 0.1 s after the window closes; the check pass dyes again any dye that didn't hold.
+
 The dye confirmation's Yes waits for the whole click gap after Dye and for the question to have been
 open for four frames and 0.2 s (0.9.3): in 0.9.1 and 0.9.2 Yes went in the frame the question came up,
 and the game crashed twice answering it (the dye window's text filled from a bad pointer, in

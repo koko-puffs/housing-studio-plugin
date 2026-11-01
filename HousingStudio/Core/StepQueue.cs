@@ -55,10 +55,11 @@ public sealed class Step
     public string? Key { get; init; }
 
     /// <summary>
-    /// The least time since the last action before this one (an action only), when not the queue's
-    /// <see cref="StepQueue.ActionGap"/>: the dye window's clicks answer at once, and need less (0.9.1).
+    /// The least time since the last action before this one (an action only), whatever the pace: the
+    /// queue's <see cref="StepQueue.ActionGap"/> when that's longer. The dye window's clicks never come
+    /// closer than 0.9.0's (0.9.10: a faster pace crashed the game there in 0.9.1). None in a dry run.
     /// </summary>
-    public TimeSpan? Gap { get; init; }
+    public TimeSpan? MinGap { get; init; }
 
     /// <summary>A short wait before the step first runs (the game needs a moment after a click).</summary>
     public TimeSpan Delay { get; init; }
@@ -211,7 +212,7 @@ public sealed class StepQueue
         var t = now();
         if (!started)
         {
-            if (step.IsAction && t - lastAction < (step.Gap is { } gap && gap < ActionGap ? gap : ActionGap)) return;
+            if (step.IsAction && t - lastAction < (step.MinGap is { } gap && gap > ActionGap && ActionGap > TimeSpan.Zero ? gap : ActionGap)) return;
             if (step.IsAction && StepByStep && !approved)
             {
                 State = QueueState.AwaitingContinue;

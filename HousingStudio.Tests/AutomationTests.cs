@@ -138,6 +138,33 @@ public class StepQueueTests
     }
 
     [Fact]
+    public void AStepsLeastGapHoldsAtAFasterPace()
+    {
+        var clicks = 0;
+        var q = Queue();
+        q.ActionGap = TimeSpan.FromMilliseconds(120);
+        q.Begin(new[]
+        {
+            Step.Act("one", () => { clicks++; return StepOutcome.Done; }),
+            new Step { Label = "two", IsAction = true, MinGap = TimeSpan.FromMilliseconds(200), Run = () => { clicks++; return StepOutcome.Done; } },
+            new Step { Label = "three", IsAction = true, MinGap = TimeSpan.FromMilliseconds(50), Run = () => { clicks++; return StepOutcome.Done; } },
+        });
+        q.Tick();
+        Advance(130);
+        q.Tick();
+        Assert.Equal(1, clicks); // the pace's gap has passed, the step's own least gap hasn't
+        Advance(80);
+        q.Tick();
+        Assert.Equal(2, clicks);
+        Advance(60);
+        q.Tick();
+        Assert.Equal(2, clicks); // a smaller least gap doesn't shorten the pace's
+        Advance(70);
+        q.Tick();
+        Assert.Equal(3, clicks);
+    }
+
+    [Fact]
     public void AStepCanFinishThePieceEarly()
     {
         var ran = new List<string>();
