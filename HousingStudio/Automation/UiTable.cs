@@ -101,8 +101,8 @@ public static class UiTable
     /// <summary>Close the editor (back to the Housing menu). [Recording 1]</summary>
     public static readonly UiCall LayoutClose = new(LayoutBar, "i:-2", false, "Recording 1");
 
-    /// <summary>Close the dye mode's list (back to the Housing menu). By analogy with the furnishing list's close; unconfirmed.</summary>
-    public static readonly UiCall DyeListClose = new(DyeList, "i:-1", true, "same as HousingGoods' close", Verified: false);
+    /// <summary>Close the dye mode's list (back to the Housing menu). [Recording 3, 0.9.12's undye: HousingGoodsStain ← [i:-1]]</summary>
+    public static readonly UiCall DyeListClose = new(DyeList, "i:-1", true, "Recording 3");
 
     // ---------- the furnishing list ----------
 
@@ -148,8 +148,8 @@ public static class UiTable
 
     // ---------- the dye window ----------
 
-    /// <summary>Pick a shade (the row of circles). [ReMakePlace; not needed in Recording 1, which stayed on the first shade]</summary>
-    public static readonly UiCall DyeShade = new(DyeWindow, "i:4 i:{shade}", true, "ReMakePlace", Verified: false);
+    /// <summary>Pick a shade (the row of circles). [ReMakePlace; Recording 3, 0.9.12's undye: ColorantColoring ← [i:4, i:0]]</summary>
+    public static readonly UiCall DyeShade = new(DyeWindow, "i:4 i:{shade}", true, "Recording 3");
 
     /// <summary>
     /// Pick a dye: (5, its row in the window's list, its Stain row, 0). Recording 1 picked Soot Black
