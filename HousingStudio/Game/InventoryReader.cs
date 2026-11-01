@@ -205,7 +205,22 @@ public static unsafe class InventoryReader
             pagesSeen[i] = pages;
             pagesSeenSince[i] = now;
         }
+        if (pages > 0) seenEmpty[i] = null;
+        else if (seenEmpty[i] != null && seenEmpty[i] == SizeKey(side)) return true;
         return pages > 0 && now - pagesSeenSince[i] >= PagesSteady;
+    }
+
+    /// <summary>The home (<see cref="SizeKey"/>) whose storeroom was seen to be empty, per side.</summary>
+    private static readonly string?[] seenEmpty = new string?[2];
+
+    /// <summary>
+    /// The furnishing window has been open a while in this home and no storeroom page came: the game
+    /// sends none for an empty storeroom (0.9.9; before, a run waited for it and stopped). Counts as
+    /// sent, empty, in this home until a page comes. Framework thread.
+    /// </summary>
+    public static void MarkStoreroomEmpty(Side side)
+    {
+        if (StoreroomPagesLoaded(side) == 0) seenEmpty[side == Side.Interior ? 0 : 1] = SizeKey(side);
     }
 
     /// <summary>How many of a side's storeroom pages (containers) the game has sent so far.</summary>

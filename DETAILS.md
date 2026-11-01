@@ -9,7 +9,11 @@ press **Start placing**: the plugin moves what's placed, places what's in your b
 its exact spot, then dyes everything to match.
 
 > **Status: 0.9.9. Placing works in the game; the newer features haven't all been tried in it yet.**
-> 0.9.9: **a deep look for bugs.** The dye window is closed once, not twice (a close sent while the
+> 0.9.9: **an empty storeroom.** The game sends nothing for a storeroom with nothing in it, so a run
+> that opened the furnishing editor to read it waited 15 s and stopped, every time. Now the furnishing
+> window open for 5 s with nothing from the storeroom counts as an empty storeroom (until a piece goes
+> in), and the run carries on. (The storeroom is always read whole, every page, from the game's own
+> memory: the furnishing window's pages don't need turning.) **A deep look for bugs.** The dye window is closed once, not twice (a close sent while the
 > last was still going could send No to a confirmation the run had just said Yes to; No now goes only to
 > a question nobody has answered for 5 s), and the red-cross check reads the right row for every dye.
 > A dye missed from the window's list once is tried again before it counts as one you don't have. The

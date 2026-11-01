@@ -466,7 +466,17 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 new Step
                 {
                     Label = "The storeroom comes in",
-                    Run = () => InventoryReader.StoreroomLoaded(side) ? StepOutcome.Done : StepOutcome.Waiting,
+                    Run = () =>
+                    {
+                        if (InventoryReader.StoreroomLoaded(side)) return StepOutcome.Done;
+                        // 0.9.9: an empty storeroom never comes in (the game sends no pages for it): the
+                        // furnishing window open 5 s with nothing from the storeroom means it's empty.
+                        if (queue.Elapsed < TimeSpan.FromSeconds(5) || !GameUi.IsOpen(UiTable.FurnishingList)
+                            || InventoryReader.StoreroomPagesLoaded(side) > 0) return StepOutcome.Waiting;
+                        InventoryReader.MarkStoreroomEmpty(side);
+                        log.Info("  Nothing came from the storeroom with the furnishing window open for 5 s: it's empty.");
+                        return StepOutcome.Done;
+                    },
                     Timeout = TimeSpan.FromSeconds(15),
                     TimeoutMessage = "The storeroom didn't come in with the furnishing editor open, so what's in it isn't known: nothing was placed. Start again.",
                 },
