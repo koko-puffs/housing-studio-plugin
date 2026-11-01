@@ -47,6 +47,9 @@ public enum SourceKind
     /// <summary>Buy it on the market board.</summary>
     Market,
 
+    /// <summary>Exchange a currency other than gil for it (MGP, wolf marks…) at an NPC (0.7.14).</summary>
+    Exchange,
+
     /// <summary>Craft it (no vendor, nothing listed).</summary>
     Craft,
 
@@ -68,6 +71,12 @@ public sealed record ShoppingLine(Need Need, SourceKind Source, int Count)
 
     /// <summary><see cref="SourceKind.Vendor"/>: the NPC to buy from (<see cref="VendorChoice.Best"/>).</summary>
     public VendorOffer? Vendor { get; init; }
+
+    /// <summary><see cref="SourceKind.Exchange"/>: the NPC, the currency and what it costs.</summary>
+    public ExchangeOffer? Exchange { get; init; }
+
+    /// <summary><see cref="SourceKind.Exchange"/>: the currency this line costs (in <see cref="ExchangeOffer.CurrencyName"/>).</summary>
+    public long CurrencyCost { get; init; }
 
     /// <summary><see cref="SourceKind.Market"/>: what's listed, and what buying the count would cost.</summary>
     public MarketQuote? Market { get; init; }
@@ -105,6 +114,13 @@ public sealed class ShoppingPlan
 
     public long TotalGil => VendorGil + MarketGil;
 
+    /// <summary>What the currency vendors cost, by currency ("MGP" → 45,000), in the order first met.</summary>
+    public IReadOnlyList<(string Currency, long Cost)> CurrencyCosts =>
+        Lines.Where(l => l.Source == SourceKind.Exchange && l.Exchange != null)
+            .GroupBy(l => l.Exchange!.CurrencyName)
+            .Select(g => (g.Key, g.Sum(l => l.CurrencyCost)))
+            .ToList();
+
     public bool IsEmpty => Lines.Count == 0;
 }
 
@@ -126,9 +142,14 @@ public static class ShoppingPlanner
         Func<uint, IReadOnlyList<VendorOffer>> offers,
         IReadOnlyDictionary<uint, MarketQuote> quotes,
         Func<uint, CraftOption?> craft,
-        string? preferDistrict = null)
+        string? preferDistrict = null,
+        Func<uint, IReadOnlyList<ExchangeOffer>>? exchanges = null,
+        Func<uint, long>? balance = null,
+        Func<uint, bool>? currencyAllowed = null)
     {
         var lines = new List<ShoppingLine>();
+        // What's left of each currency, shared out as needs take it.
+        var spent = new Dictionary<uint, long>();
         // What's left on each retainer, shared out as needs take it.
         var taken = new Dictionary<(ulong, uint), int>();
         foreach (var need in needs.Where(n => n.ItemId != 0 && n.Count > 0))
@@ -157,6 +178,22 @@ public static class ShoppingPlanner
                 lines.Add(new ShoppingLine(need, SourceKind.Vendor, left) { Vendor = offer, Gil = (long)offer.Price * left, Craft = recipe });
                 continue;
             }
+
+            // A currency vendor (0.7.14), after the gil vendors and before the board: only a currency you
+            // allow, and only as many as what you have of it buys (the rest from the board).
+            if (exchanges != null && currencyAllowed != null)
+                foreach (var ex in ExchangeChoice.Ranked(exchanges(need.ItemId), currencyAllowed))
+                {
+                    if (left <= 0) break;
+                    var have = (balance?.Invoke(ex.Currency) ?? 0) - spent.GetValueOrDefault(ex.Currency);
+                    var n = Math.Min(left, ex.Affords(Math.Max(0, have)));
+                    if (n <= 0) continue;
+                    var cost = ex.CostFor(n);
+                    spent[ex.Currency] = spent.GetValueOrDefault(ex.Currency) + cost;
+                    lines.Add(new ShoppingLine(need, SourceKind.Exchange, n) { Exchange = ex, CurrencyCost = cost, Craft = recipe });
+                    left -= n;
+                }
+            if (left <= 0) continue;
 
             if (quotes.TryGetValue(need.ItemId, out var quote) && quote.Listings.Count > 0)
             {

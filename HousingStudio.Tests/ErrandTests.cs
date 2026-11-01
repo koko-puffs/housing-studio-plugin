@@ -599,3 +599,93 @@ public class DoorWayTests
     [Fact]
     public void AWayIsMeasuredAlongIt() => Assert.Equal(15f, DoorWays.Length(Line((0, 0), (5, 0), (5, 10))), 3);
 }
+
+public class ExchangeTests
+{
+    private static readonly DateTime Noon = new(2026, 11, 1, 12, 0, 0, DateTimeKind.Utc);
+
+    private static ExchangeOffer Mgp(uint item, uint cost, int gives = 1, uint npc = 1025000, uint territory = 144) =>
+        new(new VendorOffer(item, 0, npc, "Gold Saucer Attendant", 1769800, "Prize Exchange (Furnishings)", territory, "The Gold Saucer", 196,
+            null, new System.Numerics.Vector3(1, 2, 3), null), CurrencyItems.Mgp, "MGP", cost, gives);
+
+    private static ShoppingPlan Plan(IEnumerable<Need> needs, ExchangeOffer[] exchanges, long mgp, bool allowMgp = true, VendorOffer[]? gil = null,
+        MarketQuote[]? quotes = null) =>
+        ShoppingPlanner.Build(needs.ToList(), Array.Empty<RetainerStock>(), id => (gil ?? Array.Empty<VendorOffer>()).Where(o => o.ItemId == id).ToList(),
+            (quotes ?? Array.Empty<MarketQuote>()).ToDictionary(q => q.ItemId), _ => null, "mist",
+            id => exchanges.Where(e => e.ItemId == id).ToList(), c => c == CurrencyItems.Mgp ? mgp : 0, c => allowMgp && c == CurrencyItems.Mgp);
+
+    [Fact]
+    public void AnExchangeCountsWholeExchanges()
+    {
+        var x = Mgp(500, 3000, gives: 5);
+        Assert.Equal(1, x.Exchanges(1));
+        Assert.Equal(2, x.Exchanges(6));
+        Assert.Equal(6000, x.CostFor(6));
+        Assert.Equal(10, x.Affords(7000));
+        Assert.Equal(0, x.Affords(2999));
+    }
+
+    [Fact]
+    public void WhatNoGilVendorSellsComesFromTheMgpVendor()
+    {
+        var shop = Plan(new[] { new Need(500, 2, NeedKind.Piece) }, new[] { Mgp(500, 30_000) }, mgp: 100_000);
+        var line = Assert.Single(shop.Lines);
+        Assert.Equal(SourceKind.Exchange, line.Source);
+        Assert.Equal(60_000, line.CurrencyCost);
+        Assert.Equal(0, shop.TotalGil);
+        Assert.Equal(("MGP", 60_000L), Assert.Single(shop.CurrencyCosts));
+    }
+
+    [Fact]
+    public void OnlyWhatYouHaveIsPlannedTheRestFromTheBoard()
+    {
+        var quote = new MarketQuote(500, "Light", Noon, new List<MarketListing> { new(9000, 1, "Lich", false), new(9500, 1, "Lich", false) });
+        var shop = Plan(new[] { new Need(500, 3, NeedKind.Piece) }, new[] { Mgp(500, 30_000) }, mgp: 65_000, quotes: new[] { quote });
+        Assert.Equal(2, shop.Lines.Single(l => l.Source == SourceKind.Exchange).Count);
+        Assert.Equal(1, shop.Lines.Single(l => l.Source == SourceKind.Market).Count);
+    }
+
+    [Fact]
+    public void ACurrencyNotAllowedIsNeverPlanned()
+    {
+        var shop = Plan(new[] { new Need(500, 1, NeedKind.Piece) }, new[] { Mgp(500, 30_000) }, mgp: 1_000_000, allowMgp: false);
+        Assert.Equal(SourceKind.Unknown, Assert.Single(shop.Lines).Source);
+    }
+
+    [Fact]
+    public void AGilVendorComesFirst()
+    {
+        var gil = new VendorOffer(500, 2000, 7, "Merchant", 262144, "Shop", 130, "Ul'dah", 1, null, new System.Numerics.Vector3(), null);
+        var shop = Plan(new[] { new Need(500, 1, NeedKind.Piece) }, new[] { Mgp(500, 30_000) }, mgp: 1_000_000, gil: new[] { gil });
+        Assert.Equal(SourceKind.Vendor, Assert.Single(shop.Lines).Source);
+    }
+
+    [Fact]
+    public void TwoNeedsShareWhatYouHave()
+    {
+        var shop = Plan(new[] { new Need(500, 1, NeedKind.Piece), new Need(501, 1, NeedKind.Piece) }, new[] { Mgp(500, 40_000), Mgp(501, 40_000) }, mgp: 50_000);
+        Assert.Single(shop.Lines, l => l.Source == SourceKind.Exchange);
+    }
+
+    [Fact]
+    public void TheErrandsGoToTheExchangeAndSayWhatItCosts()
+    {
+        var shop = Plan(new[] { new Need(500, 2, NeedKind.Piece) }, new[] { Mgp(500, 30_000) }, mgp: 100_000);
+        var plan = ErrandPlanner.Build(shop, new ErrandOptions { FreeSlots = 10, MarketCeiling = 0, StackSize = _ => 1, Reachable = o => o.Located });
+        var stop = Assert.Single(Assert.Single(plan.Trips).Stops);
+        Assert.Equal(StopKind.Exchange, stop.Kind);
+        Assert.Equal(60_000, Assert.Single(stop.Items).CurrencyCost);
+        Assert.Equal(0, plan.TotalGil);
+        Assert.Equal(("MGP", CurrencyItems.Mgp, 60_000L), Assert.Single(plan.CurrencyCosts));
+        Assert.Equal("Set out · 60,000 MGP", HousingStudio.UI.Model.ErrandWords.SetOut(plan.TotalGil, plan.CurrencyCosts));
+        Assert.Equal("Set out · up to 1,000 gil + 60,000 MGP", HousingStudio.UI.Model.ErrandWords.SetOut(1000, plan.CurrencyCosts));
+    }
+
+    [Fact]
+    public void AnExchangeOutOfReachIsLeft()
+    {
+        var shop = Plan(new[] { new Need(500, 1, NeedKind.Piece) }, new[] { Mgp(500, 30_000) }, mgp: 100_000);
+        var plan = ErrandPlanner.Build(shop, new ErrandOptions { FreeSlots = 10, Reachable = _ => false });
+        Assert.Equal(LeftReason.NoVendorReachable, Assert.Single(plan.Left).Reason);
+    }
+}

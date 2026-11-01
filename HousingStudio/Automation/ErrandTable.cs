@@ -41,6 +41,27 @@ public static class ErrandTable
     /// </summary>
     public static readonly UiCall ShopBuy = new(Shop, "i:0 i:{row} i:{count} empty", true, "Recording 2");
 
+    /// <summary>A currency vendor's window (MGP, tomestones, seals: "Exchange"). [Guess: other plugins' name for it]</summary>
+    public const string ExchangeCurrency = "ShopExchangeCurrency";
+
+    /// <summary>A vendor's window that takes items or marks in exchange. [Guess: other plugins' name for it]</summary>
+    public const string ExchangeItem = "ShopExchangeItem";
+
+    /// <summary>The window some currency vendors open to confirm an exchange (a quantity and Exchange). [Guess]</summary>
+    public const string ExchangeDialog = "ShopExchangeCurrencyDialog";
+
+    /// <summary>Both currency vendors' windows.</summary>
+    public static readonly string[] ExchangeWindows = { ExchangeCurrency, ExchangeItem };
+
+    /// <summary>
+    /// Exchange for <c>count</c> of the item in row <c>row</c> (the list's first is 0, as shown). [Guess:
+    /// what other plugins send, [i:0, i:row, i:count]; not seen in a recording yet, so it waits for Continue
+    /// until "Trust the new clicks" is on. A recording of one exchange by hand confirms it.]
+    /// </summary>
+    public static readonly UiCall ExchangeCurrencyBuy = new(ExchangeCurrency, "i:0 i:{row} i:{count}", false, "Guess (other plugins)", Verified: false);
+
+    public static readonly UiCall ExchangeItemBuy = new(ExchangeItem, "i:0 i:{row} i:{count}", false, "Guess (other plugins)", Verified: false);
+
     /// <summary>The menu some NPCs open first ("Purchase Furnishings (Tier 1)", "Purchase Items"). [ECommons]</summary>
     public const string SelectString = "SelectString";
 
@@ -162,5 +183,5 @@ public static class ErrandTable
     public static readonly string[] MarketBoardWords = { "Market Board" };
 
     /// <summary>Every errand click, for Settings' list of windows and clicks.</summary>
-    public static IReadOnlyList<UiCall> All => new[] { ShopBuy, MenuPick, IconMenuPick, TalkNext, RetainerPick, SearchResultPick, ListingBuy };
+    public static IReadOnlyList<UiCall> All => new[] { ShopBuy, ExchangeCurrencyBuy, ExchangeItemBuy, MenuPick, IconMenuPick, TalkNext, RetainerPick, SearchResultPick, ListingBuy };
 }

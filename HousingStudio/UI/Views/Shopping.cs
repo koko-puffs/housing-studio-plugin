@@ -20,6 +20,7 @@ public sealed partial class MainWindow
     {
         (SourceKind.Retainer, "On your retainers"),
         (SourceKind.Vendor, "Buy from vendors"),
+        (SourceKind.Exchange, "For MGP and other currencies"),
         (SourceKind.Market, "Market board"),
         (SourceKind.Craft, "Craft"),
         (SourceKind.Unknown, "Not known"),
@@ -108,6 +109,7 @@ public sealed partial class MainWindow
             var head = source switch
             {
                 SourceKind.Vendor => $"{title} · {ShoppingList.Gil(gil)}",
+                SourceKind.Exchange => $"{title} · {string.Join(" + ", lines.Where(l => l.Exchange != null).GroupBy(l => l.Exchange!.CurrencyName).Select(g => $"{g.Sum(l => l.CurrencyCost):N0} {g.Key}"))}",
                 SourceKind.Market when gil > 0 => $"{title} · about {ShoppingList.Gil(gil)}",
                 _ => title,
             };
@@ -146,12 +148,13 @@ public sealed partial class MainWindow
         }
         x += S(34) + S(12);
 
-        var vendor = line.Vendor;
+        var vendor = line.Vendor ?? line.Exchange?.Vendor;
         var pinW = vendor != null ? S(32) + S(12) : 0;
         var gil = line.Source switch
         {
             SourceKind.Vendor => ShoppingList.Gil(line.Gil),
             SourceKind.Market => "≈ " + ShoppingList.Gil(line.Gil),
+            SourceKind.Exchange when line.Exchange != null => $"{line.CurrencyCost:N0} {line.Exchange.CurrencyName}",
             _ => string.Empty,
         };
         var gilW = gil.Length > 0 ? Txt.Measure(gil, Face.Mono, 12).X + S(12) : 0;
@@ -192,6 +195,9 @@ public sealed partial class MainWindow
             case SourceKind.Vendor:
                 var v = line.Vendor!;
                 return dye + $"{v.Where()} · {ShoppingList.Gil(v.Price)} each" + (v.NeedsUnlock ? " · after a quest" : string.Empty);
+            case SourceKind.Exchange:
+                var x = line.Exchange!;
+                return dye + $"{x.Vendor.Where()} · {x.Cost:N0} {x.CurrencyName}" + (x.Gives > 1 ? $" for {x.Gives}" : " each");
             case SourceKind.Market:
                 var cost = line.MarketCost;
                 var each = line.Count > 0 ? line.Gil / line.Count : 0;

@@ -204,7 +204,8 @@ public class VendorTests
         Assert.Equal(NpcDataKind.TopicSelect, Residential.KindOf(3276801));
         Assert.Equal(NpcDataKind.PreHandler, Residential.KindOf(3538950));
         Assert.Equal(NpcDataKind.CustomTalk, Residential.KindOf(721000));
-        Assert.Equal(NpcDataKind.Other, Residential.KindOf(1769472));
+        Assert.Equal(NpcDataKind.SpecialShop, Residential.KindOf(1769472)); // a SpecialShop (0x1B…): a currency vendor (0.7.14)
+        Assert.Equal(NpcDataKind.Other, Residential.KindOf(0x0025_0000));
     }
 
     [Fact]

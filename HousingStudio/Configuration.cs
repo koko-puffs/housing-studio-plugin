@@ -9,7 +9,7 @@ namespace HousingStudio;
 [Serializable]
 public sealed partial class Configuration : IPluginConfiguration
 {
-    public int Version { get; set; } = 7;
+    public int Version { get; set; } = 8;
 
     /// <summary>Layouts opened lately, newest first.</summary>
     public List<string> RecentFiles { get; set; } = new();
@@ -146,10 +146,18 @@ public sealed partial class Configuration : IPluginConfiguration
     /// setting more than the pause between pieces; Careful becomes Steady, the rest Quick.
     /// </remarks>
     /// <remarks>Version 6 (0.3.4): place anywhere is on by default, so it's switched on.</remarks>
+    /// <remarks>Version 8 (0.7.14): the paces moved a step faster (Daring → Quick, the rest → Steady), so the speed chosen stays.</remarks>
     /// <remarks>Version 7 (0.7.13): no Beta switch; Get them for me first and Set them after placing on, unless the Beta features were in use.</remarks>
     public bool Migrate()
     {
-        if (Version >= 7) return false;
+        if (Version >= 8) return false;
+        if (Version == 7)
+        {
+            // 0.7.14: the paces moved a step faster; the one chosen keeps its speed.
+            Pace = Pacing.FromBefore0714(Pace);
+            Version = 8;
+            return true;
+        }
         if (Version < 7 && !Experimental)
         {
             // 0.7.13: the Beta features are always there; someone who never switched them on gets
@@ -159,7 +167,8 @@ public sealed partial class Configuration : IPluginConfiguration
         }
         if (Version >= 6)
         {
-            Version = 7;
+            Pace = Pacing.FromBefore0714(Pace);
+            Version = 8;
             return true;
         }
         if (Version < 4)
@@ -169,7 +178,8 @@ public sealed partial class Configuration : IPluginConfiguration
         }
         if (Version < 5) Pace = Pacing.FromOldInterval(IntervalMs);
         PlaceAnywhere = true;
-        Version = 7;
+        Pace = Pacing.FromBefore0714(Pace);
+        Version = 8;
         return true;
     }
 

@@ -9,6 +9,9 @@ public enum StopKind
 {
     Retainer,
     Vendor,
+
+    /// <summary>An NPC that takes a currency other than gil (MGP…), 0.7.14.</summary>
+    Exchange,
     Market,
 }
 
@@ -27,6 +30,12 @@ public sealed record ErrandItem(Need Need, int Count, int Bought, int Slots, lon
 
     /// <summary>Market: the listings planned (Universalis's, so they may have gone by the time the board is read).</summary>
     public IReadOnlyList<MarketListing> Listings { get; init; } = Array.Empty<MarketListing>();
+
+    /// <summary>Exchange: the NPC's offer (the currency and what one exchange costs).</summary>
+    public ExchangeOffer? Exchange { get; init; }
+
+    /// <summary>Exchange: the currency this costs (none of it gil).</summary>
+    public long CurrencyCost { get; init; }
 }
 
 /// <summary>One stop of a trip: a retainer, a vendor or a world's market board, and what to get there.</summary>
@@ -36,7 +45,7 @@ public sealed record ErrandStop(StopKind Kind, string Key, IReadOnlyList<ErrandI
     /// <summary><see cref="StopKind.Retainer"/>: the retainer to take it from.</summary>
     public RetainerStock? Retainer { get; init; }
 
-    /// <summary><see cref="StopKind.Vendor"/>: the NPC to buy from.</summary>
+    /// <summary><see cref="StopKind.Vendor"/> and <see cref="StopKind.Exchange"/>: the NPC to buy from (and where).</summary>
     public VendorOffer? Vendor { get; init; }
 
     /// <summary><see cref="StopKind.Market"/>: the world whose board the listings are on.</summary>
@@ -161,6 +170,13 @@ public sealed class ErrandPlan
 
     public IEnumerable<ErrandStop> Stops(StopKind kind) => Trips.SelectMany(t => t.Stops).Where(s => s.Kind == kind);
 
+    /// <summary>The currency vendors' part, by currency ("MGP" → 45,000): none of it gil, so not in <see cref="TotalGil"/>.</summary>
+    public IReadOnlyList<(string Currency, uint CurrencyItem, long Cost)> CurrencyCosts =>
+        Stops(StopKind.Exchange).SelectMany(s => s.Items).Where(i => i.Exchange != null)
+            .GroupBy(i => (i.Exchange!.CurrencyName, i.Exchange.Currency))
+            .Select(g => (g.Key.CurrencyName, g.Key.Currency, g.Sum(i => i.CurrencyCost)))
+            .ToList();
+
     public bool Needs(StopKind kind) => Stops(kind).Any();
 }
 
@@ -179,6 +195,8 @@ public static class ErrandPlanner
         public VendorOffer? Vendor { get; init; }
         public string? World { get; init; }
         public MarketListing? Listing { get; init; }
+        public ExchangeOffer? Exchange { get; init; }
+        public long CurrencyCost => Exchange?.CostFor(Count) ?? 0;
         public int Slots => Stacks(Bought, Stack);
     }
 
@@ -202,7 +220,8 @@ public static class ErrandPlanner
                 for (var i = 0; i < p.Items.Count; i++)
                 {
                     var (m, n) = (p.Items[i], q.Items[i]);
-                    if (m.Need != n.Need || m.Count != n.Count || m.Bought != n.Bought || m.Slots != n.Slots || m.Gil != n.Gil || m.MaxUnitPrice != n.MaxUnitPrice)
+                    if (m.Need != n.Need || m.Count != n.Count || m.Bought != n.Bought || m.Slots != n.Slots || m.Gil != n.Gil || m.MaxUnitPrice != n.MaxUnitPrice
+                        || m.CurrencyCost != n.CurrencyCost)
                         return false;
                 }
             }
@@ -238,6 +257,17 @@ public static class ErrandPlanner
                     }
                     units.Add(new Unit(StopKind.Vendor, $"v:{offer.TerritoryId}:{offer.District}:{offer.NpcId}:{offer.ShopId}", 1, line.Need, line.Count, line.Count, stack,
                         (long)offer.Price * line.Count, true) { Vendor = offer });
+                    break;
+                case SourceKind.Exchange when line.Exchange != null:
+                    // A currency vendor: walked to like a vendor, so it has to be reachable as one.
+                    if (!o.Reachable(line.Exchange.Vendor))
+                    {
+                        left.Add(new ErrandLeft(line.Need, line.Count, LeftReason.NoVendorReachable));
+                        break;
+                    }
+                    var ev = line.Exchange.Vendor;
+                    units.Add(new Unit(StopKind.Exchange, $"x:{ev.TerritoryId}:{ev.District}:{ev.NpcId}:{ev.ShopId}", 1, line.Need, line.Count, line.Count, stack, 0, true)
+                        { Vendor = ev, Exchange = line.Exchange });
                     break;
                 case SourceKind.Market when line.Market != null:
                     marketSoFar = MarketUnits(line, o, stack, units, left, marketSoFar);
@@ -323,7 +353,7 @@ public static class ErrandPlanner
     private static string PlaceOrder(Unit u) => u.Kind switch
     {
         StopKind.Retainer => (u.Retainer?.Name ?? string.Empty) + "\u0001" + u.Key,
-        StopKind.Vendor => $"{u.Vendor?.District ?? "~"}\u0001{u.Vendor?.TerritoryId:D6}\u0001{u.Vendor?.NpcId:D10}\u0001{u.Key}",
+        StopKind.Vendor or StopKind.Exchange => $"{u.Vendor?.District ?? "~"}\u0001{u.Vendor?.TerritoryId:D6}\u0001{u.Vendor?.NpcId:D10}\u0001{u.Key}",
         _ => u.World ?? string.Empty,
     };
 
@@ -414,6 +444,8 @@ public static class ErrandPlanner
                 var need = i.First().Need;
                 return new ErrandItem(need, i.Sum(u => u.Count), i.Sum(u => u.Bought), i.Sum(u => u.Slots), i.Sum(u => u.Gil))
                 {
+                    Exchange = i.Select(u => u.Exchange).FirstOrDefault(e => e != null),
+                    CurrencyCost = i.Sum(u => u.CurrencyCost),
                     MaxUnitPrice = i.Where(u => u.Listing != null).Select(u => u.Listing!.PricePerUnit).DefaultIfEmpty(0u).Max(),
                     Listings = i.Where(u => u.Listing != null).Select(u => u.Listing!).ToList(),
                 };

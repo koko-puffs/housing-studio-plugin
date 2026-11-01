@@ -112,21 +112,28 @@ public class SpeedTests
     }
 
     [Fact]
-    public void TheDefaultPaceIsDaringAndEachStepIsQuickerThanTheLast()
+    public void TheDefaultPaceIsQuickAndEachStepIsQuickerThanTheLast()
     {
-        Assert.Equal(Pace.Daring, Pacing.Default);
-        // Quick is 0.3.2's pace, as tested in game.
+        Assert.Equal(Pace.Quick, Pacing.Default);
+        // 0.7.14: Steady is 0.3.2's pace, as tested in game; Quick what Daring was.
         var quick = Pacing.Profile(Pace.Quick);
-        Assert.Equal((150, 300, 1.0), (quick.PieceGapMs, quick.ClickGapMs, quick.WaitScale));
+        Assert.Equal((50, 200, 0.65), (quick.PieceGapMs, quick.ClickGapMs, quick.WaitScale));
+        Assert.Equal((150, 300, 1.0), (Pacing.Profile(Pace.Steady).PieceGapMs, Pacing.Profile(Pace.Steady).ClickGapMs, Pacing.Profile(Pace.Steady).WaitScale));
+        Assert.True(Pacing.Profile(Pace.Daring).ErrandGapMs < quick.ErrandGapMs);
+        // A pace chosen before keeps its speed.
+        Assert.Equal(Pace.Quick, Pacing.FromBefore0714(Pace.Daring));
+        Assert.Equal(Pace.Steady, Pacing.FromBefore0714(Pace.Quick));
+        Assert.Equal(Pace.Steady, Pacing.FromBefore0714(Pace.Steady));
         var (steady, daring) = (Pacing.Profile(Pace.Steady), Pacing.Profile(Pace.Daring));
         Assert.True(steady.PieceGapMs > quick.PieceGapMs && quick.PieceGapMs > daring.PieceGapMs);
         Assert.True(steady.ClickGapMs > quick.ClickGapMs && quick.ClickGapMs > daring.ClickGapMs);
         Assert.True(steady.WaitScale > quick.WaitScale && quick.WaitScale > daring.WaitScale);
         Assert.True(daring.PieceGapMs >= Pacing.MinimumMs);
-        Assert.Equal(TimeSpan.FromMilliseconds(120), quick.Wait(120));
-        Assert.Equal(TimeSpan.FromMilliseconds(180), steady.Wait(120));
+        Assert.Equal(TimeSpan.FromMilliseconds(120), steady.Wait(120));
+        Assert.Equal(TimeSpan.FromMilliseconds(78), quick.Wait(120));
+        Assert.Equal(TimeSpan.FromMilliseconds(48), daring.Wait(120));
         // An unknown value (a hand-edited config) is the default's.
-        Assert.Equal(daring, Pacing.Profile((Pace)7));
+        Assert.Equal(quick, Pacing.Profile((Pace)7));
     }
 
     [Theory]

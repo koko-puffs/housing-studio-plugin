@@ -43,6 +43,24 @@ public static class ErrandWords
     /// <summary>The brass button, naming the most it spends: "Set out · up to 61,400 gil", or "Set out" when it spends none.</summary>
     public static string SetOut(long totalGil) => totalGil > 0 ? $"Set out · up to {Gil(totalGil)}" : "Set out";
 
+    /// <summary>The brass button with the currency vendors' part too: "Set out · up to 58,920 gil + 45,000 MGP".</summary>
+    public static string SetOut(long totalGil, IReadOnlyList<(string Currency, uint CurrencyItem, long Cost)> currencies)
+    {
+        var spent = currencies.Where(c => c.Cost > 0).Select(c => $"{Number(c.Cost)} {c.Currency}").ToList();
+        if (spent.Count == 0) return SetOut(totalGil);
+        return totalGil > 0 ? $"Set out · up to {Gil(totalGil)} + {string.Join(" + ", spent)}" : $"Set out · {string.Join(" + ", spent)}";
+    }
+
+    /// <summary>
+    /// The currencies a plan spends, against what you have: "Also spends 45,000 MGP (you have 120,000)".
+    /// Null when it spends none.
+    /// </summary>
+    public static string? CurrencyLine(IReadOnlyList<(string Currency, uint CurrencyItem, long Cost)> currencies, Func<uint, long> have)
+    {
+        var parts = currencies.Where(c => c.Cost > 0).Select(c => $"{Number(c.Cost)} {c.Currency} (you have {Number(have(c.CurrencyItem))})").ToList();
+        return parts.Count == 0 ? null : $"Also spends {string.Join(", ", parts)}: only what you have, after any gil vendor";
+    }
+
     /// <summary>"Glade Shelf ×2, Oasis Rug": what a stop gets.</summary>
     public static string Items(IEnumerable<ErrandItem> items, Func<uint, string> name) =>
         string.Join(", ", items.Select(i => i.Count == 1 ? name(i.ItemId) : $"{name(i.ItemId)} ×{i.Count}"));
@@ -85,6 +103,13 @@ public static class ErrandWords
                     var v = stop.Vendor;
                     var where = v == null ? "A vendor" : v.PlaceName.Length > 0 ? $"{v.PlaceName} · {v.NpcName}" : v.NpcName;
                     legs.Add(new RouteLeg(ErrandLeg.Vendor, where, Items(stop.Items, name), Number(stop.Gil)));
+                    break;
+                case StopKind.Exchange:
+                    var x = stop.Vendor;
+                    var at = x == null ? "A vendor" : x.PlaceName.Length > 0 ? $"{x.PlaceName} · {x.NpcName}" : x.NpcName;
+                    var costs = stop.Items.Where(i => i.Exchange != null).GroupBy(i => i.Exchange!.CurrencyName)
+                        .Select(g => $"{Number(g.Sum(i => i.CurrencyCost))} {g.Key}");
+                    legs.Add(new RouteLeg(ErrandLeg.Vendor, at, Items(stop.Items, name), string.Join(" + ", costs)));
                     break;
                 case StopKind.Market:
                     var world = !string.IsNullOrEmpty(stop.World) && stop.World != homeWorld ? $" · {stop.World}" : string.Empty;
@@ -161,7 +186,7 @@ public static class ErrandWords
         if (trip != null)
         {
             if (trip.Stops.Any(s => s.Kind == StopKind.Retainer)) stops.Add(ErrandLeg.Bell);
-            if (trip.Stops.Any(s => s.Kind == StopKind.Vendor)) stops.Add(ErrandLeg.Vendor);
+            if (trip.Stops.Any(s => s.Kind is StopKind.Vendor or StopKind.Exchange)) stops.Add(ErrandLeg.Vendor);
             if (trip.Stops.Any(s => s.Kind == StopKind.Market)) stops.Add(ErrandLeg.Market);
         }
         stops.Add(ErrandLeg.Home);

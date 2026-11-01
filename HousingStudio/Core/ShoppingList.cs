@@ -108,6 +108,9 @@ public static class ShoppingList
         Section(SourceKind.Vendor, $"Buy from vendors ({Gil(shop.VendorGil)})", l => l.Vendor is { } v
             ? $"{Gil(v.Price)} each, {Gil(l.Gil)}, from {v.Where()}"
             : null);
+        Section(SourceKind.Exchange, "For MGP and other currencies (what you have, not gil)", l => l.Exchange is { } x
+            ? $"{l.CurrencyCost:N0} {x.CurrencyName}, from {x.Vendor.Where()}"
+            : null);
         Section(SourceKind.Market, $"Market board (about {Gil(shop.MarketGil)})", l =>
         {
             var each = l.Count > 0 ? l.Gil / l.Count : 0;

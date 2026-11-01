@@ -42,6 +42,9 @@ public sealed partial class ErrandRunner : IDisposable
 
     private const string Guess = "guess";
 
+    /// <summary>The pace chosen (Settings → Pace): the errands' clicks and some of their waits follow it.</summary>
+    private PaceProfile Speed => Pacing.Profile(config.Pace);
+
     private readonly Configuration config;
     private readonly LayoutSession session;
     private readonly PlacementRunner runner;
@@ -202,7 +205,12 @@ public sealed partial class ErrandRunner : IDisposable
     // Planning.
 
     /// <summary>Which home "go home" goes to: the one chosen in the errands' screen, else the one you're in.</summary>
-    public HomeKind KindOf(HomeRef at) => config.ErrandsHome is >= 0 and <= 2 ? (HomeKind)config.ErrandsHome : at.Kind;
+    /// <summary>
+    /// Which home "go home" is: the one you're in when the game says it's yours (0.7.13 took Settings'
+    /// choice over it: from company chambers with "My house" chosen it went to your house's ward with the
+    /// chambers' district's merchants planned); Settings' choice only for a home the game doesn't say is.
+    /// </summary>
+    public HomeKind KindOf(HomeRef at) => !at.Owned && config.ErrandsHome is >= 0 and <= 2 ? (HomeKind)config.ErrandsHome : at.Kind;
 
     /// <summary>
     /// The errands for a shopping plan, as things stand here: your free bag slots (less the spare ones),
@@ -315,6 +323,9 @@ public sealed partial class ErrandRunner : IDisposable
         Rehearsal = rehearse;
         rehearsalFailures = 0;
         emptyBoards.Clear();
+        currencyAgreed.Clear();
+        currencySpent.Clear();
+        foreach (var (_, currencyItem, currencyCost) in plan.CurrencyCosts) currencyAgreed[currencyItem] = currencyAgreed.GetValueOrDefault(currencyItem) + currencyCost;
         home = ErrandGame.HomeHere(ctx)!;
         homeKind = KindOf(home);
         homeWorld = ErrandGame.HomeWorld();
@@ -339,7 +350,8 @@ public sealed partial class ErrandRunner : IDisposable
         StopReason = null;
         ResultWaiting = false;
         StartedAt = DateTime.Now;
-        queue.ActionGap = TimeSpan.FromMilliseconds(Math.Max(300, Pacing.Profile(config.Pace).ClickGapMs));
+        // The errands' clicks by the pace (0.7.14: Daring 0.15 s apart, Quick 0.3 s, Steady 0.4 s).
+        queue.ActionGap = TimeSpan.FromMilliseconds(Math.Max(Speed.ErrandGapMs, Speed.ClickGapMs));
         queue.Begin(Array.Empty<Step>());
         if (plan.Needs(StopKind.Retainer))
             log.Info(shop.AutoRetainer.KeepOut() ? "AutoRetainer is asked to keep out of the way while the errands use a bell." : "AutoRetainer didn't answer (not installed?); carrying on.");
@@ -351,6 +363,8 @@ public sealed partial class ErrandRunner : IDisposable
         if (!HasWayFor(home))
             log.Warn($"No way to your front door is recorded for plot {home.Plot}: vnavmesh's map of a ward has no houses in it, so its way to your door can run into walls. "
                      + "If it does, you're asked to walk in (Settings → Getting → Way to your door records the way once, to be followed after).");
+        if (plan.CurrencyCosts.Count > 0)
+            log.Info($"Currency vendors: {string.Join(", ", plan.CurrencyCosts.Select(c => $"{c.Cost:N0} {c.Currency} (you have {ErrandGame.CurrencyCount(c.CurrencyItem):N0})"))} agreed, no more.");
         if (rehearse) RehearsalStarted(plan);
         State = RunState.Running;
         StatusText = "Starting…";
@@ -446,7 +460,8 @@ public sealed partial class ErrandRunner : IDisposable
     /// <summary>Closes every window the errands open, as their own close buttons do.</summary>
     private static void CloseWindows()
     {
-        foreach (var name in new[] { UiTable.ContextMenu, ErrandTable.Shop, ErrandTable.ItemSearchResult, ErrandTable.ItemSearch, ErrandTable.SelectIconString })
+        foreach (var name in new[] { UiTable.ContextMenu, ErrandTable.Shop, ErrandTable.ExchangeDialog, ErrandTable.ExchangeCurrency, ErrandTable.ExchangeItem,
+                     ErrandTable.ItemSearchResult, ErrandTable.ItemSearch, ErrandTable.SelectIconString })
             GameUi.Close(name);
         foreach (var name in ErrandTable.RetainerInventory) GameUi.Close(name);
         // The retainer's menu and list last (closing the menu says goodbye to the retainer).
@@ -567,6 +582,7 @@ public sealed partial class ErrandRunner : IDisposable
                  {
                      StopKind.Retainer => $"{s.Retainer?.Name}",
                      StopKind.Vendor => s.Vendor?.Where() ?? "a vendor",
+                     StopKind.Exchange => $"{s.Vendor?.Where() ?? "a vendor"} (for {string.Join(" + ", s.Items.Where(i => i.Exchange != null).GroupBy(i => i.Exchange!.CurrencyName).Select(g => $"{g.Sum(i => i.CurrencyCost):N0} {g.Key}"))})",
                      _ => $"the market board on {s.World}",
                  })) + ".");
         foreach (var stop in next.Stops)
@@ -578,6 +594,9 @@ public sealed partial class ErrandRunner : IDisposable
                     break;
                 case StopKind.Vendor:
                     AddVendor(stop);
+                    break;
+                case StopKind.Exchange:
+                    AddExchange(stop);
                     break;
                 default:
                     AddMarket(stop);
@@ -1189,7 +1208,10 @@ public sealed partial class ErrandRunner : IDisposable
         return steps;
     }
 
-    private List<Step> OpenShopSteps(VendorOffer v)
+    private List<Step> OpenShopSteps(VendorOffer v) => OpenShopSteps(v, new[] { ErrandTable.Shop });
+
+    /// <summary>Talks to the vendor and goes through their menus until one of <paramref name="windows"/> (their shop) opens.</summary>
+    private List<Step> OpenShopSteps(VendorOffer v, string[] windows)
     {
         var menus = 0;
         var used = DateTime.MinValue;
@@ -1200,7 +1222,7 @@ public sealed partial class ErrandRunner : IDisposable
             Run = () =>
             {
                 if (used == DateTime.MinValue) used = DateTime.UtcNow;
-                if (GameUi.IsOpen(ErrandTable.Shop)) return StepOutcome.Done;
+                if (windows.Any(GameUi.IsOpen)) return StepOutcome.Done;
                 if (ErrandGame.MenuEntries() != null)
                 {
                     if (++menus > 3) return StepOutcome.Halt($"{v.NpcName}'s menus went on and on.");
@@ -1334,6 +1356,178 @@ public sealed partial class ErrandRunner : IDisposable
             TimeoutMessage = $"{Name(item.ItemId)} didn't come to your bags.",
         };
         return Once();
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Currency vendors (0.7.14): MGP at the Gold Saucer, marks, seals, tomestones.
+
+    /// <summary>What each currency may cost in all, as agreed (the plan's), and what's been spent of it.</summary>
+    private readonly Dictionary<uint, long> currencyAgreed = new();
+
+    private readonly Dictionary<uint, long> currencySpent = new();
+
+    private void AddExchange(ErrandStop stop)
+    {
+        var v = stop.Vendor!;
+        Add($"Going to {v.Where()}", () => VendorTravelSteps(v), WindowCleanup, ErrandLeg.Vendor, true, v.NpcName);
+        Add($"Opening {v.NpcName}'s exchange", () => OpenShopSteps(v, ErrandTable.ExchangeWindows), WindowCleanup, ErrandLeg.Vendor, who: v.NpcName);
+        foreach (var item in stop.Items.Where(i => i.Exchange != null))
+            Add($"Exchanging for {Thing(item)} at {v.NpcName}", () => Rehearsal ? RehearseExchange(item) : ExchangeSteps(item), WindowCleanup, ErrandLeg.Vendor, who: v.NpcName, item: item);
+        Add($"Closing {v.NpcName}'s exchange", () => new List<Step>
+        {
+            Step.Act("Close the exchange", () =>
+            {
+                GameUi.Close(ErrandTable.ExchangeDialog);
+                foreach (var w in ErrandTable.ExchangeWindows) GameUi.Close(w);
+                GameUi.Close(ErrandTable.SelectIconString);
+                GameUi.Close(ErrandTable.SelectString);
+                return StepOutcome.Done;
+            }),
+            Step.Wait("The exchange closes", () => !ErrandTable.ExchangeWindows.Any(GameUi.IsOpen), TimeSpan.FromSeconds(3), StepStatus.Done),
+        }, WindowCleanup, ErrandLeg.Vendor, who: v.NpcName);
+    }
+
+    /// <summary>The currency vendor's window that's open, or null.</summary>
+    private static string? ExchangeWindow() => ErrandTable.ExchangeWindows.FirstOrDefault(GameUi.IsOpen);
+
+    /// <summary>
+    /// Exchanges for an item: its row found in the window by name, then Exchange with the count; what
+    /// comes to your bags and what the currency went down by are checked against the plan. A question
+    /// is answered yes only when it names the cost planned; the game's own confirm window (if this
+    /// vendor has one) is left for you to press, and the errands carry on once the item comes.
+    /// </summary>
+    private List<Step> ExchangeSteps(ErrandItem item)
+    {
+        var ex = item.Exchange!;
+        var v = ex.Vendor;
+        var bought = 0;
+        var before = 0;
+        long haveBefore = 0;
+        var n = 0;
+        long cost = 0;
+        var askedYou = false;
+        var stack = ErrandGame.StackSize(item.ItemId);
+        List<Step> Once() => new()
+        {
+            new Step
+            {
+                Label = $"Exchange {ex.CurrencyName} for {Name(item.ItemId)} at {v.NpcName} ({ErrandTable.ExchangeCurrencyBuy.Describe()})",
+                IsAction = true,
+                Key = Guess,
+                Run = () =>
+                {
+                    if (bought >= item.Count) return Finished();
+                    if (ExchangeWindow() is not { } window) return StepOutcome.Halt($"{v.NpcName}'s exchange closed.");
+                    n = Math.Min(item.Count - bought, Math.Min(MaxPerPurchase, stack));
+                    var times = ex.Exchanges(n);
+                    cost = ex.CostFor(n);
+                    var have = ErrandGame.CurrencyCount(ex.Currency);
+                    if (have < cost)
+                    {
+                        log.Warn($"  Not enough {ex.CurrencyName}: {cost:N0} for {n} × {Name(item.ItemId)}, and you have {have:N0}. Left for now.");
+                        return Finished();
+                    }
+                    var agreed = currencyAgreed.GetValueOrDefault(ex.Currency);
+                    if (currencySpent.GetValueOrDefault(ex.Currency) + cost > agreed)
+                    {
+                        log.Warn($"  That would spend more than the {agreed:N0} {ex.CurrencyName} agreed to: {Name(item.ItemId)} is left for now.");
+                        return Finished();
+                    }
+                    var room = ErrandGame.FreeSlots();
+                    if (room < ErrandPlanner.Stacks(n, stack)) return StepOutcome.Halt($"Your bags are full ({room} free slots).");
+                    var row = ErrandGame.ExchangeRow(window, shop.Vendors.ExchangeShopItems(v.ShopId), item.ItemId);
+                    if (row < 0)
+                    {
+                        log.Warn($"  {Name(item.ItemId)} isn't in {v.NpcName}'s list (it may need a quest, or another of their menus): left for now. Its window's words: {GameUi.TextSummary(window)}");
+                        return Finished();
+                    }
+                    before = ErrandGame.BagCount(item.ItemId);
+                    haveBefore = have;
+                    askedYou = false;
+                    log.Info($"  Exchanging {cost:N0} {ex.CurrencyName} for {n} × {Name(item.ItemId)} (row {row}, {times} exchange{(times == 1 ? string.Empty : "s")}).");
+                    var call = window == ErrandTable.ExchangeItem ? ErrandTable.ExchangeItemBuy : ErrandTable.ExchangeCurrencyBuy;
+                    return GameUi.Fire(call, UiCallValues.Of(("row", row), ("count", times))) ? StepOutcome.Done : StepOutcome.Halt($"{v.NpcName}'s exchange closed.");
+                },
+            },
+            Came(),
+        };
+        Step Came() => new()
+        {
+            Label = $"{Name(item.ItemId)} comes to your bags",
+            Run = () =>
+            {
+                var now = ErrandGame.BagCount(item.ItemId);
+                if (now <= before)
+                {
+                    if (GameUi.YesNoText() is { } question)
+                    {
+                        // Only a question naming the cost planned is answered yes.
+                        if (MarketRule.QuestionMatches(question, ex.Cost, ex.Exchanges(n), cost))
+                        {
+                            queue.InsertNext(new[] { Yes(question), Came() });
+                            return StepOutcome.Done;
+                        }
+                        GameUi.Close(UiTable.YesNo);
+                        log.Warn($"  The game asked \"{question}\", not {cost:N0} {ex.CurrencyName} for {n} × {Name(item.ItemId)} as planned: said no, and it's left for you.");
+                        return Finished();
+                    }
+                    if (GameUi.IsOpen(ErrandTable.ExchangeDialog) && !askedYou)
+                    {
+                        // Its confirm window isn't known yet: you press its button (once); then it's seen.
+                        askedYou = true;
+                        log.Warn($"  The game asks to confirm the exchange in its own window: press Exchange there for {n} × {Name(item.ItemId)} ({cost:N0} {ex.CurrencyName}); the errands carry on once it comes.");
+                    }
+                    return StepOutcome.Waiting;
+                }
+                var spent = Math.Max(0, haveBefore - ErrandGame.CurrencyCount(ex.Currency));
+                currencySpent[ex.Currency] = currencySpent.GetValueOrDefault(ex.Currency) + spent;
+                Count(item.ItemId, now - before);
+                bought += now - before;
+                log.Info($"  Got {now - before} × {Name(item.ItemId)} for {spent:N0} {ex.CurrencyName}.");
+                if (spent > cost) return StepOutcome.Halt($"{Name(item.ItemId)} cost {spent:N0} {ex.CurrencyName}, more than the {cost:N0} planned.");
+                if (bought < item.Count) queue.InsertNext(Once());
+                return StepOutcome.Done;
+            },
+            Timeout = TimeSpan.FromSeconds(90),
+            TimeoutMessage = $"{Name(item.ItemId)} didn't come to your bags.",
+        };
+        return Once();
+    }
+
+    /// <summary>
+    /// A rehearsal at a currency vendor: the window open, the item's row found and what it would cost
+    /// said, with what you have; Exchange is never pressed (its click isn't confirmed by a recording yet).
+    /// </summary>
+    private List<Step> RehearseExchange(ErrandItem item)
+    {
+        var ex = item.Exchange!;
+        var v = ex.Vendor;
+        var where = $"Exchanging for {Thing(item)} at {v.NpcName}";
+        return new List<Step>
+        {
+            Step.Act($"Find {Name(item.ItemId)} in {v.NpcName}'s exchange (Exchange isn't pressed in a rehearsal)", () =>
+            {
+                if (ExchangeWindow() is not { } window)
+                {
+                    Rehearsals.Report.Issue(where, $"{v.NpcName}'s exchange window didn't open (looked for {string.Join(" or ", ErrandTable.ExchangeWindows)}).", RehearsalTrouble.Failed);
+                    return Finished();
+                }
+                var row = ErrandGame.ExchangeRow(window, shop.Vendors.ExchangeShopItems(v.ShopId), item.ItemId);
+                var cost = ex.CostFor(item.Count);
+                var have = ErrandGame.CurrencyCount(ex.Currency);
+                if (row < 0)
+                {
+                    Rehearsals.Report.Issue(where, $"{Name(item.ItemId)} wasn't found in the window ({window}). Its words: {GameUi.TextSummary(window)}", RehearsalTrouble.Failed);
+                    log.Warn($"  {Name(item.ItemId)} wasn't found in {window}. Its words: {GameUi.TextSummary(window)}");
+                    return Finished();
+                }
+                if (have < cost) WouldStop(where, $"You have {have:N0} {ex.CurrencyName}; this takes {cost:N0}.");
+                log.Info($"  Would exchange {cost:N0} {ex.CurrencyName} for {item.Count} × {Name(item.ItemId)}: row {row} of {window} (you have {have:N0}). A rehearsal doesn't press Exchange.");
+                Rehearsals.Report.Would(RehearsalAct.Buy, item.Count, 0);
+                Rehearsals.Report.Note($"{where}: found at row {row} of {window}; would spend {cost:N0} {ex.CurrencyName}.");
+                return StepOutcome.Done;
+            }),
+        };
     }
 
     /// <summary>Answers the game's yes/no (OK) for a purchase checked above. [Recording 2: SelectYesno [i:0]]</summary>
@@ -1527,7 +1721,8 @@ public sealed partial class ErrandRunner : IDisposable
                         log.Info($"  {name} is result {index + 1} of the search ({string.Join(" | ", seen)}).");
                         return StepOutcome.Done;
                     }
-                    if (DateTime.UtcNow - searchedAt.Value < TimeSpan.FromSeconds(1.5)) return StepOutcome.Waiting;
+                    // The results come a moment after the search: 1.5 s at Steady, 1 s at Quick, 0.6 s at Daring.
+                    if (DateTime.UtcNow - searchedAt.Value < TimeSpan.FromMilliseconds(Math.Max(600, 1500 * Speed.WaitScale))) return StepOutcome.Waiting;
                     // The results' names aren't in the window's values (0.7.6's log): searched by its full
                     // name, the item is the first result (as you opened it, [i:5, i:0]); whose listings
                     // open is checked next, and another item's are closed and left to you.

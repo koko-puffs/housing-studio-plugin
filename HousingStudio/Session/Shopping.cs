@@ -75,7 +75,36 @@ public sealed class Shopping : IDisposable
 
     private static (uint World, string? Name) dataCentreOf = (uint.MaxValue, null);
 
-    private (Plan? Plan, object? Dyes, bool Vendors, int Market, int Record, int Allagan, bool Prices, string? Scope, string? District, long Minute, int Learnt, string Fixtures) key;
+    private (Plan? Plan, object? Dyes, bool Vendors, int Market, int Record, int Allagan, bool Prices, string? Scope, string? District, long Minute, int Learnt, string Fixtures, string Currencies) key;
+
+    /// <summary>
+    /// The currencies you allow and what you have of each ("29=45000"): the plan is worked out again when
+    /// either changes. Balances read at most every 2 s.
+    /// </summary>
+    private (DateTime Until, Dictionary<uint, long> Have, string Key) currenciesNow = (DateTime.MinValue, new(), string.Empty);
+
+    private (Dictionary<uint, long> Have, string Key) Currencies()
+    {
+        if (DateTime.UtcNow < currenciesNow.Until && currenciesNow.Have.Keys.ToHashSet().SetEquals(config.ErrandsCurrencies)) return (currenciesNow.Have, currenciesNow.Key);
+        var have = new Dictionary<uint, long>();
+        foreach (var c in config.ErrandsCurrencies.OrderBy(c => c))
+        {
+            try
+            {
+                have[c] = ErrandGame.CurrencyCount(c);
+            }
+            catch (Exception ex)
+            {
+                Services.Log.Debug(ex, $"Couldn't read how much of currency {c} you have");
+                have[c] = 0;
+            }
+        }
+        currenciesNow = (DateTime.UtcNow + TimeSpan.FromSeconds(2), have, string.Join(",", have.Select(kv => $"{kv.Key}={kv.Value}")));
+        return (have, currenciesNow.Key);
+    }
+
+    /// <summary>What you have of a currency, as last read (0 when it isn't allowed).</summary>
+    public long Balance(uint currency) => currenciesNow.Have.TryGetValue(currency, out var n) ? n : 0;
 
     /// <summary>
     /// The design's fixtures for the side you're on that aren't in your bags (an item each), for the
@@ -162,8 +191,9 @@ public sealed class Shopping : IDisposable
     {
         var scope = config.LookUpMarketPrices ? DataCentre() : null;
         var (fixtures, fixturesKey) = Fixtures();
+        var (have, currenciesKey) = Currencies();
         var k = (plan, (object?)dyesToBuy, Vendors.Ready, Market.Version, Record.Version, Allagan.Version, config.LookUpMarketPrices, scope, district,
-            DateTime.UtcNow.Ticks / TimeSpan.TicksPerMinute, learnt, fixturesKey);
+            DateTime.UtcNow.Ticks / TimeSpan.TicksPerMinute, learnt, fixturesKey, currenciesKey);
         if (k == key) return last.Shop;
         var firstForPlan = !ReferenceEquals(key.Plan, plan);
         key = k;
@@ -192,7 +222,10 @@ public sealed class Shopping : IDisposable
             if (Vendors.Ready) Market.Request(scope, priced);
             quotes = Market.Quotes(scope, priced);
         }
-        var shop = ShoppingPlanner.Build(needs, retainers, Offers, quotes, Vendors.Craft, district);
+        // Currency vendors (0.7.14): only the currencies you allow, as far as what you have goes.
+        var allowed = new HashSet<uint>(config.ErrandsCurrencies);
+        var shop = ShoppingPlanner.Build(needs, retainers, Offers, quotes, Vendors.Craft, district,
+            Vendors.Exchanges, c => have.TryGetValue(c, out var n) ? n : 0, allowed.Contains);
         last = (shop, needs, priced, scope);
         return shop;
     }

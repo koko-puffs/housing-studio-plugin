@@ -194,6 +194,7 @@ public sealed partial class MainWindow
         public string? TitleItalic;
         public string Button = string.Empty;
         public string Have = string.Empty;
+        public string? Currencies;
         public List<RouteTrip> Route = new();
         public string[] RouteIds = Array.Empty<string>();
         public List<LeftRow> Left = new();
@@ -212,7 +213,8 @@ public sealed partial class MainWindow
         g.Eyebrow = $"{title} · get";
         g.EyebrowUpper = g.Eyebrow.ToUpperInvariant();
         (g.TitlePlain, g.TitleItalic) = ErrandWords.Title(plan);
-        g.Button = ErrandWords.SetOut(plan.TotalGil);
+        g.Button = ErrandWords.SetOut(plan.TotalGil, plan.CurrencyCosts);
+        g.Currencies = ErrandWords.CurrencyLine(plan.CurrencyCosts, Plugin.Shop.Balance);
         g.Route = ErrandWords.Route(plan, data.AnyItemName, ErrandRunner.BellNearby(), ErrandGame.HomeWorld(), ErrandWords.City(config.ErrandsHub));
         g.RouteIds = g.Route.Select((_, i) => $"##errand-trip{i}").ToArray();
         g.Left = ErrandWords.LeftRows(plan.Left, data.AnyItemName);
@@ -371,6 +373,11 @@ public sealed partial class MainWindow
         {
             Kit.Gap(12);
             DimLine("##errand-have", Icon.Backpack, g.Have);
+        }
+        if (g.Currencies != null)
+        {
+            Kit.Gap(8);
+            DimLine("##errand-currencies", Icon.Scale, g.Currencies, Palette.Text);
         }
 
         // The limits above the trips (0.7.13): changing one changes the trips, and with the limits
@@ -617,17 +624,7 @@ public sealed partial class MainWindow
             config.ErrandsOtherWorlds = !config.ErrandsOtherWorlds;
             config.Save();
         }
-        var homeNow = config.ErrandsHome is >= 0 and <= 2 ? config.ErrandsHome : here != null ? (int)here.Kind : 0;
-        SetRow(i++, "Home is", here is { Owned: true } && config.ErrandsHome < 0 ? "As the game says for this home" : "Where \"go home\" takes you (Lifestream)",
-            Kit.SegmentedWidth(HomeLabels), S(40), p =>
-            {
-                var picked = Kit.Segmented("##errand-home", p, HomeLabels, homeNow, 0, Kit.Width - S(40));
-                if (picked != homeNow)
-                {
-                    config.ErrandsHome = picked;
-                    config.Save();
-                }
-            }, below: true);
+        DrawHomeIsRow(i++, here, "##errand-home");
         var spare = config.ErrandsSpareSlots;
         var d = StepperRow(i++, "##errand-spare", "Bag slots to keep free", "Each trip leaves these empty", spare.ToString(), spare > 0, spare < 20);
         if (d != 0)

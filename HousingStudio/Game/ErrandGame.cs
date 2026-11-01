@@ -78,6 +78,26 @@ public static unsafe class ErrandGame
         return mgr == null ? 0 : mgr->GetGil();
     }
 
+    /// <summary>
+    /// How much of a currency you have (MGP is item 29; seals, tomestones, marks): the game's count of the
+    /// item, which takes in the currency page, or the currency page itself, whichever is more.
+    /// </summary>
+    public static long CurrencyCount(uint currencyItem)
+    {
+        var mgr = InventoryManager.Instance();
+        if (mgr == null || currencyItem == 0) return 0;
+        long count = mgr->GetInventoryItemCount(currencyItem, false, false, false, 0);
+        long page = 0;
+        var c = mgr->GetInventoryContainer(InventoryType.Currency);
+        if (c != null && c->IsLoaded)
+            for (var i = 0; i < c->Size; i++)
+            {
+                var item = c->GetInventorySlot(i);
+                if (item != null && !item->IsEmpty() && item->GetBaseItemId() == currencyItem) page += item->GetQuantity();
+            }
+        return Math.Max(count, page);
+    }
+
     /// <summary>How many of an item your bags hold (HQ copies too).</summary>
     public static int BagCount(uint itemId)
     {
@@ -437,6 +457,26 @@ public static unsafe class ErrandGame
         var names = new HashSet<string>(ShopItemNames(shopId));
         var row = 0;
         foreach (var (_, text) in GameUi.TextValues(ErrandTable.Shop).OrderBy(kv => kv.Key))
+        {
+            if (!names.Contains(text)) continue;
+            if (text == wanted) return row;
+            row++;
+        }
+        return -1;
+    }
+
+    /// <summary>
+    /// The row of an item in a currency vendor's window (<paramref name="window"/>), as its texts list it:
+    /// the names of the shop's own items (<paramref name="shopItems"/>, from the game's data) counted in
+    /// the window's order, as <see cref="ShopRow"/> does for a gil shop. -1 when it isn't there.
+    /// </summary>
+    public static int ExchangeRow(string window, IReadOnlyList<uint> shopItems, uint itemId)
+    {
+        var wanted = ItemName(itemId);
+        if (wanted.Length == 0) return -1;
+        var names = new HashSet<string>(shopItems.Select(ItemName).Where(n => n.Length > 0));
+        var row = 0;
+        foreach (var (_, text) in GameUi.TextValues(window).OrderBy(kv => kv.Key))
         {
             if (!names.Contains(text)) continue;
             if (text == wanted) return row;

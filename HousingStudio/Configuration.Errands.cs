@@ -45,6 +45,12 @@ public sealed partial class Configuration
     /// </summary>
     public Dictionary<uint, uint> ErrandsVendorPrices { get; set; } = new();
 
+    /// <summary>
+    /// The currencies the errands may spend at currency vendors (their Item rows; 29 is MGP), 0.7.14.
+    /// Only what you have of one is planned; gil vendors come first. MGP is allowed by default.
+    /// </summary>
+    public HashSet<uint> ErrandsCurrencies { get; set; } = new() { Core.CurrencyItems.Mgp };
+
     /// <summary>Bag slots the errands leave free (a stack that doesn't join one already there, a quest item).</summary>
     public int ErrandsSpareSlots { get; set; } = 2;
 }

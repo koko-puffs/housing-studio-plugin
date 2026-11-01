@@ -204,6 +204,7 @@ public sealed partial class MainWindow
     {
         (SourceKind.Retainer, Icon.Bell, "retainers"),
         (SourceKind.Vendor, Icon.Store, "vendors"),
+        (SourceKind.Exchange, Icon.Store, "currency"),
         (SourceKind.Market, Icon.Scale, "market"),
         (SourceKind.Craft, Icon.Hammer, "craft"),
         (SourceKind.Unknown, Icon.Info, "not known"),

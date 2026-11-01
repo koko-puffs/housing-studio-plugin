@@ -46,8 +46,8 @@ public class FlowScreensTests
     [Fact]
     public void PaceInOneLine()
     {
-        Assert.Equal("0.6 s between pieces", PaceSetting.Short(Pace.Steady));
-        Assert.Equal("0.15 s between pieces", PaceSetting.Short(Pace.Quick));
-        Assert.Equal("0.05 s between pieces", PaceSetting.Short(Pace.Daring));
+        Assert.Equal("0.15 s between pieces", PaceSetting.Short(Pace.Steady));
+        Assert.Equal("0.05 s between pieces", PaceSetting.Short(Pace.Quick));
+        Assert.Equal("0.02 s between pieces", PaceSetting.Short(Pace.Daring));
     }
 }

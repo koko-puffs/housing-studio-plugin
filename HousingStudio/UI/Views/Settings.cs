@@ -42,7 +42,7 @@ public sealed partial class MainWindow
     /// <summary>The settings under More options (shown on its row).</summary>
     private const int MoreCount = 12;
 
-    private const int GettingRows = 8;
+    private const int GettingRows = 9;
 
     private static readonly TabSpec[] SettingsTabs =
     {
@@ -429,6 +429,7 @@ public sealed partial class MainWindow
                 config.Save();
             }
         }, below: true);
+        DrawCurrenciesRow(i++);
         if (SwitchRow(i++, "##errand-ride", "Ride and sprint", "Mount up where the zone allows, else sprint", config.ErrandsRide,
                 "For walks of 35 yalms or more, the mount roulette where the zone lets you ride (not a city's streets or inside); Sprint otherwise, again whenever it's ready. Off: walks." + errands))
         {
@@ -445,21 +446,92 @@ public sealed partial class MainWindow
         }
         // Which home "go home" is: here too, as the errands can't open their screen while it's unknown.
         var here = ErrandGame.HomeHere(session.Context);
+        DrawHomeIsRow(i++, here, "##settings-errand-home");
+        DrawDoorWayRow(i++);
+        DrawAccountRow(i++);
+        DrawGameLinkRows(i);
+        Kit.EndPanel();
+    }
+
+    /// <summary>
+    /// Currencies (0.7.14): which currencies the errands may spend at currency vendors (MGP, marks, seals,
+    /// tomestones…), each a pill, picked ones lit; the game's list of the currencies that vendors take for
+    /// furnishings, dyes and fixtures (MGP first). Only what you have of one is ever planned.
+    /// </summary>
+    private void DrawCurrenciesRow(int index)
+    {
+        var all = Plugin.Shop.Vendors.Currencies;
+        var list = all.OrderBy(c => c.Item == CurrencyItems.Mgp ? 0 : 1).ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        if (list.Count == 0)
+        {
+            SetRow(index, "Currencies", Plugin.Shop.Vendors.Ready ? "No currency vendor sells furnishings" : "Reading the game's vendors…", 0, 0, _ => { });
+            return;
+        }
+        // The pills, wrapped to the row's width.
+        var width = Kit.Width - S(28);
+        var gap = S(8);
+        var h = Kit.ButtonHeight(BtnSize.Tiny);
+        var spots = new List<Vector2>();
+        float x = 0, y = 0;
+        foreach (var (_, name) in list)
+        {
+            var w = Kit.ButtonWidth(name, BtnSize.Tiny);
+            if (x > 0 && x + w > width)
+            {
+                x = 0;
+                y += h + gap;
+            }
+            spots.Add(new Vector2(x, y));
+            x += w + gap;
+        }
+        var allowed = config.ErrandsCurrencies;
+        var on = list.Count(c => allowed.Contains(c.Item));
+        SetRow(index, "Currencies", on == 0 ? "None: gil vendors and the board only" : $"{on} the errands may spend, only what you have", width, y + h, p =>
+        {
+            for (var c = 0; c < list.Count; c++)
+            {
+                var (item, name) = list[c];
+                var picked = allowed.Contains(item);
+                if (Kit.Button($"##currency{item}", p + spots[c], name, picked ? Btn.Picked : Btn.Glass, BtnSize.Tiny, null, 0, false,
+                        picked ? $"The errands may spend {name} at its vendors (after any gil vendor)." : $"Let the errands spend {name} at its vendors."))
+                {
+                    if (picked) allowed.Remove(item);
+                    else allowed.Add(item);
+                    config.Save();
+                }
+            }
+        }, below: true,
+            tip: "Currency vendors (the Gold Saucer's for MGP, and others for marks, seals, tomestones): the errands go to them for what no gil vendor sells, "
+                 + "spending only what you have of a currency you pick here. The estimate shows what each costs before you set out.");
+    }
+
+    /// <summary>
+    /// Home is: the home you're in, when the game says it's yours (your house, your company's house or
+    /// private chambers in it, your apartment): that's the one the errands go home to, whatever was
+    /// chosen before (0.7.13 went to your house's ward with Lavender Beds' merchants planned, from your
+    /// company's chambers). Only a home the game doesn't say is yours asks which it is.
+    /// </summary>
+    private void DrawHomeIsRow(int index, HomeRef? here, string id)
+    {
+        if (here is { Owned: true })
+        {
+            var what = here.Chamber ? "Your private chambers, in your company's house"
+                : here.Kind switch { HomeKind.CompanyHouse => "Your company's house", HomeKind.Apartment => "Your apartment", _ => "Your house" };
+            SetRow(index, "Home is", $"{what}: the one you're in", 0, 0, _ => { }, false,
+                "The errands go home to the home you start them in. Start them in another of your homes to decorate that one.");
+            return;
+        }
         var homeNow = config.ErrandsHome is >= 0 and <= 2 ? config.ErrandsHome : here != null ? (int)here.Kind : 0;
-        SetRow(i++, "Home is", here is { Owned: true } && config.ErrandsHome < 0 ? "As the game says for this home" : "Where \"go home\" takes you (Lifestream)",
+        SetRow(index, "Home is", here == null ? "Where \"go home\" takes you (read from the home you're in)" : "The game doesn't say this home is yours: which is it?",
             Kit.SegmentedWidth(HomeLabels), S(40), p =>
             {
-                var picked = Kit.Segmented("##settings-errand-home", p, HomeLabels, homeNow, 0, Kit.Width - S(40));
+                var picked = Kit.Segmented(id, p, HomeLabels, homeNow, 0, Kit.Width - S(40));
                 if (picked != homeNow)
                 {
                     config.ErrandsHome = picked;
                     config.Save();
                 }
             }, below: true);
-        DrawDoorWayRow(i++);
-        DrawAccountRow(i++);
-        DrawGameLinkRows(i);
-        Kit.EndPanel();
     }
 
     /// <summary>

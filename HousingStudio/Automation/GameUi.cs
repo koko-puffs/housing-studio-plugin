@@ -191,6 +191,10 @@ public static unsafe class GameUi
         return result;
     }
 
+    /// <summary>A window's first texts, in order ("[3] Prize Exchange | [12] Cactuar Screen | …"), for the log when something isn't found.</summary>
+    public static string TextSummary(string name, int max = 40) =>
+        string.Join(" | ", TextValues(name).OrderBy(kv => kv.Key).Where(kv => kv.Value.Trim().Length > 0).Take(max).Select(kv => $"[{kv.Key}] {kv.Value}"));
+
     /// <summary>Every value a window holds, typed ("[12] i:3"), for diagnostics.</summary>
     public static string DumpValues(string name, int max = 2000)
     {

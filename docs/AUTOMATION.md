@@ -385,6 +385,21 @@ listed); the item search proxy only when it isn't.
 and opening the furnishing editor waits for its bar too: the editor opens in the mode last used
 (0.7.11's recording: mode Store at 403.85 s, `HousingLayout` open at 404.02).
 
+**Currency vendors** (0.7.14): `VendorData` reads `SpecialShop` (`Item` entries: `ReceiveItems[0].Item`,
+`ReceiveCount`; one `ItemCosts` entry with `ItemCost` and `CurrencyCost`); a cost item below 8 is resolved
+by `UseCurrencyType` (4: `TomestonesItem`), otherwise skipped; the currency must be an Item of UI
+category 100. NPCs reach them through ENpcData 0x1B…, TopicSelect, PreHandler and CustomTalk as gil
+shops do (`NpcDataKind.SpecialShop`). `ExchangeOffer` (the vendor, currency, cost, gives);
+`ShoppingPlanner.Build(..., exchanges, balance, currencyAllowed)` after gil vendors, before the board,
+sharing out each balance (`ErrandGame.CurrencyCount`: the item count or the Currency page);
+`SourceKind.Exchange` / `StopKind.Exchange`; `ErrandPlan.CurrencyCosts`, agreed at Start
+(`currencyAgreed`). At the vendor: `OpenShopSteps(v, ErrandTable.ExchangeWindows)`, `ErrandGame.ExchangeRow`
+(the window's texts against `VendorData.ExchangeShopItems`), `ErrandTable.ExchangeCurrencyBuy` /
+`ExchangeItemBuy` `[i:0, i:row, i:count]` (Guess, unverified: `Key = Guess`), a yes/no naming the cost
+answered yes, `ShopExchangeCurrencyDialog` left for you. `RehearseExchange` finds the row only.
+`ErrandRunner.KindOf`: the home's own kind when `Owned`. `PaceProfile.ErrandGapMs` sets the errands'
+`ActionGap`; the board's results wait `max(0.6 s, 1.5 s × WaitScale)`.
+
 **0.7.13**: `ErrandPlanner.Pack` cuts each stop's units (by `Key`) into pieces that fit a trip, then
 packs the pieces biggest first into the first trip with room (first-fit decreasing); a trip keeps the
 plan's order. `NeedKind.Fixture`: `Shopping.FixturesToGet` (the plugin sets it to `FixtureRun.Plan()`'s

@@ -55,6 +55,52 @@ public sealed record VendorOffer(
     }
 }
 
+/// <summary>
+/// An NPC that exchanges an item for a currency other than gil (MGP at the Gold Saucer, wolf marks,
+/// allied seals, tomestones…): the game's SpecialShop rows. <see cref="Vendor"/> says who and where (its
+/// Price is 0, its ShopId the SpecialShop row, its ShopName as the NPC's menu lists it).
+/// </summary>
+/// <param name="Currency">The currency's Item row (29 is MGP).</param>
+/// <param name="CurrencyName">"MGP", "Wolf Mark".</param>
+/// <param name="Cost">The currency one exchange costs.</param>
+/// <param name="Gives">How many of the item one exchange gives (usually 1).</param>
+public sealed record ExchangeOffer(VendorOffer Vendor, uint Currency, string CurrencyName, uint Cost, int Gives = 1)
+{
+    public uint ItemId => Vendor.ItemId;
+
+    /// <summary>How many exchanges <paramref name="count"/> of the item takes.</summary>
+    public int Exchanges(int count) => count <= 0 ? 0 : (count + Math.Max(1, Gives) - 1) / Math.Max(1, Gives);
+
+    /// <summary>The currency <paramref name="count"/> of the item costs.</summary>
+    public long CostFor(int count) => (long)Cost * Exchanges(count);
+
+    /// <summary>How many of the item <paramref name="balance"/> of the currency buys (whole exchanges).</summary>
+    public int Affords(long balance) => Cost == 0 ? int.MaxValue : (int)Math.Min(int.MaxValue, balance / Cost * Math.Max(1, Gives));
+}
+
+/// <summary>Currencies' Item rows the plugin names.</summary>
+public static class CurrencyItems
+{
+    /// <summary>MGP (the Gold Saucer's).</summary>
+    public const uint Mgp = 29;
+}
+
+/// <summary>Choosing among the currency vendors for an item. Pure, so it's tested.</summary>
+public static class ExchangeChoice
+{
+    /// <summary>
+    /// The offers you may use (their currency allowed, <paramref name="allowed"/>), the vendor's spot
+    /// known first, then the least of the currency, then the lowest NPC (steady).
+    /// </summary>
+    public static IEnumerable<ExchangeOffer> Ranked(IEnumerable<ExchangeOffer> offers, Func<uint, bool> allowed) =>
+        offers.Where(o => allowed(o.Currency) && o.Cost > 0)
+            .OrderBy(o => o.Vendor.Located ? 0 : 1)
+            .ThenBy(o => o.Vendor.NeedsUnlock)
+            .ThenBy(o => (double)o.Cost / Math.Max(1, o.Gives))
+            .ThenBy(o => o.Vendor.NpcId)
+            .ThenBy(o => o.Vendor.ShopId);
+}
+
 /// <summary>Choosing among the vendors who sell an item. Pure, so it's tested.</summary>
 public static class VendorChoice
 {
@@ -124,6 +170,7 @@ public static class Residential
     {
         0x0004 => NpcDataKind.GilShop,
         0x000B => NpcDataKind.CustomTalk,
+        0x001B => NpcDataKind.SpecialShop,
         0x0032 => NpcDataKind.TopicSelect,
         0x0036 => NpcDataKind.PreHandler,
         _ => NpcDataKind.Other,
@@ -137,4 +184,7 @@ public enum NpcDataKind
     CustomTalk,
     TopicSelect,
     PreHandler,
+
+    /// <summary>A shop that exchanges items for a currency other than gil (0x1B…).</summary>
+    SpecialShop,
 }

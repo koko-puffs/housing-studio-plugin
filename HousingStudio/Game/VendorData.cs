@@ -62,6 +62,19 @@ public sealed class VendorData
     public IReadOnlyList<System.Numerics.Vector3> SpotsOf(string npcName, uint territory) =>
         tables is { } t && t.SpotsByName.TryGetValue((npcName, territory), out var list) ? list : NoSpots;
 
+    private static readonly IReadOnlyList<ExchangeOffer> NoExchanges = Array.Empty<ExchangeOffer>();
+
+    /// <summary>Every NPC exchanging an item for a currency other than gil (each place they stand), or none.</summary>
+    public IReadOnlyList<ExchangeOffer> Exchanges(uint itemId) =>
+        tables is { } t && t.ExchangesByItem.TryGetValue(itemId, out var list) ? list : NoExchanges;
+
+    /// <summary>The currencies the vendors take for furnishings, dyes and fixtures (for Settings), by name; empty until read.</summary>
+    public IReadOnlyList<(uint Item, string Name)> Currencies => tables?.Currencies ?? (IReadOnlyList<(uint, string)>)Array.Empty<(uint, string)>();
+
+    /// <summary>A SpecialShop's items in its own order (every entry that gives one thing), or none.</summary>
+    public IReadOnlyList<uint> ExchangeShopItems(uint shopId) =>
+        tables is { } t && t.ExchangeShopItems.TryGetValue(shopId, out var list) ? list : Array.Empty<uint>();
+
     /// <summary>Every NPC selling an item for gil (each place they stand), or none.</summary>
     public IReadOnlyList<VendorOffer> Offers(uint itemId) =>
         tables is { } t && t.ByItem.TryGetValue(itemId, out var list) ? list : None;
@@ -72,6 +85,9 @@ public sealed class VendorData
     /// <summary>Whether the item can be sold on the market board (tradable, with a board category).</summary>
     public bool Marketable(uint itemId) => marketable.GetOrAdd(itemId, id =>
         Services.Data.GetExcelSheet<Item>().TryGetRow(id, out var item) && !item.IsUntradable && item.ItemSearchCategory.RowId != 0);
+
+    /// <summary>The item UI category of currencies (gil, MGP, seals, tomestones…).</summary>
+    private const uint CurrencyCategory = 100;
 
     /// <summary>A fixture (a house's or a room's walls, floor, light…): its Item's UI category is one of the fixtures'.</summary>
     private static bool IsFixtureItem(uint itemId) =>
@@ -106,6 +122,15 @@ public sealed class VendorData
     private sealed class Tables
     {
         public readonly Dictionary<uint, IReadOnlyList<VendorOffer>> ByItem = new();
+
+        /// <summary>The currency vendors (SpecialShops) for an item.</summary>
+        public readonly Dictionary<uint, IReadOnlyList<ExchangeOffer>> ExchangesByItem = new();
+
+        /// <summary>Every currency some vendor takes for a wanted item (its Item row and name), by name.</summary>
+        public readonly List<(uint Item, string Name)> Currencies = new();
+
+        /// <summary>Each SpecialShop's items as its window lists them (for finding a row by name).</summary>
+        public readonly Dictionary<uint, IReadOnlyList<uint>> ExchangeShopItems = new();
 
         /// <summary>Every spot of a selling NPC, by its name and territory (both divisions of a ward).</summary>
         public readonly Dictionary<(string Name, uint Territory), List<System.Numerics.Vector3>> SpotsByName = new();
@@ -143,6 +168,73 @@ public sealed class VendorData
                 if (!shopItems.TryGetValue(row.RowId, out var list)) shopItems[row.RowId] = list = new List<(uint, bool, uint[])>();
                 list.Add((id, unlock, quests.ToArray()));
             }
+        // Currency shops (SpecialShop: MGP, wolf marks, allied seals, tomestones…), 0.7.14: each entry
+        // that gives one wanted item for one cost in a currency (an Item of the Currency UI category). A
+        // cost item below 8 is an index the shop's UseCurrencyType resolves (4: a tomestone, by the
+        // TomestonesItem sheet); the others (scrips' 16, gil's 8) are left out.
+        var exchangeItems = new Dictionary<uint, List<(uint Item, int Gives, uint Currency, uint Cost)>>();
+        var exchangeAll = new Dictionary<uint, List<uint>>();
+        var exchangeNames = new Dictionary<uint, string>();
+        var tomestones = new Dictionary<uint, uint>();
+        try
+        {
+            foreach (var t in Services.Data.GetExcelSheet<TomestonesItem>())
+                if (t.Tomestones.RowId != 0 && t.Item.RowId != 0) tomestones.TryAdd(t.Tomestones.RowId, t.Item.RowId);
+        }
+        catch (Exception ex)
+        {
+            Services.Log.Debug(ex, "Couldn't read the tomestones' items");
+        }
+        uint CurrencyOf(uint costItem, long useCurrencyType)
+        {
+            if (costItem >= 8) return costItem;
+            if (costItem == 0) return 0;
+            return useCurrencyType == 4 && tomestones.TryGetValue(costItem, out var item) ? item : 0;
+        }
+        try
+        {
+            foreach (var sp in Services.Data.GetExcelSheet<SpecialShop>())
+            {
+                var listed = new List<uint>();
+                foreach (var entry in sp.Item)
+                {
+                    if (entry.ReceiveItems.Count == 0) continue;
+                    var gets = entry.ReceiveItems[0].Item.RowId;
+                    if (gets == 0) continue;
+                    listed.Add(gets);
+                    // One thing for one cost only (not "a and b for x and y").
+                    var more = false;
+                    for (var r = 1; r < entry.ReceiveItems.Count; r++) more |= entry.ReceiveItems[r].Item.RowId != 0;
+                    var costItem = 0u;
+                    var costAmount = 0u;
+                    var costCount = 0;
+                    foreach (var c in entry.ItemCosts)
+                    {
+                        if (c.ItemCost.RowId == 0 || c.CurrencyCost <= 0) continue;
+                        costCount++;
+                        costItem = c.ItemCost.RowId;
+                        costAmount = (uint)c.CurrencyCost;
+                    }
+                    if (more || costCount != 1) continue;
+                    if (!(data.IsFurnishing(gets) || wanted.Contains(gets) || IsFixtureItem(gets))) continue;
+                    var currency = CurrencyOf(costItem, sp.UseCurrencyType);
+                    if (currency <= 1 || !items.TryGetRow(currency, out var cur) || cur.ItemUICategory.RowId != CurrencyCategory) continue;
+                    var gives = Math.Max(1, (int)entry.ReceiveItems[0].ReceiveCount);
+                    if (!exchangeItems.TryGetValue(sp.RowId, out var list)) exchangeItems[sp.RowId] = list = new List<(uint, int, uint, uint)>();
+                    list.Add((gets, gives, currency, costAmount));
+                }
+                if (exchangeItems.ContainsKey(sp.RowId))
+                {
+                    exchangeAll[sp.RowId] = listed;
+                    exchangeNames[sp.RowId] = sp.Name.ExtractText();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Services.Log.Warning(ex, "Couldn't read the currency vendors: the errands leave them out");
+        }
+
         var shopNames = new Dictionary<uint, string>();
         var gilShops = Services.Data.GetExcelSheet<GilShop>();
         foreach (var id in shopItems.Keys)
@@ -159,14 +251,14 @@ public sealed class VendorData
             if (dataId == 0 || depth > 3) return;
             var kind = Residential.KindOf(dataId);
             if (kind == NpcDataKind.Other) return;
-            if (kind != NpcDataKind.GilShop && reached.TryGetValue(dataId, out var known))
+            if (kind != NpcDataKind.GilShop && kind != NpcDataKind.SpecialShop && reached.TryGetValue(dataId, out var known))
             {
                 into.UnionWith(known);
                 return;
             }
             var found = new HashSet<uint>();
             Walk(dataId, kind, found, depth);
-            if (kind != NpcDataKind.GilShop) reached[dataId] = found.ToArray();
+            if (kind != NpcDataKind.GilShop && kind != NpcDataKind.SpecialShop) reached[dataId] = found.ToArray();
             into.UnionWith(found);
         }
         void Walk(uint dataId, NpcDataKind kind, HashSet<uint> into, int depth)
@@ -175,6 +267,9 @@ public sealed class VendorData
             {
                 case NpcDataKind.GilShop:
                     if (shopItems.ContainsKey(dataId)) into.Add(dataId);
+                    break;
+                case NpcDataKind.SpecialShop:
+                    if (exchangeItems.ContainsKey(dataId)) into.Add(dataId);
                     break;
                 case NpcDataKind.TopicSelect:
                     if (topics.TryGetRow(dataId, out var topic))
@@ -187,7 +282,7 @@ public sealed class VendorData
                 case NpcDataKind.CustomTalk:
                     if (talks.TryGetRow(dataId, out var talk))
                         foreach (var s in talk.Script)
-                            if (Residential.KindOf(s.ScriptArg) == NpcDataKind.GilShop) ShopsOf(s.ScriptArg, into, depth + 1);
+                            if (Residential.KindOf(s.ScriptArg) is NpcDataKind.GilShop or NpcDataKind.SpecialShop) ShopsOf(s.ScriptArg, into, depth + 1);
                     break;
             }
         }
@@ -265,12 +360,32 @@ public sealed class VendorData
             return p;
         }
         var byItem = new Dictionary<uint, List<VendorOffer>>();
+        var byExchange = new Dictionary<uint, List<ExchangeOffer>>();
+        var currencies = new Dictionary<uint, string>();
         foreach (var (npc, shops) in npcShops)
         {
             var name = residents.TryGetRow(npc, out var res) ? NpcName(res.Singular.ExtractText()) : string.Empty;
             if (name.Length == 0) name = "Vendor";
             var at = spots.TryGetValue(npc, out var list) ? list : new List<Spot>();
-            foreach (var shop in shops)
+            foreach (var shop in shops.Where(exchangeItems.ContainsKey))
+                foreach (var (item, gives, currency, cost) in exchangeItems[shop])
+                {
+                    var currencyName = items.TryGetRow(currency, out var ci) ? ci.Name.ExtractText() : $"Currency {currency}";
+                    if (!byExchange.TryGetValue(item, out var offers)) byExchange[item] = offers = new List<ExchangeOffer>();
+                    foreach (var spot in at.Count > 0 ? at : new List<Spot> { default })
+                    {
+                        var located = spot.Territory != 0;
+                        var (place, district) = located ? PlaceOf(spot.Territory) : (string.Empty, null);
+                        System.Numerics.Vector2? coords = located && maps.TryGetRow(spot.Map, out var map)
+                            ? MapCoords.FromWorld(spot.Position, map.OffsetX, map.OffsetY, map.SizeFactor)
+                            : null;
+                        var vendor = new VendorOffer(item, 0, npc, name, shop, exchangeNames[shop], spot.Territory, place, spot.Map, coords,
+                            located ? spot.Position : null, district);
+                        offers.Add(new ExchangeOffer(vendor, currency, currencyName, cost, gives));
+                    }
+                    if (!currencies.ContainsKey(currency)) currencies[currency] = currencyName;
+                }
+            foreach (var shop in shops.Where(shopItems.ContainsKey))
                 foreach (var (item, unlock, quests) in shopItems[shop])
                 {
                     var price = items.TryGetRow(item, out var it) ? it.PriceMid : 0;
@@ -305,6 +420,13 @@ public sealed class VendorData
         }
         foreach (var (item, offers) in byItem)
             tables.ByItem[item] = VendorChoice.Ranked(offers).ToList();
+        foreach (var (item, offers) in byExchange)
+            tables.ExchangesByItem[item] = offers;
+        tables.Currencies.AddRange(currencies.Select(c => (c.Key, c.Value)).OrderBy(c => c.Item2, StringComparer.OrdinalIgnoreCase));
+        foreach (var (shop, listed) in exchangeAll)
+            tables.ExchangeShopItems[shop] = listed;
+        Services.Log.Debug($"Currency vendors read: {tables.ExchangesByItem.Values.Sum(l => l.Count)} offers for {tables.ExchangesByItem.Count} items, "
+                           + $"in {tables.Currencies.Count} currencies ({string.Join(", ", tables.Currencies.Select(c => c.Name))})");
         return tables;
     }
 

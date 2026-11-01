@@ -87,7 +87,7 @@ public class PacingTests
     [Fact]
     public void NeverGoesQuickerThanTheFloor()
     {
-        Assert.Equal(Pacing.MinimumMs, Pacing.NextDelayMs(100, 0.5f, 0));
+        Assert.Equal(Pacing.MinimumMs, Pacing.NextDelayMs(30, 0.5f, 0));
         Assert.True(Pacing.NextDelayMs(Pacing.MinimumMs, 0.5f, 0) >= Pacing.MinimumMs);
     }
 

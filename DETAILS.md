@@ -8,7 +8,25 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.7.13. Placing works in the game; the newer features haven't all been tried in it yet.**
+> **Status: 0.7.14. Placing works in the game; the newer features haven't all been tried in it yet.**
+> 0.7.14: **Currency vendors.** The errands now read the game's currency shops (SpecialShop: MGP at
+> the Gold Saucer, marks, seals, tomestones) and, for what no gil vendor sells, plan them before the
+> market board: only currencies you allow (Settings → Getting → **Currencies**, MGP on by default),
+> and only as much as what you have of each buys (the rest from the board). The estimate says what
+> each currency costs against what you have ("Also spends 45,000 MGP (you have 120,000)"), and the
+> brass button names it ("Set out · up to 58,920 gil + 45,000 MGP"); a run never spends more of a
+> currency than was shown. At the vendor: their window (ShopExchangeCurrency or ShopExchangeItem),
+> the item's row found by name, Exchange with the count, and what comes to your bags and what the
+> currency went down by checked. **The Exchange click isn't confirmed by a recording yet**: it waits
+> for Continue until "Trust the new clicks" is on, a rehearsal finds the row and never presses it, and
+> if the game opens its own confirm window you press its button and the errands carry on. **Home**:
+> the home you start in is the one the errands go home to whenever the game says it's yours (0.7.13
+> let Settings' "Home is" win: from company chambers with "My house" chosen, it planned Lavender
+> Beds' merchants and teleported to the house in Mist); "Home is" only asks for a home the game
+> doesn't say is yours. **Paces, a step faster**: Steady is what Quick was, Quick (the default) what
+> Daring was, and Daring is new: 0.02 s between pieces, 0.12 s between clicks, waits at 0.4, the
+> errands' clicks 0.15 s apart and the board's results read after 0.6 s. A pace chosen before keeps
+> its speed (Daring becomes Quick, the rest Steady).
 > 0.7.13: **No Beta**: the errands, setting the fixtures and putting back what changed are always
 > there, and the Beta tab and tags are gone; Ready's own switches (Get them for me first, Set them for
 > me after placing) are on by default. **New defaults** for a new install: Daring pace, pieces in place
