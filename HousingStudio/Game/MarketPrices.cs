@@ -94,6 +94,14 @@ public sealed class MarketPrices : IDisposable
             }
             var json = await response.Content.ReadAsStringAsync(stop.Token).ConfigureAwait(false);
             var got = Universalis.Parse(json, scope, DateTime.UtcNow);
+            // Not Universalis's JSON (a proxy's or a block page, answered 200): no prices this time,
+            // rather than every item marked "nothing listed" for 15 minutes.
+            if (got.Count == 0 && !json.TrimStart().StartsWith('{'))
+            {
+                LastError = "Universalis answered something that isn't market data";
+                Services.Log.Debug($"Market prices: {url} → not JSON ({json.Length} characters)");
+                return;
+            }
             foreach (var (id, q) in got) quotes[(scope, id)] = q;
             // Items Universalis doesn't know: an empty quote, so they aren't asked again for a while.
             foreach (var id in batch.Where(id => !got.ContainsKey(id)))

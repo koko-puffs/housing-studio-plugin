@@ -141,6 +141,7 @@ public sealed class ViewModel
     // Dyes missing, read from your bags once per plan.
 
     private Plan? dyesFor;
+    private DateTime dyesAgain;
     private List<(byte Stain, string Name, int Count)> missingDyes = new();
 
     /// <summary>The dyes this design needs beyond what's in your bags (<see cref="LayoutSession.MissingDyes"/>), for the plan as it stands.</summary>
@@ -148,10 +149,15 @@ public sealed class ViewModel
     {
         get
         {
-            if (!ReferenceEquals(dyesFor, session.Plan))
+            // Again for a new plan, and every 2 s (dyes in your bags don't change the plan: bought by hand,
+            // they stayed "to buy", and the errands bought them again). The same list while it says the same.
+            var now = DateTime.UtcNow;
+            if (!ReferenceEquals(dyesFor, session.Plan) || now >= dyesAgain)
             {
                 dyesFor = session.Plan;
-                missingDyes = session.MissingDyes();
+                dyesAgain = now + TimeSpan.FromSeconds(2);
+                var fresh = session.MissingDyes();
+                if (!fresh.SequenceEqual(missingDyes)) missingDyes = fresh;
             }
             return missingDyes;
         }

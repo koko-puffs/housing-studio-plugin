@@ -117,7 +117,8 @@ public sealed class Plugin : IDalamudPlugin
         Services.ClientState.Login += OnLogin;
 
         // Reopen the last design, so it's there when you come back to your house.
-        if (config.RecentFiles.Count > 0 && System.IO.File.Exists(config.RecentFiles[0])) session.Load(config.RecentFiles[0]);
+        // (Safely: a file that fails to load mustn't leave the plugin half set up, its hooks in the game.)
+        if (config.RecentFiles.Count > 0 && System.IO.File.Exists(config.RecentFiles[0])) Safely(() => session.Load(config.RecentFiles[0]));
     }
 
     private DateTime drawFailedAt;
@@ -163,33 +164,59 @@ public sealed class Plugin : IDalamudPlugin
 
     private void OnUpdate(IFramework framework)
     {
+        HousingContext ctx;
         try
         {
-            var ctx = HousingContext.Read(Plots);
+            ctx = HousingContext.Read(Plots);
             runner.Update();
             runner.Tick(ctx);
             Errands.Tick(ctx);
             FixtureRun.Tick(ctx);
-            // "Set them for me after placing" follows its run here, whether the window is open or not.
-            window.Tick();
-            care.Tick(ctx);
-            link.Tick(ctx);
-            recorder.Tick();
-            Shop.Tick();
-            if (DateTime.UtcNow >= nextRefresh)
-            {
-                nextRefresh = DateTime.UtcNow + (runner.Active ? RefreshWhileRunning : RefreshEvery);
-                session.Refresh(ctx);
-            }
         }
         catch (Exception ex)
         {
-            Services.Log.Error(ex, "Housing Studio update failed");
+            // The runs themselves (or reading where you are): stopped, to be safe.
+            Throttled(ex, "Housing Studio update failed");
             Safely(() => runner.Stop("Something went wrong reading the game; stopped to be safe."));
             Safely(() => FixtureRun.Stop("Something went wrong reading the game; stopped to be safe."));
             Safely(() => Errands.Stop("Something went wrong reading the game; stopped to be safe."));
             Safely(anywhere.Disable);
+            return;
         }
+        // The rest each on its own: one failing (every frame, say) no longer stops every run, and its
+        // error is logged at most every 10 s.
+        Ticked(window.Tick, "the window's");
+        Ticked(() => care.Tick(ctx), "the home check's");
+        Ticked(() => link.Tick(ctx), "the site link's");
+        Ticked(recorder.Tick, "the recording's");
+        Ticked(Shop.Tick, "the shopping list's");
+        Ticked(() =>
+        {
+            if (DateTime.UtcNow < nextRefresh) return;
+            nextRefresh = DateTime.UtcNow + (runner.Active ? RefreshWhileRunning : RefreshEvery);
+            session.Refresh(ctx);
+        }, "reading the home's");
+    }
+
+    private DateTime updateFailedAt = DateTime.MinValue;
+
+    private void Ticked(Action tick, string what)
+    {
+        try
+        {
+            tick();
+        }
+        catch (Exception ex)
+        {
+            Throttled(ex, $"Housing Studio: {what} update failed");
+        }
+    }
+
+    private void Throttled(Exception ex, string message)
+    {
+        if (DateTime.UtcNow - updateFailedAt < TimeSpan.FromSeconds(10)) return;
+        updateFailedAt = DateTime.UtcNow;
+        Services.Log.Error(ex, message);
     }
 
     private void OnTerritoryChanged(uint territory)

@@ -140,7 +140,7 @@ public sealed unsafe class UiRecorder : IDisposable
         var tab = hm != null && hm->IndoorTerritory != null && hm->IndoorTerritory->ShowStoreroomTab;
         var placed = CountPlaced();
         var previewAt = preview != null ? $"({preview->Position.X:0.00}, {preview->Position.Y:0.00}, {preview->Position.Z:0.00}) r{preview->Rotation:0.00}" : "none";
-        return $"mode={mode} active={(active != 0 ? $"0x{active:X}" : "none")} preview={previewAt} storeroomTab={tab} storeroomPick={(selection is { } s ? $"{s.Container}/{s.Slot}" : "none")} placed={placed}";
+        return $"mode={mode} active={(active != 0 ? $"0x{active:X}" : "none")} preview={previewAt} storeroomTab={tab} storeroomPick={(selection is { } s ? $"{s.Container}/{s.Slot}" : "none")} placed={placed} spawned={CountSpawned()}";
     }
 
     private static int CountPlaced()
@@ -149,6 +149,18 @@ public sealed unsafe class UiRecorder : IDisposable
         if (hm == null) return 0;
         var fm = hm->IndoorTerritory != null ? &hm->IndoorTerritory->FurnitureManager : hm->OutdoorTerritory != null ? &hm->OutdoorTerritory->FurnitureManager : null;
         return fm == null ? 0 : (int)fm->FurnitureVector.LongCount;
+    }
+
+    /// <summary>The spawned furniture objects inside (the reader's first source), for the STATE line.</summary>
+    private static int CountSpawned()
+    {
+        var hm = HousingManager.Instance();
+        if (hm == null || hm->IndoorTerritory == null) return 0;
+        var array = &hm->IndoorTerritory->FurnitureManager.ObjectManager.ObjectArray;
+        var n = 0;
+        foreach (var p in array->Objects)
+            if (p.Value != null && p.Value != array->TempObject) n++;
+        return n;
     }
 
     private bool Detour(AtkUnitBase* self, uint count, AtkValue* values, bool close)

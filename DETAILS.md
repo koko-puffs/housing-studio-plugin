@@ -8,7 +8,34 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.7.14. Placing works in the game; the newer features haven't all been tried in it yet.**
+> **Status: 0.8.0. Placing works in the game; the newer features haven't all been tried in it yet.**
+> 0.8.0, from a full rehearsal and a scan of the whole plugin. **The errands**: a bell or board is used
+> once you're free (not still at a bell or in an event) and used again every 2.5 s it hasn't opened
+> (the board after a retainer said "Cannot execute at this time"); a retainer's greeting is clicked
+> through at once (it waited 8 s); the board's first result is picked again when its listings don't
+> open, and the search made again when the last item's results were still showing; a listing gone
+> (bought by someone else) or a question about another row moves on to the next listing, three times,
+> instead of stopping the run; the rows of the board's list move up after a purchase as the board's
+> do; a board's empty answer is "none listed" only after 10 s; teleports, the aethernet and world
+> visits that never start are asked for again (twice) instead of waiting out minutes, and their own
+> 20 s of asking now apply (a step's 3 s default cut them short); the door is looked for again for 5 s
+> when it hasn't loaded; a rehearsal that carries on past a failed stop stops its travel first; a new
+> run starts from nothing of the last. **The way to your door needs no setup**: with none known for
+> your plot, the first trip home asks you to walk in once, and that walk is remembered. **Placing**:
+> furniture placed but not spawned (as read in private chambers) is read from the game's own list of
+> placed furniture, and a read that finds nothing while something is placed is "not loaded" rather
+> than "nothing placed" (the counts are logged when the two disagree); a storeroom piece that looks
+> placed isn't placed again; clean-up never sets down a storeroom preview; a store job checks the
+> piece's spot too; the last phases (dyes, putting away) wait for a read rather than being dropped;
+> an older run's backup isn't offered when this run saved none; windows get 6 s, not 3. **Elsewhere**:
+> turning a currency off survives a restart; dyes bought by hand are noticed within 2 s; one failing
+> part of the plugin's frame no longer stops every run; a non-JSON answer from Universalis isn't
+> "nothing listed"; the log keeps 5,000 lines and the recording an hour, without other plugins'
+> overlays. **The window**: when the errands can't set out, Ready's button still opens their screen,
+> which says why and offers "Place what I have"; the errands' summary goes on to the placing's own
+> result (Put them back, the fixtures); Continue sits at the top of the running screens; toasts stay
+> in the window, above its footer; "Way to your door" in Settings says it's learnt on the first walk
+> home; leftover "experimental" wording is gone.
 > 0.7.14: **Currency vendors.** The errands now read the game's currency shops (SpecialShop: MGP at
 > the Gold Saucer, marks, seals, tomestones) and, for what no gil vendor sells, plan them before the
 > market board: only currencies you allow (Settings → Getting → **Currencies**, MGP on by default),

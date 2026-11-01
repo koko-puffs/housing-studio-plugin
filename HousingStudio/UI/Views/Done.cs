@@ -86,7 +86,7 @@ public sealed partial class MainWindow
         Kit.Reserve(at, w, y - at.Y);
         Frame.EndHeader();
 
-        Frame.BeginBody("##done", "done-foot", 20, 22);
+        Frame.BeginBody("##done-body", "done-foot", 20, 22);
         DrawFixtureRunPanel();
         DrawTally(preview);
         DrawPutAwayLine(preview);

@@ -38,6 +38,12 @@ public sealed partial class MainWindow
         Frame.EndHeader();
 
         Frame.BeginBody("##running", "running-foot", 22, 22);
+        // Continue first, at the top (0.8.0): below the piece in hand it moved with every step's words.
+        if (waiting)
+        {
+            DrawCallout();
+            Kit.Gap(18);
+        }
         DrawFigure(preview);
         Kit.Gap(18);
         DrawPhases();
@@ -56,11 +62,6 @@ public sealed partial class MainWindow
             var h = Txt.Flow(at2 + new Vector2(textX, 0), Kit.Width - textX, runs, 19.5f, out _);
             Icons.Draw(Kit.Dl, Icon.Alert, at2 + new Vector2(0, S(2)), S(16), Palette.Danger);
             Kit.Reserve(at2, Kit.Width, h);
-        }
-        if (waiting)
-        {
-            Kit.Gap(18);
-            DrawCallout();
         }
         Kit.Gap(18);
         DrawLog("running-bottom");
@@ -273,12 +274,12 @@ public sealed partial class MainWindow
             // The panel's own padding below the lines (16) is in the room too.
             var fits = (int)MathF.Floor((Frame.RoomLeft(bottomId) - S(16) + S(2)) / step);
             var count = Math.Clamp(fits, 3, 200);
-            var lines = log.Lines.Skip(Math.Max(0, log.Lines.Count - count)).ToList();
             var at = Kit.At;
             var x = at.X + S(20);
             var w = Kit.Width - S(40);
             var y = at.Y;
             var dl = Kit.Dl;
+            var lines = LogRows(count, x + w);
             if (lines.Count == 0)
             {
                 Txt.Line(dl, new Vector2(x, y), "Nothing yet.", Face.Sans, 12, Palette.Dim, 12 * 1.6f);
@@ -287,9 +288,7 @@ public sealed partial class MainWindow
             for (var i = 0; i < lines.Count; i++)
             {
                 var l = lines[i];
-                var time = l.At.ToString("HH:mm:ss");
-                var tw = Txt.Line(dl, new Vector2(x, y), time, Face.Mono, 12, Palette.Dim, 12 * 1.6f);
-                var text = LogWords(l.Text);
+                var tw = Txt.Line(dl, new Vector2(x, y), l.Time, Face.Mono, 12, Palette.Dim, 12 * 1.6f);
                 var color = l.Kind switch
                 {
                     LogKind.Error => Palette.Danger,
@@ -297,17 +296,43 @@ public sealed partial class MainWindow
                     _ => i < lines.Count - 1 ? Palette.Dim : Palette.Text,
                 };
                 var tx = x + tw + S(12);
-                var fit = Txt.Fit(text, Face.Sans, 12, x + w - tx);
-                Txt.Line(dl, new Vector2(tx, y), fit, Face.Sans, 12, color, 12 * 1.6f);
+                Txt.Line(dl, new Vector2(tx, y), l.Fit, Face.Sans, 12, color, 12 * 1.6f);
                 // A line cut short: the whole of it on hover.
-                if (fit != text && !Kit.Blocked && ImGui.IsWindowHovered()
+                if (l.Fit != l.Text && !Kit.Blocked && ImGui.IsWindowHovered()
                     && ImGui.IsMouseHoveringRect(new Vector2(tx, y), new Vector2(x + w, y + lineBox)))
-                    Kit.Tooltip(text);
+                    Kit.Tooltip(l.Text);
                 y += i < lines.Count - 1 ? step : lineBox;
             }
             Kit.Reserve(at, Kit.Width, y - at.Y + S(16));
         }
         Kit.EndPanel();
+    }
+
+    private readonly record struct LogRow(string Time, string Text, string Fit, LogKind Kind);
+
+    private (int Count, LogLine? Last, int Shown, float Right, List<LogRow> Rows) logRows = (0, null, 0, 0, new List<LogRow>());
+
+    /// <summary>
+    /// The log's last <paramref name="count"/> lines, worded and cut to fit, made again only when a line
+    /// comes, the room changes or the window's width does (it was all done again every frame).
+    /// </summary>
+    private List<LogRow> LogRows(int count, float right)
+    {
+        var all = log.Lines;
+        var last = all.Count > 0 ? all[^1] : null;
+        var c = logRows;
+        if (c.Count == all.Count && ReferenceEquals(c.Last, last) && c.Shown == count && Math.Abs(c.Right - right) < 0.5f) return c.Rows;
+        var rows = new List<LogRow>(Math.Min(count, all.Count));
+        var timeW = Txt.Measure("00:00:00", Face.Mono, 12).X;
+        for (var i = Math.Max(0, all.Count - count); i < all.Count; i++)
+        {
+            var l = all[i];
+            var text = LogWords(l.Text);
+            var tx = right - Kit.Width + S(40) + timeW + S(12);
+            rows.Add(new LogRow(l.At.ToString("HH:mm:ss"), text, Txt.Fit(text, Face.Sans, 12, right - tx), l.Kind));
+        }
+        logRows = (all.Count, last, count, right, rows);
+        return rows;
     }
 
     /// <summary>A log line without the step markers it's indented with ("  → ", "  … ", "  ✕ ").</summary>

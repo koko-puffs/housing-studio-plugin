@@ -70,6 +70,12 @@ public sealed partial class ErrandRunner
             segment++;
             skipped++;
         }
+        // Travel left running (a teleport or world visit that didn't finish) is stopped first.
+        Nav.Stop();
+        walkTarget = null;
+        if (travelling || Travel.Busy) Travel.Abort();
+        travelling = false;
+        lastTerritory = ErrandGame.Territory;
         log.Warn($"  ✕ {seg.Title}: {message} The rehearsal notes it and goes on{(skipped > 0 ? $" with the next stop ({skipped} step{(skipped == 1 ? "" : "s")} of this one left out)" : string.Empty)}.");
         CloseWindows();
         return true;

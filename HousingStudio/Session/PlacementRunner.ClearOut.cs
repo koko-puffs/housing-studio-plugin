@@ -231,10 +231,10 @@ public sealed unsafe partial class PlacementRunner
     /// </summary>
     private void PlanClearOutLater()
     {
+        var live = ReadLive();
+        if (live == null || clearOutLater.Count == 0) return; // kept for when it can be read
         var waiting = clearOutLater;
         clearOutLater = new List<PlacedPiece>();
-        var live = ReadLive();
-        if (live == null || waiting.Count == 0) return;
         var used = new HashSet<int>();
         var garden = side == Side.Garden;
         var added = 0;

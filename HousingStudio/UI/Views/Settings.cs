@@ -42,12 +42,11 @@ public sealed partial class MainWindow
     /// <summary>The settings under More options (shown on its row).</summary>
     private const int MoreCount = 12;
 
-    private const int GettingRows = 9;
 
     private static readonly TabSpec[] SettingsTabs =
     {
         new("Placing"),
-        new("Getting", GettingRows.ToString()),
+        new("Getting"),
         new("Help"),
     };
 
@@ -545,17 +544,20 @@ public sealed partial class MainWindow
         var home = ErrandGame.HomeHere(session.Context);
         var way = errands.WayFor(home);
         var note = errands.WayNote
-                   ?? (home is null ? "Recorded once, walked by the errands"
+                   ?? (home is null ? "Learnt on the errands' first walk home"
                        : home.Kind == HomeKind.Apartment ? "An apartment: none needed"
-                       : way != null ? $"Recorded for plot {home.Plot}: {DoorWays.Length(way.Spots()):0} yalms"
-                       : $"None for plot {home.Plot} yet: record it once");
+                       : way != null ? $"Known for plot {home.Plot}: {DoorWays.Length(way.Spots()):0} yalms"
+                       : "Learnt on the errands' first walk home, or record it now");
         var label = errands.RecordingWay ? "Stop" : way != null ? "Record again" : "Record";
-        const string tip = "Stand where the home teleport lands you, outside your home, press Record, walk to your front door and go in: going in saves the way. "
-                           + "The errands then follow it to your door (vnavmesh's own way runs into the walls: its map of a ward has no houses in it). "
+        // Recording starts outside, where the home teleport lands you.
+        var inside = session.Context.Kind == PlaceKind.Interior && !errands.RecordingWay;
+        var cannot = errands.Active ? "Not while the errands run." : inside ? "Go outside first: stand where the home teleport lands you." : null;
+        const string tip = "The errands walk to your front door along a way you walked once: their first trip home asks you to walk from where you land to your door, and remembers it. "
+                           + "To record it now instead: outside, where the home teleport lands you, press Record, walk to your door and go in. "
                            + "Recording again replaces it; one way serves the same plot in every ward.";
-        if (!ButtonRow(index, "##door-way", "Way to your door", note, label, errands.RecordingWay ? Btn.Danger : Btn.Glass, errands.Active, tip: tip)) return;
+        if (!ButtonRow(index, "##door-way", "Way to your door", note, label, errands.RecordingWay ? Btn.Danger : Btn.Glass, cannot != null, cannot, tip)) return;
         if (errands.RecordingWay) errands.StopWay();
-        else if (errands.RecordWay() is { } why) Services.Chat.PrintError($"Way to your door: {why}", "Housing Studio");
+        else if (errands.RecordWay() is { } why) Notify(why);
     }
 
     // ---------------------------------------------------------------------------------------------

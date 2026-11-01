@@ -262,8 +262,8 @@ public sealed partial class ErrandRunner : IDisposable
         if (mine == null || session.Plan == null) return "Go inside your home: what's missing is worked out there.";
         if (!ctx.HasPermission) return "You can only place furniture in a home you may decorate.";
         if (!mine.Owned && config.ErrandsHome < 0) return mine.Chamber
-            ? "These chambers aren't in your company's house as the game has it: choose which home \"go home\" is in Settings → Getting → Home is."
-            : "The game doesn't say this home is yours: choose which home it is in Settings → Getting → Home is.";
+            ? "These chambers aren't in your company's house as the game has it: choose which home \"go home\" is under Limits → Change → Home is."
+            : "The game doesn't say this home is yours: choose which home it is under Limits → Change → Home is.";
         var world = ErrandGame.CurrentWorld();
         if (world.Length == 0 || world != ErrandGame.HomeWorld()) return "Go back to your home world first.";
         if (!Nav.Installed) return "vnavmesh isn't installed (or is turned off).";
@@ -277,7 +277,7 @@ public sealed partial class ErrandRunner : IDisposable
         {
             var city = ErrandGame.Hub(config.ErrandsHub);
             var hub = ErrandGame.AetheryteOf(city.AetheryteTerritory);
-            if (hub == 0 || !ErrandGame.Attuned(hub)) return $"The market board and the summoning bells are reached through {city.Name}'s aetheryte, which you haven't attuned to (Settings → Getting → Market city).";
+            if (hub == 0 || !ErrandGame.Attuned(hub)) return $"The market board and the summoning bells are reached through {city.Name}'s aetheryte, which you haven't attuned to: attune to it, or pick the other in Settings → Getting → Market city.";
         }
         return null;
     }
@@ -323,6 +323,12 @@ public sealed partial class ErrandRunner : IDisposable
         Rehearsal = rehearse;
         rehearsalFailures = 0;
         emptyBoards.Clear();
+        // Nothing of a run before (a stop mid-way could leave its last plan's ending or segments).
+        finishPending = false;
+        pendingTrip = null;
+        segments.Clear();
+        segment = -1;
+        pausedAt = null;
         currencyAgreed.Clear();
         currencySpent.Clear();
         foreach (var (_, currencyItem, currencyCost) in plan.CurrencyCosts) currencyAgreed[currencyItem] = currencyAgreed.GetValueOrDefault(currencyItem) + currencyCost;
@@ -695,6 +701,7 @@ public sealed partial class ErrandRunner : IDisposable
     {
         var firstTry = DateTime.MinValue;
         var lastTry = DateTime.MinValue;
+        var asks = 0;
         return new List<Step>
         {
             new Step
@@ -717,12 +724,15 @@ public sealed partial class ErrandRunner : IDisposable
                         ? StepOutcome.Halt($"Lifestream wouldn't take the aethernet to {shard} (asked for 20 s).")
                         : StepOutcome.Waiting;
                 },
+                // Its own 20 s decide (the step's 3 s default gave up after the second ask).
+                Timeout = TimeSpan.FromSeconds(25),
             },
             new Step
             {
                 Label = $"Arrive at {where}",
                 Run = () =>
                 {
+                    if (ErrandGame.Territory != territory && Again(ref lastTry, ref asks, () => Travel.Aethernet(shard)) is { } stop) return stop;
                     if (ErrandGame.Territory != territory || !ErrandGame.Settled || Travel.Busy) return StepOutcome.Waiting;
                     travelling = false;
                     lastTerritory = territory;
@@ -739,6 +749,7 @@ public sealed partial class ErrandRunner : IDisposable
         var aetheryte = ErrandGame.AetheryteOf(territory);
         var firstTry = DateTime.MinValue;
         var lastTry = DateTime.MinValue;
+        var asks = 0;
         return new List<Step>
         {
             new Step
@@ -768,12 +779,15 @@ public sealed partial class ErrandRunner : IDisposable
                         ? StepOutcome.Halt($"Lifestream wouldn't teleport to {where} (asked for 20 s; is it installed and up to date?).")
                         : StepOutcome.Waiting;
                 },
+                // Its own 20 s decide (the step's 3 s default gave up after the second ask).
+                Timeout = TimeSpan.FromSeconds(25),
             },
             new Step
             {
                 Label = $"Arrive in {where}",
                 Run = () =>
                 {
+                    if (ErrandGame.Territory != territory && Again(ref lastTry, ref asks, () => Travel.Teleport(aetheryte)) is { } stop) return stop;
                     if (ErrandGame.Territory != territory || !ErrandGame.Settled || Travel.Busy) return StepOutcome.Waiting;
                     travelling = false;
                     lastTerritory = territory;
@@ -785,12 +799,17 @@ public sealed partial class ErrandRunner : IDisposable
         };
     }
 
-    private List<Step> WorldSteps(string world) => new()
+    private List<Step> WorldSteps(string world)
     {
+        var lastTry = DateTime.MinValue;
+        var asks = 0;
+        return new List<Step>
+        {
         Step.Act($"Go to {world} (Lifestream)", () =>
         {
             if (ErrandGame.CurrentWorld() == world) return StepOutcome.Done;
             travelling = true;
+            lastTry = DateTime.UtcNow;
             return Travel.ChangeWorld(world) ? StepOutcome.Done : StepOutcome.Halt($"Lifestream wouldn't go to {world}.");
         }),
         new Step
@@ -798,6 +817,7 @@ public sealed partial class ErrandRunner : IDisposable
             Label = $"Arrive on {world}",
             Run = () =>
             {
+                if (ErrandGame.CurrentWorld() != world && Again(ref lastTry, ref asks, () => Travel.ChangeWorld(world), 25) is { } stop) return stop;
                 if (ErrandGame.CurrentWorld() != world || !ErrandGame.Settled || Travel.Busy) return StepOutcome.Waiting;
                 travelling = false;
                 lastTerritory = ErrandGame.Territory;
@@ -806,7 +826,27 @@ public sealed partial class ErrandRunner : IDisposable
             Timeout = WorldWait,
             TimeoutMessage = $"Didn't arrive on {world} within {WorldWait.TotalMinutes:0} minutes.",
         },
-    };
+        };
+    }
+
+    /// <summary>
+    /// Travel asked for that never started: settled, Lifestream idle and still not there
+    /// <paramref name="afterSeconds"/> s after the ask (a refusal its fallback hid, a cast cut short):
+    /// asked again, twice, then stopped (0.7.13 waited out the arrival's 2 to 5 minutes). Null: carry on waiting.
+    /// </summary>
+    private StepOutcome? Again(ref DateTime lastTry, ref int asks, Func<bool> ask, int afterSeconds = 12)
+    {
+        var now = DateTime.UtcNow;
+        if (lastTry == DateTime.MinValue) lastTry = now;
+        if (!ErrandGame.Settled || Travel.Busy || ErrandGame.Moving || now - lastTry < TimeSpan.FromSeconds(afterSeconds)) return null;
+        if (asks >= 2) return StepOutcome.Halt("Lifestream didn't take you there (asked three times).");
+        asks++;
+        lastTry = now;
+        travelling = true;
+        log.Info("  Not on the way yet: asking Lifestream again.");
+        if (!ask()) log.Info("  Lifestream said no.");
+        return null;
+    }
 
     /// <summary>Walks (vnavmesh) to within <paramref name="within"/> yalms of a spot, found when the walk starts.</summary>
     private List<Step> WalkSteps(string what, Func<Vector3?> where, float within = Reach)
@@ -1334,6 +1374,7 @@ public sealed partial class ErrandRunner : IDisposable
                     if (bought >= item.Count) return Finished();
                     if (!GameUi.IsOpen(ErrandTable.Shop)) return StepOutcome.Halt($"{v.NpcName}'s shop closed.");
                     n = Math.Min(item.Count - bought, Math.Min(MaxPerPurchase, stack));
+                    allowed = 0;
                     var cost = (long)v.Price * n;
                     var gil = ErrandGame.Gil();
                     if (gil < cost) return StepOutcome.Halt($"Not enough gil: {cost:N0} for {n} {Name(item.ItemId)}, and you have {gil:N0}.");
@@ -1633,6 +1674,29 @@ public sealed partial class ErrandRunner : IDisposable
         var name = Name(item.ItemId);
         // Listings bought (or tried): the board's list may still show one for a moment after.
         var tried = new HashSet<ulong>();
+        ulong listing = 0;
+        var gone = false;
+        var retryPending = false;
+        var misses = 0;
+        var firedAt = DateTime.MinValue;
+        DateTime confirmFrom() => firedAt;
+        // A listing that didn't work out (gone, or the list moved under the click): the next one, three
+        // times at most, then the item is left for now (0.7.13 stopped the whole run).
+        StepOutcome Missed(string why)
+        {
+            gone = true;
+            misses++;
+            BoardListings.Gone(listing);
+            if (misses > 3)
+            {
+                log.Warn($"  {name}: {why}; tried {misses} listings, so it's left for now.");
+                return Finished();
+            }
+            log.Info($"  {name}: {why}. Trying the next listing.");
+            // The next try goes after this one's last step (its steps still to come see `gone` and pass).
+            retryPending = true;
+            return StepOutcome.Done;
+        }
         List<Step> Once() => new()
         {
             new Step
@@ -1642,7 +1706,9 @@ public sealed partial class ErrandRunner : IDisposable
                 Run = () =>
                 {
                     if (bought >= wanted) return Finished();
-                    if (BoardListings.Open(item.ItemId) is not { } listings) return StepOutcome.Halt($"{name}'s listings closed.");
+                    if (BoardListings.Open(item.ItemId) is not { } listings)
+                        return GameUi.IsOpen(ErrandTable.ItemSearchResult) ? StepOutcome.Waiting : StepOutcome.Halt($"{name}'s listings closed.");
+                    gone = false;
                     var gil = ErrandGame.Gil();
                     string? firstWhy = null;
                     foreach (var l in listings.OrderBy(l => l.UnitPrice))
@@ -1661,17 +1727,32 @@ public sealed partial class ErrandRunner : IDisposable
                         unit = l.UnitPrice;
                         quantity = l.Quantity;
                         tried.Add(l.ListingId);
+                        listing = l.ListingId;
                         before = ErrandGame.BagCount(item.ItemId);
                         gilBefore = gil;
                         log.Info($"  Buying {l.Quantity} × {name} at {l.UnitPrice:N0} gil each ({cost:N0} with tax), row {l.Row}.");
+                        firedAt = DateTime.UtcNow;
                         return GameUi.Fire(ErrandTable.ListingBuy, UiCallValues.Of(("index", l.Row))) ? StepOutcome.Done : StepOutcome.Halt($"{name}'s listings closed.");
                     }
                     log.Warn($"  No listing of {name} to buy here ({firstWhy ?? "none listed"}): {wanted - bought} left for now; this world isn't planned for it again this run.");
                     if (emptyBoards.Add((item.ItemId, ErrandGame.CurrentWorld()))) emptiedThisTrip++;
                     return Finished();
                 },
+                Timeout = TimeSpan.FromSeconds(15),
+                TimeoutMessage = $"{name}'s listings didn't come.",
             },
-            WaitFor("The board asks to confirm", () => GameUi.YesNoText() != null, TimeSpan.FromSeconds(5), "The board didn't ask to confirm the purchase."),
+            new Step
+            {
+                // No question in 5 s: the listing has gone (bought by someone else first); the next one.
+                Label = "The board asks to confirm",
+                Timeout = TimeSpan.FromSeconds(8),
+                Run = () =>
+                {
+                    if (GameUi.YesNoText() != null) return StepOutcome.Done;
+                    if (DateTime.UtcNow - confirmFrom() < TimeSpan.FromSeconds(5)) return StepOutcome.Waiting;
+                    return Missed("the board didn't ask to confirm (sold to someone else first?)");
+                },
+            },
             new Step
             {
                 Label = $"Answer yes (buy {name})",
@@ -1680,11 +1761,13 @@ public sealed partial class ErrandRunner : IDisposable
                 {
                     // Only the listing chosen: the question must name its price (another row clicked, or
                     // another question, is said no to and stops the errands).
+                    if (gone) return StepOutcome.Done;
                     var question = GameUi.YesNoText();
                     if (!MarketRule.QuestionMatches(question, unit, quantity, cost))
                     {
+                        // Another listing's question (the list moved under the click): no, and the next.
                         GameUi.Close(UiTable.YesNo);
-                        return StepOutcome.Halt($"The board asked \"{question}\", which isn't the {cost:N0} gil listing chosen: nothing was bought.");
+                        return Missed($"the board asked \"{question}\", not the {cost:N0} gil listing chosen: said no");
                     }
                     return GameUi.Fire(UiTable.YesNoYes) ? StepOutcome.Done : StepOutcome.Halt("The yes/no closed.");
                 },
@@ -1694,8 +1777,24 @@ public sealed partial class ErrandRunner : IDisposable
                 Label = $"{name} comes to your bags",
                 Run = () =>
                 {
+                    if (!gone)
+                    {
+                        var came = ErrandGame.BagCount(item.ItemId);
+                        if (came <= before && DateTime.UtcNow - confirmFrom() < TimeSpan.FromSeconds(10)) return StepOutcome.Waiting;
+                        if (came <= before && Missed("it didn't come to your bags (sold to someone else first?)").Status != StepStatus.Done) return Finished();
+                    }
+                    if (gone)
+                    {
+                        // This try is over: the next listing, if one's due (the last step of the try).
+                        if (retryPending)
+                        {
+                            retryPending = false;
+                            queue.InsertNext(Once());
+                        }
+                        return StepOutcome.Done;
+                    }
                     var now = ErrandGame.BagCount(item.ItemId);
-                    if (now <= before) return StepOutcome.Waiting;
+                    BoardListings.Gone(listing);
                     var spent = Math.Max(0, gilBefore - ErrandGame.Gil());
                     MarketSpent += spent;
                     itemSpent += spent;
@@ -1706,7 +1805,7 @@ public sealed partial class ErrandRunner : IDisposable
                     if (bought < wanted) queue.InsertNext(Once());
                     return StepOutcome.Done;
                 },
-                Timeout = TimeSpan.FromSeconds(10),
+                Timeout = TimeSpan.FromSeconds(15),
                 TimeoutMessage = $"{name} didn't come to your bags (sold to someone else first?).",
             },
         };
@@ -1731,8 +1830,13 @@ public sealed partial class ErrandRunner : IDisposable
         // The listings window open for the item, and its listings come (or none, 6 s after it opened:
         // an item nobody sells there has none to send).
         bool Opened() => GameUi.IsOpen(ErrandTable.ItemSearchResult)
-                         && (ErrandGame.Listings(itemId) != null || (DateTime.UtcNow - BoardListings.AskedAt(itemId)).TotalSeconds > 6);
-        Step YouOpen(string what) => You($"{what} {name} and open its listings", Opened);
+                         && (ErrandGame.Listings(itemId) != null || (DateTime.UtcNow - BoardListings.AskedAt(itemId)).TotalSeconds > 10);
+        // Handed to you: the listings you open are expected (an empty answer then reads as none listed).
+        Step YouOpen(string what)
+        {
+            BoardListings.Expect(itemId);
+            return You($"{what} {name} and open its listings", Opened);
+        }
         return new List<Step>
         {
             Step.Act("Close the last item's listings", () =>
@@ -1930,9 +2034,25 @@ public sealed partial class ErrandRunner : IDisposable
     /// <summary>Inside your home this frame (from where you are as read each frame).</summary>
     private bool Inside() => home != null && ErrandGame.InsideHome(home, here);
 
-    private List<Step> EnterSteps()
+    private List<Step> EnterSteps() => EnterSteps(looked: false);
+
+    private List<Step> EnterSteps(bool looked)
     {
         if (Inside()) return ReadAgainSteps();
+        // The door may load a moment after you arrive: looked for again for up to 5 s before it's
+        // called missing (it was looked for once, the moment you arrived).
+        if (!looked && homeKind != HomeKind.Apartment && !(home is { Chamber: true } && ErrandGame.InHouseOf(home))
+            && (ErrandGame.Me is not { } at || ErrandGame.Nearest(ErrandTable.EntranceWords, at, 30, UsableKinds) == null))
+            return new List<Step>
+            {
+                Step.Wait("Your door comes into sight", () => ErrandGame.Me is { } p && ErrandGame.Nearest(ErrandTable.EntranceWords, p, 30, UsableKinds) != null,
+                    TimeSpan.FromSeconds(5), StepStatus.Done),
+                Step.Act("Go in", () =>
+                {
+                    queue.InsertNext(EnterSteps(looked: true));
+                    return StepOutcome.Done;
+                }),
+            };
         // In the hall of the house your chambers are in already: up to them.
         if (home is { Chamber: true } && ErrandGame.InHouseOf(home)) return ChamberSteps().Concat(ReadAgainSteps()).ToList();
         var steps = new List<Step>();
@@ -2089,6 +2209,7 @@ public sealed partial class ErrandRunner : IDisposable
             {
                 Label = recorded ? "Follow your way to the door (vnavmesh)" : "Walk to your door (vnavmesh)",
                 IsAction = true,
+                Timeout = TimeSpan.FromSeconds(35), // its own 30 s for the mesh decide
                 Run = () =>
                 {
                     if (handed() || ErrandGame.DistanceTo(end) <= 1f) return StepOutcome.Done;
@@ -2212,6 +2333,7 @@ public sealed partial class ErrandRunner : IDisposable
             {
                 Label = "Walk to it (vnavmesh)",
                 IsAction = true,
+                Timeout = TimeSpan.FromSeconds(25), // its own 20 s for the mesh decide
                 Run = () =>
                 {
                     if (Up() || spot == null) return StepOutcome.Done;

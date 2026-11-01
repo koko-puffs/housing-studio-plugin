@@ -154,7 +154,10 @@ public sealed partial class MainWindow
         var toSet = tasks.Count(t => t.State == FixtureState.ToSet);
         var line = FixtureBagWords();
         if (run.Result != null || run.StopReason != null)
-            line += $". Last time: {(run.State == RunState.Stopped ? $"stopped ({run.StopReason}) " : string.Empty)}{run.Result ?? run.StopReason}";
+            // The stop's reason once (it read "stopped (Stopped by you.) Stopped by you.").
+            line += run.Result != null
+                ? $". Last time: {(run.State == RunState.Stopped && run.StopReason != null ? $"stopped ({run.StopReason.TrimEnd('.')}), " : string.Empty)}{run.Result}"
+                : $". Last time: stopped ({run.StopReason!.TrimEnd('.')})";
 
         const string label = "Set them for me";
         var blocked = run.CanStart() ?? (toSet == 0 ? "Nothing here to set from your bags" : null);
@@ -176,7 +179,7 @@ public sealed partial class MainWindow
     {
         Ask("Set the fixtures?",
             $"This opens the game's {(session.Context.Side == Side.Garden ? "Exterior" : "Interior")} Fixtures window and puts the {Words.Count(toSet, "fixture")} in from your bags. "
-            + "It's experimental: it holds before each action until you press Continue, asks you where it can't find its way, and you press the window's apply yourself. "
+            + "It holds before each action until you press Continue, asks you where it can't find its way, and you press the window's apply yourself. "
             + "Setting a fixture uses its item, as it does by hand.",
             "Set them", "Not now", () => OnFramework(() =>
             {

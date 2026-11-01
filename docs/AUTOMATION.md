@@ -385,6 +385,22 @@ listed); the item search proxy only when it isn't.
 and opening the furnishing editor waits for its bar too: the editor opens in the mode last used
 (0.7.11's recording: mode Store at 403.85 s, `HousingLayout` open at 404.02).
 
+**0.8.0**: `ErrandRunner.UseUntil(what, find, window, opened)` (bell, board): `FreeToUse()` (landed, no
+Occupied*/OccupiedSummoningBell/OccupiedInEvent/Casting), then `Interact`, again every 2.5 s, 4 times.
+`SearchSteps`' "listings come": the window's title ([2]) or the proxy's item tells another item's
+results apart (closed, searched again after 0.6 s, 3 searches); no window: the pick again every 2.5 s
+(3 picks), then a search again. `ListingSteps`: `BoardListings.Gone(listingId)` after a purchase (rows
+after it move up); `Missed(why)` (no question in 5 s, another row's question, nothing in the bags in
+10 s) → the next listing after this try's last step (`retryPending`), 3 misses then left.
+`BoardListings.Open` gives none after 10 s. Travel: the asking steps time out at 25 s (their own 20 s
+decide); `Again(ref lastTry, ref asks, ask)` in each arrival asks Lifestream again when settled, idle
+and not there after 12 s (25 s for a world), twice. `Vnavmesh.Stop` also calls
+`vnavmesh.Nav.PathfindCancelAll`. `EnterSteps(looked)` waits 5 s for the door; with no way known,
+`StartRecordingWay(errands: true)` and a "You: walk to your door" step. `FurnitureReader.ReadInterior`
+adds `FurnitureVector` slots with no spawned object (row 0x20000 | Id, no instance) and returns null when
+something's placed but nothing reads. `UiRecorder`: 60 min, 8,000 lines, noise filtered
+(`IsNoise`), words cut at 160, the state written only when it changes, `spawned=` in it.
+
 **Currency vendors** (0.7.14): `VendorData` reads `SpecialShop` (`Item` entries: `ReceiveItems[0].Item`,
 `ReceiveCount`; one `ItemCosts` entry with `ItemCost` and `CurrencyCost`); a cost item below 8 is resolved
 by `UseCurrencyType` (4: `TomestonesItem`), otherwise skipped; the currency must be an Item of UI

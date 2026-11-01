@@ -137,7 +137,7 @@ public static class ErrandTable
     public const int SearchByWords = 9;
 
     /// <summary>Opens the listings of the search's result in row <c>index</c>. [Recording 2: [i:5, i:8] for the ninth]</summary>
-    public static readonly UiCall SearchResultPick = new(ItemSearch, "i:5 i:{index}", true, "Recording 2", Verified: false);
+    public static readonly UiCall SearchResultPick = new(ItemSearch, "i:5 i:{index}", true, "Recording 2; 0.7.13's recordings: [i:5, i:0] opens the first result");
 
     // ---------- the house ----------
 

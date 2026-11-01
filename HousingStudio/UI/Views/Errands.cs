@@ -12,7 +12,7 @@ using static HousingStudio.UI.Theme;
 namespace HousingStudio.UI;
 
 /// <summary>
-/// "Get everything for me" (experimental), as the 0.6 flow mock-up draws it (docs/mockups/flow.html):
+/// "Get everything for me", as the 0.6 flow mock-up draws it (docs/mockups/flow.html):
 /// "Get, before setting out" (the plugins as check chips, the route trip by trip, what isn't got this
 /// way, the Limits, and one brass button naming the gil, which is the confirmation), then Running (the
 /// journey Bell → Vendors → Market → Home → Place, where it is in words, what it's doing, Got and
@@ -425,6 +425,20 @@ public sealed partial class MainWindow
         var row = Kit.At;
         var fw = Kit.Width;
         var button = rehearse ? RehearsalWords.ErrandsButton : g.Button;
+        // Can't set out: placing what you have is the other way on (as Ready's button did before).
+        if (blocked != null && !rehearse && placeInstead is { } place)
+        {
+            const string instead = "Place what I have";
+            var iw = Kit.ButtonWidth(instead, BtnSize.Lg, null, Btn.Glass);
+            if (Kit.Button("##errands-place-instead", row, instead, Btn.Glass, BtnSize.Lg, null, iw, false, "Places what's in your storeroom and bags now, without getting the rest"))
+            {
+                errandsOpen = false;
+                place();
+            }
+            Kit.Reserve(row, iw, S(46));
+            Kit.Gap(10);
+            row = Kit.At;
+        }
         var bw = MathF.Min(fw, Kit.ButtonWidth(button, BtnSize.Lg, Icon.Play, Btn.Primary));
         if (Kit.Button("##errands-start", row, button, Btn.Primary, BtnSize.Lg, Icon.Play, bw, blocked != null,
                 blocked ?? (rehearse ? "Sets out now on the trips shown: nothing is bought or taken, teleports are real." : "Sets out now: no question after this. It spends no more than this in all, and stops at anything it didn't expect.")))
@@ -721,6 +735,12 @@ public sealed partial class MainWindow
         Frame.EndHeader();
 
         Frame.BeginBody("##errands-run", "errands-run-foot", 18, 22);
+        // Continue first, at the top (0.8.0): below the cards it moved with every step's words.
+        if (waiting)
+        {
+            DrawErrandCallout(placing);
+            Kit.Gap(14);
+        }
         Kit.Journey(r.Stops, placing ? r.Stops.Length - 1 : r.At);
         Kit.Gap(14);
         if (placing)
@@ -738,11 +758,6 @@ public sealed partial class MainWindow
         else
         {
             DrawErrandCurrent(r);
-        }
-        if (waiting)
-        {
-            Kit.Gap(14);
-            DrawErrandCallout(placing);
         }
         Kit.Gap(14);
         DrawErrandCards(e);
@@ -942,7 +957,7 @@ public sealed partial class MainWindow
         Kit.Reserve(at, w, y - at.Y);
         Frame.EndHeader();
 
-        Frame.BeginBody("##errands-done", "errands-done-foot", 22, 22);
+        Frame.BeginBody("##errands-done-body", "errands-done-foot", 22, 22);
         SectionLabel("GOT", s.Rows.Count > 0 ? Words.Count(e.GotCount, "thing") : null);
         Kit.Gap(8);
         Kit.BeginPanel("##errand-got", 0, 0, 0);
@@ -970,10 +985,13 @@ public sealed partial class MainWindow
 
         Frame.BeginFooter("errands-done-foot", 18, 22);
         var row = Kit.At;
-        if (Kit.Button("##errands-done", row, "Done", Btn.Primary, BtnSize.Lg, Icon.Check, Kit.Width))
+        // Done goes on to the placing run's own result (what needs you, Put them back, the fixtures)
+        // when the errands placed something: it used to skip it, and with it the only undo.
+        var placingResult = vm.ResultWaiting && runner.State is RunState.Finished or RunState.Stopped;
+        var finish = placingResult ? "See what was placed" : "Done";
+        if (Kit.Button("##errands-finish", row, finish, Btn.Primary, BtnSize.Lg, Icon.Check, Kit.Width))
         {
             e.Dismiss();
-            vm.Dismiss();
             errandsOpen = false;
         }
         Kit.Reserve(row, Kit.Width, S(46));

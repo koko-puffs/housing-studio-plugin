@@ -154,7 +154,7 @@ public sealed partial class MainWindow
         Kit.Reserve(at, w, y - at.Y);
         Frame.EndHeader();
 
-        Frame.BeginBody("##rehearsal-done", "rehearsal-done-foot", 20, 22);
+        Frame.BeginBody("##rehearsal-done-body", "rehearsal-done-foot", 20, 22);
         if (!errands) DrawFixtureRunPanel();
         Kit.BeginPanel("##rehearsal-counts", 14, 16, 14);
         var top = Kit.At;

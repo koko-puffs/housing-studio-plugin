@@ -49,6 +49,8 @@ public sealed partial class Configuration
     /// The currencies the errands may spend at currency vendors (their Item rows; 29 is MGP), 0.7.14.
     /// Only what you have of one is planned; gil vendors come first. MGP is allowed by default.
     /// </summary>
+    /// <remarks>Replaced on load, not added to: the default's MGP would otherwise come back after being switched off.</remarks>
+    [Newtonsoft.Json.JsonProperty(ObjectCreationHandling = Newtonsoft.Json.ObjectCreationHandling.Replace)]
     public HashSet<uint> ErrandsCurrencies { get; set; } = new() { Core.CurrencyItems.Mgp };
 
     /// <summary>Bag slots the errands leave free (a stack that doesn't join one already there, a quest item).</summary>

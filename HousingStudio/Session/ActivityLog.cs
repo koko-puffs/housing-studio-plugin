@@ -18,7 +18,8 @@ public sealed record LogLine(DateTime At, LogKind Kind, string Text);
 /// <summary>What the plugin did, newest last: shown in the window, copyable, and sent to Dalamud's log (/xllog).</summary>
 public sealed class ActivityLog
 {
-    private const int Max = 500;
+    /// <summary>A whole errands run's worth (0.7.13 kept 500, and a long run lost its start before it could be copied).</summary>
+    private const int Max = 5000;
     private readonly List<LogLine> lines = new();
 
     public IReadOnlyList<LogLine> Lines => lines;
@@ -26,7 +27,8 @@ public sealed class ActivityLog
     public void Add(LogKind kind, string text)
     {
         lines.Add(new LogLine(DateTime.Now, kind, text));
-        if (lines.Count > Max) lines.RemoveRange(0, lines.Count - Max);
+        // Trimmed in chunks (one line at a time moved the whole list on every line added).
+        if (lines.Count > Max + 500) lines.RemoveRange(0, lines.Count - Max);
         switch (kind)
         {
             case LogKind.Error:

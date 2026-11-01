@@ -45,7 +45,13 @@ public sealed unsafe class FurnitureReader
         }
     }
 
-    /// <summary>Every furnishing placed inside, or null when you aren't inside a home.</summary>
+    /// <summary>
+    /// Every furnishing placed inside, or null when you aren't inside a home (or what's placed isn't
+    /// loaded yet). The spawned pieces first (with the instance the editor moves); then any slot in the
+    /// game's own list of placed furniture (FurnitureVector) with no spawned piece, from its memory (no
+    /// instance: it can't be moved until it loads). 0.7.13's chambers read no pieces from the spawned
+    /// ones alone; when the two disagree, the counts are logged once per place.
+    /// </summary>
     public List<LivePiece>? ReadInterior()
     {
         var hm = HousingManager.Instance();
@@ -54,21 +60,66 @@ public sealed unsafe class FurnitureReader
         var memory = fm->FurnitureMemory;
         var array = &fm->ObjectManager.ObjectArray;
         var list = new List<LivePiece>();
+        var seen = new HashSet<int>();
+        var objects = 0;
+        var unmapped = 0;
         foreach (var p in array->Objects)
         {
             var o = p.Value;
             if (o == null || o == array->TempObject) continue;
+            objects++;
             var ho = (HousingObject*)o;
-            if (ho->HousingObjectId.Type != HousingObjectType.Furniture) continue;
             var key = (int)ho->HousingFurnitureIndex;
+            if (key < 0) continue;
             var item = data.ItemOfPlaced(o->BaseId, yard: false);
-            if (item == 0) continue;
+            if (item == 0)
+            {
+                unmapped++;
+                continue;
+            }
+            if (!seen.Add(key)) continue;
             byte stain = 0;
-            if (key >= 0 && key < memory.Length) stain = memory[key].Stain;
+            if (key < memory.Length) stain = memory[key].Stain;
             list.Add(new LivePiece(key, item, o->BaseId, Pos(o), o->Rotation, stain, (nint)ho->SharedGroupLayoutInstance));
         }
+        // The game's own list: slots placed but not spawned (or not told apart above).
+        var vectorCount = fm->FurnitureVector.LongCount;
+        var fromMemory = 0;
+        if (vectorCount > 0 && memory.Length > 0)
+        {
+            fixed (HousingFurniture* first = memory)
+            {
+                for (long i = 0; i < vectorCount; i++)
+                {
+                    var f = fm->FurnitureVector[i].Value;
+                    if (f == null) continue;
+                    var key = (int)(f - first);
+                    if (key < 0 || key >= memory.Length || seen.Contains(key)) continue;
+                    // Its HousingFurniture row: 0x20000 | Id inside (the memory's Id lacks the prefix).
+                    var row = 0x20000u | (f->Id & 0xFFFF);
+                    var item = data.ItemOfPlaced(row, yard: false);
+                    if (item == 0) item = data.ItemOfPlaced(f->Id, yard: false);
+                    if (item == 0) continue;
+                    seen.Add(key);
+                    fromMemory++;
+                    list.Add(new LivePiece(key, item, row, new Vector3(f->Position.X, f->Position.Y, f->Position.Z), f->Rotation, f->Stain, 0));
+                }
+            }
+        }
+        var place = hm->IndoorTerritory->HouseId.Id;
+        if ((fromMemory > 0 || (list.Count == 0 && (objects > 0 || vectorCount > 0))) && place != lastOddPlace)
+        {
+            lastOddPlace = place;
+            Services.Log.Info($"Placed furniture here: {objects} spawned objects ({unmapped} not furniture), {vectorCount} in the game's list, "
+                              + $"{list.Count} read ({fromMemory} from the list only).");
+        }
+        // Something's placed but nothing could be read: not loaded yet, rather than "nothing placed".
+        if (list.Count == 0 && (objects > 0 || vectorCount > 0)) return null;
         return list;
     }
+
+    /// <summary>The place whose odd read was logged last (once per place).</summary>
+    private ulong lastOddPlace;
 
     /// <summary>The garden of the plot you're editing, or null when it can't be read here.</summary>
     public List<LivePiece>? ReadGarden(out string? why)

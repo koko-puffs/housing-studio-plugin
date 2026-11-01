@@ -55,7 +55,8 @@ public sealed unsafe partial class PlacementRunner : IDisposable
     /// tried up to 600: two minutes and more for a piece the list didn't show at all).
     /// </summary>
     private const int MaxRowsInTurn = 60;
-    private static readonly TimeSpan WindowWait = TimeSpan.FromSeconds(3);
+    // How long a window may take to open before the run gives up on it (0.8.0: 3 s stopped runs on one server hitch; waits end as soon as it opens).
+    private static readonly TimeSpan WindowWait = TimeSpan.FromSeconds(6);
     private static readonly TimeSpan ClickWait = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan LandWait = TimeSpan.FromSeconds(6);
     private static readonly TimeSpan YouWait = TimeSpan.FromSeconds(90);
@@ -128,6 +129,9 @@ public sealed unsafe partial class PlacementRunner : IDisposable
     private List<PlacedPiece> toPutAway = new();
 
     private bool putAwayPlanned = true;
+
+    /// <summary>Tries at reading what's placed before planning the last phases (every 250 ms, 20 at most).</summary>
+    private int planReadTries;
 
     /// <summary>The run put the editor in Store mode: it's put back in Rotate when the run ends, so a click doesn't put a piece away.</summary>
     private bool storeModeUsed;
@@ -341,6 +345,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         dyesTriedOnStandIn.Clear();
         index = -1;
         dyesPlanned = !dyes;
+        planReadTries = 0;
         failuresInARow = 0;
         rowsReady = false;
         listExhausted = false;
@@ -395,7 +400,19 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 keepAs = null;
                 return;
             }
-            else log.Warn("No backup was saved for this run (see why above): Put them back won't be offered for it.");
+            else
+            {
+                // An older run's backup would put away everything placed since it: not offered.
+                LastBackupPath = null;
+                backupOf = null;
+                log.Warn("No backup was saved for this run (see why above): Put them back won't be offered for it.");
+            }
+        }
+        else if (!dryRun)
+        {
+            // No backup this run (switched off): an older run's isn't offered for it either.
+            LastBackupPath = null;
+            backupOf = null;
         }
         if (!dryRun && !rehearse && config.PlaceAnywhere && !anywhere.Enable()) log.Warn(anywhere.Error ?? "Couldn't switch on place anywhere; placing with the game's usual checks.");
 
@@ -680,6 +697,19 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         if (index >= jobs.Count)
         {
             if (AfterClearOut()) return;
+            // The dyes, putting away and the later clear out are worked out from what's placed now: a
+            // moment the list can't be read (a garden's list reloading) waits, up to 5 s, rather than
+            // dropping the whole phase (it was planned as done and did nothing).
+            if ((!dyesPlanned || !putAwayPlanned || clearOutLater.Count > 0) && ReadLive() == null)
+            {
+                if (planReadTries++ < 20)
+                {
+                    index--;
+                    nextJobAt = DateTime.UtcNow + TimeSpan.FromMilliseconds(250);
+                    return;
+                }
+                log.Warn("What's placed couldn't be read for 5 s: the dyes and putting away left after placing are skipped (run again to do them).");
+            }
             if (!dyesPlanned)
             {
                 dyesPlanned = true;
@@ -816,7 +846,11 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 var mode = HousingEditor.Mode;
                 if (mode == EditorMode.Rotate || mode == EditorMode.Move)
                 {
-                    if (editor.Place(held)) log.Info("  Set down the piece the editor was holding, where it is now.");
+                    // Only a placed piece it holds is set down: after a storeroom row the game keeps that
+                    // row's preview as the active item, and setting it down would place it, untracked.
+                    liveThisFrame = null;
+                    var placed = ReadLive()?.Values.Any(p => p.Instance == held) == true;
+                    if (placed && editor.Place(held)) log.Info("  Set down the piece the editor was holding, where it is now.");
                 }
                 else if (mode == EditorMode.Place)
                 {
@@ -1061,7 +1095,8 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 previewAt = HousingActions.PreviewAt()?.Position;
                 // What's placed right now, so a piece put down since the run's (a second old) list
                 // isn't taken for the one this places.
-                if (ReadLive() is { } liveNow) knownKeys.UnionWith(liveNow.Keys);
+                // (Replaced, not added to: a slot freed since, by hand, is free for the new piece to take.)
+                if (ReadLive() is { } liveNow) knownKeys = liveNow.Keys.ToHashSet();
                 placedBefore = FurnitureReader.PlacedCount(side == Side.Garden);
                 storedBefore = InventoryReader.StoreroomOccupied(side).Count;
                 lastToast = null;
@@ -1129,6 +1164,11 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             if (placed) return StepOutcome.Done;
             var toast = lastToast != null ? $" The game said: \"{lastToast}\"." : string.Empty;
             var count = FurnitureReader.PlacedCount(side == Side.Garden);
+            // Placed after all, but not told apart (lag, or a slot used again): no second copy.
+            var stored = InventoryReader.StoreroomOccupied(side).Count;
+            if ((placedBefore >= 0 && count > placedBefore) || (storedBefore >= 0 && stored < storedBefore))
+                return StepOutcome.Skip($"It looks placed ({placedBefore} → {count} pieces placed, {storedBefore} → {stored} in the storeroom) but couldn't be told apart, "
+                                        + "so it isn't moved to its spot; check it, or run again to move it.", ProblemKind.DidNotLand);
             if (attempt == 0)
             {
                 log.Warn($"  The game didn't place it ({placedBefore} → {count} pieces placed).{toast} Trying once more.");
@@ -2416,6 +2456,8 @@ public sealed unsafe partial class PlacementRunner : IDisposable
     {
         if (!rowsReady || !rowsDirty || DryRun) return;
         if (!force && DateTime.UtcNow - rowsSavedAt < RowsSaveEvery) return;
+        // Tried now, whatever comes of it (a mismatch below scanned the storeroom every frame after).
+        rowsSavedAt = DateTime.UtcNow;
         var occupied = Occupied();
         // Only rows that line up with the storeroom as it is now (not while a placed piece's row is still to come out).
         if (rows.Count != occupied.Count || rowsLeaving.Count > 0) return;
@@ -2520,7 +2562,10 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 Run = () =>
                 {
                     var live = ReadLive();
-                    if (live == null || !live.TryGetValue(key, out var piece) || piece.ItemId != job.Target.ItemId)
+                    // The same item at the same spot (a slot may be renumbered after a piece is stored:
+                    // another copy, one the design keeps, isn't put away in its place).
+                    if (live == null || !live.TryGetValue(key, out var piece) || piece.ItemId != job.Target.ItemId
+                        || Vector3.Distance(piece.Position, job.Target.Position) > 0.25f)
                         return StepOutcome.Skip("It's no longer where it was (moved or put away already).", ProblemKind.NotFound);
                     if (piece.Instance == 0) return StepOutcome.Skip("The game hasn't loaded it (walk closer to it).", ProblemKind.NotLoaded);
                     if (StoreroomRefuses()) return StepOutcome.Skip(StoreroomFullWords, ProblemKind.Other);

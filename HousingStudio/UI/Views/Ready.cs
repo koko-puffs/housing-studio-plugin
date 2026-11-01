@@ -430,7 +430,7 @@ public sealed partial class MainWindow
     {
         Kit.Gap(10);
         Txt.Note(Plugin.FixtureRun.Enabled
-            ? "Set them with the game's Housing → Remodel Interior (or Remodel Exterior), or let the plugin put them in from your bags (experimental). Tick each one as it's set."
+            ? "Set them with the game's Housing → Remodel Interior (or Remodel Exterior), or let the plugin put them in from your bags. Tick each one as it's set."
             : "The plugin doesn't set these: use the game's Housing → Remodel Interior (or Remodel Exterior), and tick each one as you set it.");
         Kit.Gap(10);
         DrawSetFixtures();
@@ -537,6 +537,9 @@ public sealed partial class MainWindow
     /// <summary>What the brass button does now (Ready's, and Done's after a preview), with its words.</summary>
     /// <param name="Getting">It opens the errands' estimate (Get first is on and they can get something and go now).</param>
     /// <param name="NotGetting">Get first is on but the errands can't go (why); the button places what you have.</param>
+    /// <summary>What Ready's button does without getting first (the errands' screen's "Place what I have").</summary>
+    private Action? placeInstead;
+
     private readonly record struct GoPlan(bool Getting, string? NotGetting, ReadyMode Mode, IReadOnlyList<PlacedPiece>? Clear, bool FixturesAfter, string Label);
 
     /// <summary>
@@ -550,7 +553,11 @@ public sealed partial class MainWindow
         string? notGetting = null;
         if (config.GetFirst && Errands.Enabled && session.Plan != null && !shop.IsEmpty)
             notGetting = Plugin.FixtureRun.Active ? "Wait until the fixtures are set." : ErrandsBlocked(ErrandEstimate().Plan);
-        var getting = config.GetFirst && Errands.Enabled && session.Plan != null && !shop.IsEmpty && notGetting == null;
+        // Blocked (a plugin missing, too little gil, another world…): the errands' screen still opens,
+        // as it says why and how to fix it, with "Place what I have" there; it used to quietly become
+        // "Start placing". Only nothing to get (or fixtures being set) places straight away.
+        var getting = config.GetFirst && Errands.Enabled && session.Plan != null && !shop.IsEmpty
+                      && (notGetting == null || (!Plugin.FixtureRun.Active && !ErrandEstimate().Plan.IsEmpty));
         var mode = ModeNow;
         var clear = ChosenClearOut();
         var things = getting ? GetWords(shop).Things : 0;
@@ -559,7 +566,8 @@ public sealed partial class MainWindow
         var g = goLabel;
         if (g.Mode != mode || g.Things != things || g.Clear != (clear?.Count ?? 0) || g.Getting != getting || g.Fixtures != fixturesAfter)
             g = goLabel = (mode, things, clear?.Count ?? 0, getting, fixturesAfter, ReadyWords.Go(mode, things, clear?.Count ?? 0, getting, fixturesAfter));
-        return new GoPlan(getting, notGetting, mode, clear, fixturesAfter, g.Label);
+        // (Getting: the errands' screen says what's in the way; the line under the button doesn't.)
+        return new GoPlan(getting, getting ? null : notGetting, mode, clear, fixturesAfter, g.Label);
     }
 
     /// <summary>The brass button pressed: the errands' estimate, else Swap (asks first), else Start (asks before a clear out).</summary>
@@ -569,6 +577,12 @@ public sealed partial class MainWindow
         {
             errandsRehearse = false;
             errandsOpen = true;
+            // The errands' screen offers placing what you have instead, as this button would have.
+            placeInstead = () =>
+            {
+                if (g.Mode == ReadyMode.Swap && g.Clear != null) AskSwap(KeepAsName(), g.Clear.Count);
+                else StartFromReady(entries);
+            };
         }
         else if (g.Mode == ReadyMode.Swap && g.Clear != null) AskSwap(KeepAsName(), g.Clear.Count);
         else StartFromReady(entries);

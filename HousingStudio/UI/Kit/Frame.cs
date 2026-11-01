@@ -117,6 +117,7 @@ public static class Frame
         Kit.PushBox(win.X + S(SidePad), w - S(SidePad) * 2);
         Kit.Reserve(new Vector2(win.X, top), 1, S(padTop));
         Footers.Push((id, top, padBottom));
+        footerTop = top;
     }
 
     public static void EndFooter()
@@ -138,8 +139,13 @@ public static class Frame
         toastUntil = DateTime.UtcNow + TimeSpan.FromSeconds(2.6);
     }
 
+    /// <summary>The top of the footer drawn this frame (0 when none): toasts sit above it, not over its buttons.</summary>
+    private static float footerTop;
+
     public static void DrawToast()
     {
+        var top = footerTop;
+        footerTop = 0;
         if (toast == null) return;
         var left = (toastUntil - DateTime.UtcNow).TotalSeconds;
         if (left <= 0)
@@ -151,9 +157,13 @@ public static class Frame
         var old = Palette.Opacity;
         Palette.Opacity = ReducedMotion ? 1 : fade;
         var win = ImGui.GetWindowPos();
-        var size = Txt.Measure(toast, Face.Sans, 13);
+        // Within the window (a long message is cut short), above the footer.
+        var text = Txt.Fit(toast, Face.Sans, 13, MathF.Max(S(80), ImGui.GetWindowWidth() - S(56) - S(16) * 2));
+        var size = Txt.Measure(text, Face.Sans, 13);
         var box = new Vector2(size.X + S(16) * 2, S(36));
-        var pos = new Vector2(win.X + (ImGui.GetWindowWidth() - box.X) / 2, win.Y + ImGui.GetWindowHeight() - box.Y - S(28));
+        var bottom = win.Y + ImGui.GetWindowHeight();
+        var y = top > win.Y && top < bottom ? top - S(10) - box.Y : bottom - box.Y - S(28);
+        var pos = new Vector2(win.X + (ImGui.GetWindowWidth() - box.X) / 2, y);
         var dl = ImGui.GetForegroundDrawList();
         // shadow-float, softly.
         for (var i = 3; i >= 1; i--)
@@ -161,7 +171,7 @@ public static class Frame
         dl.AddRectFilled(pos, pos + box, Palette.U32(Palette.Over(Palette.Float, Palette.Ink)), box.Y / 2);
         dl.AddRect(pos, pos + box, Palette.U32(Palette.Line), box.Y / 2);
         using (Txt.Fonts.Push(Face.Sans, 13))
-            dl.AddText(pos + new Vector2(S(16), (box.Y - ImGui.GetFontSize()) / 2), Palette.U32(Palette.Ivory), toast);
+            dl.AddText(pos + new Vector2(S(16), (box.Y - ImGui.GetFontSize()) / 2), Palette.U32(Palette.Ivory), text);
         Palette.Opacity = old;
     }
 }

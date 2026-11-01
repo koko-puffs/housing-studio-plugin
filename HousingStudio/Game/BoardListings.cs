@@ -59,6 +59,21 @@ public static class BoardListings
         }
     }
 
+    /// <summary>
+    /// A listing was bought (or is gone): taken out, and the rows after it moved up one, as the board's
+    /// own list does; a list the board sends again after the purchase replaces it anyway.
+    /// </summary>
+    public static void Gone(ulong listingId)
+    {
+        lock (Gate)
+        {
+            var i = Received.FindIndex(r => r.ListingId == listingId);
+            if (i < 0) return;
+            Received.RemoveAt(i);
+            for (var k = i; k < Received.Count; k++) Received[k] = Received[k] with { Row = Received[k].Row - 1 };
+        }
+    }
+
     /// <summary>When this item's listings were last asked for (<see cref="DateTime.MaxValue"/> if they weren't).</summary>
     public static DateTime AskedAt(uint itemId)
     {
@@ -73,7 +88,8 @@ public static class BoardListings
     {
         if (!Automation.GameUi.IsOpen(Automation.ErrandTable.ItemSearchResult)) return null;
         if (ErrandGame.Listings(itemId) is { } l) return l;
-        return (DateTime.UtcNow - AskedAt(itemId)).TotalSeconds > 6 ? new List<ErrandGame.BoardListing>() : null;
+        // Nothing came at all: none listed after 10 s (a slow or busy board took 4 s in 0.7.13's runs).
+        return (DateTime.UtcNow - AskedAt(itemId)).TotalSeconds > 10 ? new List<ErrandGame.BoardListing>() : null;
     }
 
     /// <summary>

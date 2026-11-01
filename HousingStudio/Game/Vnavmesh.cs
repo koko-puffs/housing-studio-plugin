@@ -60,6 +60,7 @@ public sealed class Vnavmesh
     private readonly ICallGateSubscriber<List<Vector3>, bool, object> follow;
     private readonly ICallGateSubscriber<bool> isRunning;
     private readonly ICallGateSubscriber<object> stop;
+    private readonly ICallGateSubscriber<object> cancelPathfinds;
     private readonly HashSet<string> failed = new();
 
     public Vnavmesh()
@@ -71,6 +72,7 @@ public sealed class Vnavmesh
         follow = pi.GetIpcSubscriber<List<Vector3>, bool, object>("vnavmesh.Path.MoveTo");
         isRunning = pi.GetIpcSubscriber<bool>("vnavmesh.Path.IsRunning");
         stop = pi.GetIpcSubscriber<object>("vnavmesh.Path.Stop");
+        cancelPathfinds = pi.GetIpcSubscriber<object>("vnavmesh.Nav.PathfindCancelAll");
     }
 
     /// <summary>Installed and loaded (its IPC may still not answer).</summary>
@@ -93,11 +95,20 @@ public sealed class Vnavmesh
     public bool Busy => Call("SimpleMove.PathfindInProgress", () => pathfindInProgress.InvokeFunc(), false) || Call("Path.IsRunning", () => isRunning.InvokeFunc(), false);
 
     /// <summary>Stops walking (safe to call whenever: nothing happens when it isn't).</summary>
-    public void Stop() => Call<object?>("Path.Stop", () =>
+    public void Stop()
     {
-        stop.InvokeAction();
-        return null;
-    }, null);
+        // A path still being worked out starts walking once it's found: cancelled too.
+        Call<object?>("Nav.PathfindCancelAll", () =>
+        {
+            cancelPathfinds.InvokeAction();
+            return null;
+        }, null);
+        Call<object?>("Path.Stop", () =>
+        {
+            stop.InvokeAction();
+            return null;
+        }, null);
+    }
 
     private T Call<T>(string what, Func<T> call, T fallback)
     {
