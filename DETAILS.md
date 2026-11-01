@@ -8,7 +8,16 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.9.1. Placing works in the game; the newer features haven't all been tried in it yet.**
+> **Status: 0.9.2. Placing works in the game; the newer features haven't all been tried in it yet.**
+> 0.9.2: **a game crash while dyeing.** A dye you have none of isn't in the dye window's list; the run
+> then guessed its row from the game's dye sheet, which could be past the list's end, and the game read
+> past its own list (a crash in the window's text). Now a dye not in the list is skipped as out (and
+> the other pieces needing it), and no row past the list's end is ever chosen. The dye window's clicks
+> are a little less hurried than 0.9.1's: nothing goes in until its list has filled in, at least 0.1 s
+> between its clicks, the whole click gap before a shade switch. And **with things missing, Start opens
+> the errands** whenever "Get them for me first" is on, also when they can get none of it: their
+> screen says why for each, with Place what I have (it placed straight away, the reason only in the line
+> under the button).
 > 0.9.1: **Clear out this house** (Home's This house): everything placed there is put away, whatever
 > design is loaded (or none), tabletop and wall-mounted pieces first, to the storeroom, your bags, or
 > the storeroom and then your bags (it asks). **The storeroom's real size**: a company's private
@@ -699,9 +708,10 @@ One window, no tabs: what it shows follows what you're doing.
   a tick. One brass button says what it does ("Get 12, then place", "Clear out 14, then place",
   "Swap and place", "Start placing", with " · fixtures" when they follow), beside **Preview** (a menu:
   **Mark the spots**, the preview, or **Rehearse the run**, see [Rehearsal](#rehearsal)), with
-  about how long it takes at your pace (and the errands' trips first). With Get them for me first on,
-  it opens the errands only when they can get something and set out now; otherwise it places what you
-  have, and the line under it starts "Not getting first:" and why. Its tooltip says what it does
+  about how long it takes at your pace (and the errands' trips first). With Get them for me first on and
+  something missing, it opens the errands' screen, also when they can get none of it or can't set out
+  now (0.9.2): that screen says why, thing by thing, and has **Place what I have**. Only while the
+  fixtures are being set does it place straight away, the line under it starting "Not getting first:". Its tooltip says what it does
   to the game (stay in the house, the editor, the backup). The header has **Pieces**, **Settings**
   and **×** (close this design).
 - **Running** (a run or a preview): the pieces done, the three phases, the piece in hand with its dye

@@ -180,6 +180,16 @@ public class DyeRowTests
 
     [Fact]
     public void NoColorIsntADye() => Assert.Null(Menus.DyeRow(Window, "No Color", 203));
+
+    [Fact]
+    public void TheListsLengthEndsWhereNoColorComesRound()
+    {
+        // Rows 0 (No Color) to 37 (Standard Spectrum Dye at 240): every row read is under it.
+        Assert.Equal(38, Menus.DyeListCount(Window, 203));
+        Assert.True(Menus.DyeRow(Window, "Terebinth", 203) < Menus.DyeListCount(Window, 203));
+        // Not loaded yet: no rows.
+        Assert.Equal(0, Menus.DyeListCount(new Dictionary<int, string> { [1] = "HOUSING" }, 203));
+    }
 }
 
 public class RunEstimateTests

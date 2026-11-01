@@ -573,8 +573,10 @@ public sealed partial class MainWindow
         // Blocked (a plugin missing, too little gil, another world…): the errands' screen still opens,
         // as it says why and how to fix it, with "Place what I have" there; it used to quietly become
         // "Start placing". Only nothing to get (or fixtures being set) places straight away.
-        var getting = config.GetFirst && Errands.Enabled && session.Plan != null && !shop.IsEmpty
-                      && (notGetting == null || (!Plugin.FixtureRun.Active && !ErrandEstimate().Plan.IsEmpty));
+        // 0.9.1.1: also when the errands can get none of it (2 dyes missing, the market off…): their screen
+        // says why for each, with Place what I have. Start placed without a word then, the reason only in
+        // the line under the button.
+        var getting = config.GetFirst && Errands.Enabled && session.Plan != null && !shop.IsEmpty && !Plugin.FixtureRun.Active;
         var mode = ModeNow;
         var clear = ChosenClearOut();
         var things = getting ? GetWords(shop).Things : 0;

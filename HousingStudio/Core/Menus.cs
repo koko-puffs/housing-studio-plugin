@@ -45,6 +45,24 @@ public static class Menus
         return null;
     }
 
+    /// <summary>
+    /// How many rows the dye window's list has: rows are numbered by their value's place after
+    /// <paramref name="first"/> ("No Color", row 0), up to the last before its words come round again;
+    /// 0 before it's loaded.
+    /// </summary>
+    public static int DyeListCount(IReadOnlyDictionary<int, string> values, int first)
+    {
+        if (!values.TryGetValue(first, out var head) || Clean(head).Length == 0) return 0;
+        var last = first;
+        foreach (var (index, text) in values.OrderBy(kv => kv.Key))
+        {
+            if (index <= first) continue;
+            if (string.Equals(Clean(text), Clean(head), StringComparison.OrdinalIgnoreCase)) break;
+            if (Clean(text).Length > 0) last = index;
+        }
+        return last - first + 1;
+    }
+
     public static string Clean(string s) =>
         new string(s.Where(c => !char.IsControl(c) && c != '�' && !(c >= '' && c <= '')).ToArray()).Trim();
 }

@@ -279,8 +279,11 @@ me" off, the run waits for you to put each down and then sets it.
 3. Find the dye's row in the window's list: its names start at value 203 "No Color" (row 0) and end
    where "No Color" comes round again, so Snow White is row 1 and Soot Black row 6. If the dye isn't
    in the list shown, the shade is picked first (`[i:4, i:shade]`, RemakePlace, **unconfirmed**), and
-   the row is read as soon as the shade's list shows the dye (0.9.1; 0.9.0 waited 300 ms whatever),
-   else its place in the dye sheet after 0.4 s.
+   the row is read once the shade's list shows the dye and 0.15 s have passed (0.9.1). A dye not in the
+   list after 0.4 s isn't guessed any more (0.9.2): a dye you have none of isn't listed, and the row
+   0.9.0 guessed from the dye sheet could be past the list's end, where the game read past its own
+   list and crashed. It's skipped as out of that dye, as are the other pieces needing it; and no row
+   is ever chosen past the list's end (`Menus.DyeListCount`).
 4. `ColorantColoring ← [i:5, i:row, i:stain, i:0]` (recorded: Snow White [5, 1, 1, 0], Soot Black
    [5, 6, 6, 0]; the third value matches both row and Stain id there), Dye `[i:0]`, confirm
    `MiragePrismMiragePlateConfirm ← [i:0]`, close `ColorantColoring ← [i:-2]`; check the dye changed.
@@ -290,12 +293,14 @@ me" off, the run waits for you to put each down and then sets it.
    window closes without Dye. So the dye before is read with the window closed, and the dye after only
    counts with the window closed and the reading steady for 0.3 s (`DyeHeld`; 0.7 s before 0.9.1).
 
-   **Speed (0.9.1).** The dye window's clicks (interact, shade, pick, Dye, Yes, close) wait only a
-   third of the pace's click gap after the last action (`Step.Gap`, `DyeGap`: 67 ms at Quick, never
-   under 40), as the window answers within a frame; RemakePlace/plugin waits 100 ms in all between its
-   own. "Close the dye window if it's open" and "If it didn't, open it from the list" aren't actions any
-   more (they click only when needed), so no click gap is spent on them, and the dye shown is checked
-   from the first frame after the pick (no 250 ms delay first).
+   **Speed (0.9.1, made safer in 0.9.2).** Nothing goes into the dye window until its list has come in
+   and held for three frames and 80 ms (0.9.1 switched the shade 70 ms after the window opened, and the
+   game crashed once filling the window's text). The interact, pick, Dye, Yes and close wait half the
+   pace's click gap after the last action (`Step.Gap`, `DyeGap`: never under 100 ms, RemakePlace/plugin's
+   wait between its window's clicks); the shade switch takes the whole click gap, as it fills the
+   window again. "Close the dye window if it's open" clicks (as an action) only when it's open, and "If
+   it didn't, open it from the list" isn't an action, so no click gap is spent on them; the dye shown is
+   checked from the first frame after the pick (no 250 ms delay first).
 
 **How many to dye** is one calculation (`DyeCounts.Needs`) for the run's first line and the dye phase:
 each piece you have, placed (the dye it has now) or still to place (the dye it will have: storeroom

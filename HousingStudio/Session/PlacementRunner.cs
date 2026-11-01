@@ -2395,6 +2395,8 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         var stainBefore = new byte[] { 0 };
         var asked = new[] { false };
         nint instance = 0;
+        // The dye window's list, held steady for a few frames before anything goes into it (this piece's own).
+        var windowFilled = new Settle(3, TimeSpan.FromMilliseconds(80));
         return new List<Step>
         {
             EnsureMode(EditorMode.Dye),
@@ -2402,11 +2404,20 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             // was spent for nothing on every piece.
             new Step
             {
-                Label = $"Close the dye window if it's open: {UiTable.DyeClose.Describe()}",
+                Label = "Is the dye window still open?",
                 Run = () =>
                 {
-                    if (GameUi.IsOpen(UiTable.DyeConfirm)) GameUi.Fire(UiTable.DyeConfirmNo);
-                    else if (GameUi.IsOpen(UiTable.DyeWindow)) GameUi.Fire(UiTable.DyeClose);
+                    // The click, when there's one, is an action (the click gap before it, 0.9.1's crash).
+                    if (GameUi.IsOpen(UiTable.DyeConfirm) || GameUi.IsOpen(UiTable.DyeWindow))
+                        queue.InsertNext(new[]
+                        {
+                            Step.Act($"Close the dye window: {UiTable.DyeClose.Describe()}", () =>
+                            {
+                                if (GameUi.IsOpen(UiTable.DyeConfirm)) GameUi.Fire(UiTable.DyeConfirmNo);
+                                else if (GameUi.IsOpen(UiTable.DyeWindow)) GameUi.Fire(UiTable.DyeClose);
+                                return StepOutcome.Done;
+                            }),
+                        });
                     return StepOutcome.Done;
                 },
             },
@@ -2474,11 +2485,28 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 },
             },
             Step.Wait($"The dye window ({UiTable.DyeWindow}) is open", () => GameUi.IsOpen(UiTable.DyeWindow), WindowWait, StepStatus.SkipJob),
+            // 0.9.1.1: nothing goes into the window until its list has come in and held for a few frames.
+            // 0.9.1 switched the shade 70 ms after opening it, and the game crashed filling the window's
+            // text (Utf8String from a bad pointer, in AgentColorant's refresh).
             new Step
             {
+                Label = "The dye window has filled in its list",
+                Timeout = WindowWait,
+                OnTimeout = StepStatus.SkipJob,
+                TimeoutProblem = ProblemKind.DyeFailed,
+                TimeoutMessage = "The dye window's list didn't fill in.",
+                Run = () =>
+                {
+                    var values = GameUi.TextValues(UiTable.DyeWindow);
+                    var count = Menus.DyeListCount(values, UiTable.DyeListFirstValue);
+                    return windowFilled.Update(count > 1 ? $"{values.Count}:{count}" : null, DateTime.UtcNow) ? StepOutcome.Done : StepOutcome.Waiting;
+                },
+            },
+            new Step
+            {
+                // The full click gap: it may switch the shade, which fills the window again.
                 Label = $"Find {dye} in the dye window's list",
                 IsAction = true,
-                Gap = DyeGap,
                 Run = () =>
                 {
                     var r = Menus.DyeRow(GameUi.TextValues(UiTable.DyeWindow), dye, UiTable.DyeListFirstValue);
@@ -2497,7 +2525,8 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                                 Timeout = TimeSpan.FromSeconds(2),
                                 Run = () =>
                                 {
-                                    if (Menus.DyeRow(GameUi.TextValues(UiTable.DyeWindow), dye, UiTable.DyeListFirstValue) is { } found)
+                                    if (Menus.DyeRow(GameUi.TextValues(UiTable.DyeWindow), dye, UiTable.DyeListFirstValue) is { } found
+                                        && queue.Elapsed >= Speed.Wait(150))
                                     {
                                         row[0] = found;
                                         return StepOutcome.Done;
@@ -2513,11 +2542,13 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     row[0] = r ?? Fallback();
                     return StepOutcome.Done;
 
+                    // 0.9.1.1: no row guessed from the dye sheet any more. A dye you have none of isn't in
+                    // the window's list, and its guessed row was past the list's end: the game read past
+                    // it and crashed (0.9.1, after two missing dyes).
                     int Fallback()
                     {
-                        var f = slot?.SubOrder ?? 0;
-                        log.Info($"  {dye} not found by name in the window; using its place in the dye sheet ({f}).");
-                        return f;
+                        log.Info($"  {dye} isn't in the dye window's list (none of it to use?).");
+                        return -1;
                     }
                 },
             },
@@ -2528,6 +2559,15 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 Gap = DyeGap,
                 Run = () =>
                 {
+                    // Never a row past the list's end (a row guessed from the dye sheet when the name
+                    // wasn't read): the game reads past its own list then.
+                    var rows = Menus.DyeListCount(GameUi.TextValues(UiTable.DyeWindow), UiTable.DyeListFirstValue);
+                    if (row[0] < 0 || row[0] >= rows)
+                    {
+                        // Not in the list: none to use. The other pieces needing it are skipped at once.
+                        if (dyesOut.Add(job.Target.Stain)) log.Warn($"Out of {dye}, it seems (not in the dye window's list): the other pieces needing it are skipped this run.");
+                        return StepOutcome.Skip($"Out of {dye}: it isn't in the dye window's list. Get some and Try again.", ProblemKind.DyeMissing);
+                    }
                     var values = UiCallValues.Of(("row", row[0]), ("stain", job.Target.Stain));
                     log.Info($"  → {UiTable.DyePick.Describe(values)}");
                     if (Rehearsal) queue.InsertNext(RehearseDyeEnd(job, key, stainBefore[0]));
@@ -2631,11 +2671,13 @@ public sealed unsafe partial class PlacementRunner : IDisposable
     private static readonly TimeSpan DyeSettle = TimeSpan.FromMilliseconds(300);
 
     /// <summary>
-    /// The least time between two of the dye window's clicks (0.9.1): a third of the pace's click gap
-    /// (67 ms at Quick), as the window answers within a frame. RemakePlace/plugin waits 100 ms in all
-    /// between its window's clicks.
+    /// The least time between two of the dye window's clicks: half the pace's click gap, never under
+    /// 100 ms (RemakePlace/plugin's wait between its window's clicks). 0.9.1 had a third, down to 40 ms,
+    /// and the game crashed once; the shade switch takes the whole click gap.
     /// </summary>
-    private TimeSpan DyeGap => TimeSpan.FromMilliseconds(Math.Max(40, Speed.ClickGapMs / 3));
+    private TimeSpan DyeGap => TimeSpan.FromMilliseconds(Math.Max(100, Speed.ClickGapMs / 2));
+
+
 
     /// <summary>
     /// Before Dye is pressed: the window must be on this piece and, once its preview shows, show the dye
