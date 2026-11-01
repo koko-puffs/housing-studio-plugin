@@ -90,15 +90,17 @@ public static class ErrandWords
     {
         var legs = new List<RouteLeg>();
         var retainers = trip.Stops.Where(s => s.Kind == StopKind.Retainer).ToList();
-        if (retainers.Count > 0)
-        {
-            var what = string.Join("; ", retainers.Select(r => $"{r.Retainer?.Name ?? "A retainer"} · {Items(r.Items, name)}"));
-            legs.Add(new RouteLeg(ErrandLeg.Bell, houseBell ? "Bell in your house" : $"{city} · Summoning bell", what, "free"));
-        }
+        var bellSaid = false;
         foreach (var stop in trip.Stops)
         {
             switch (stop.Kind)
             {
+                case StopKind.Retainer when !bellSaid:
+                    // Every retainer of the trip at one bell, where the trip comes to the first.
+                    bellSaid = true;
+                    var what = string.Join("; ", retainers.Select(r => $"{r.Retainer?.Name ?? "A retainer"} · {Items(r.Items, name)}"));
+                    legs.Add(new RouteLeg(ErrandLeg.Bell, houseBell ? "Bell in your house" : $"{city} · Summoning bell", what, "free"));
+                    break;
                 case StopKind.Vendor:
                     var v = stop.Vendor;
                     var where = v == null ? "A vendor" : v.PlaceName.Length > 0 ? $"{v.PlaceName} · {v.NpcName}" : v.NpcName;

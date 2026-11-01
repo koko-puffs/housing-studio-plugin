@@ -32,7 +32,8 @@ public static unsafe class InventoryReader
     {
         var list = new List<StockSlot>();
         Add(list, data, Bags, StockSource.Inventory, out _);
-        Add(list, data, side == Side.Interior ? InteriorStoreroom : ExteriorStoreroom, StockSource.Storeroom, out storeroomLoaded);
+        Add(list, data, side == Side.Interior ? InteriorStoreroom : ExteriorStoreroom, StockSource.Storeroom, out _);
+        storeroomLoaded = StoreroomLoaded(side);
         return list;
     }
 
@@ -123,17 +124,28 @@ public static unsafe class InventoryReader
         return loaded ? Math.Max(0, slots - used) : null;
     }
 
-    /// <summary>Has the game sent this side's storeroom yet?</summary>
+    /// <summary>How long the storeroom's pages stay as they are before it counts as sent.</summary>
+    private static readonly TimeSpan PagesSteady = TimeSpan.FromMilliseconds(300);
+
+    private static readonly int[] pagesSeen = new int[2];
+    private static readonly DateTime[] pagesSeenSince = new DateTime[2];
+
+    /// <summary>
+    /// Has the game sent this side's storeroom: some of its pages, and no more coming (as many for a
+    /// moment). 0.8.0 took the first page as all of it, so pieces on the later pages read as missing.
+    /// Framework thread.
+    /// </summary>
     public static bool StoreroomLoaded(Side side)
     {
-        var mgr = InventoryManager.Instance();
-        if (mgr == null) return false;
-        foreach (var t in side == Side.Interior ? InteriorStoreroom : ExteriorStoreroom)
+        var pages = StoreroomPagesLoaded(side);
+        var i = side == Side.Interior ? 0 : 1;
+        var now = DateTime.UtcNow;
+        if (pages != pagesSeen[i])
         {
-            var c = mgr->GetInventoryContainer(t);
-            if (c != null && c->IsLoaded) return true;
+            pagesSeen[i] = pages;
+            pagesSeenSince[i] = now;
         }
-        return false;
+        return pages > 0 && now - pagesSeenSince[i] >= PagesSteady;
     }
 
     /// <summary>How many of a side's storeroom pages (containers) the game has sent so far.</summary>

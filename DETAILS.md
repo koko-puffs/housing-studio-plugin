@@ -8,7 +8,28 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.8.0. Placing works in the game; the newer features haven't all been tried in it yet.**
+> **Status: 0.8.1. Placing works in the game; the newer features haven't all been tried in it yet.**
+> 0.8.1, from the company chambers' rehearsal and a stability scan. **The errands**: an NPC's items
+> are one stop, each of their shops opened in turn (the Housing Merchant's chairs, then their
+> partitions: one visit a run, not one a trip), and each item is checked against its own price (0.8.0
+> kept the stop's first item's offer, so a Stage Panel was checked against an Eorzean Map's 1,000 gil
+> and "learnt" nothing); a trip goes to the vendors first (it starts at home, where they are), then the
+> bell, then your own world's board, then the others (0.8.0 went to a city's bell, home to the merchant,
+> then back to a city); a bell in your home still comes first. The board's results get 1.5 s before
+> the first pick whatever the pace (at Quick a quarter of the picks went too early and were lost),
+> and a lost pick is tried again after 1.2 s, not 2.5. NPCs are walked up to 2 yalms (from 3 the game
+> said "Unable to execute action from this location"). A "You:" step that's done already isn't said
+> in the log; a rehearsal says "learnt" only when a price was. **Placing**: the storeroom counts as
+> loaded once its pages stop coming (the first page alone made pieces on later pages read as missing);
+> a set-down gets 5 s to land; a bag piece goes straight from the bag when the storeroom's picking is
+> off; the furnishing list is read every 40 ms while it settles, not every frame; a garden run stops
+> if you go to another plot, a garden read off every plot is "stand on your plot", and the check that
+> the garden's list is this plot's reads the spawned pieces (it never caught anything); a rehearsal
+> with nothing placed says so instead of "none of the 0 pieces". **Elsewhere**: the fixtures' apply
+> waits for its question (a closed window no longer counts as answered) and says yes to one that
+> comes late; the run's progress file is written every 3 s at most, not at each piece; retainer saves
+> land in order; a plugin that fails while starting lets go of what it hooked; the recording keeps
+> its first lines, cuts very long ones, and doesn't stop at an hour while a run goes (three at most).
 > 0.8.0, from a full rehearsal and a scan of the whole plugin. **The errands**: a bell or board is used
 > once you're free (not still at a bell or in an event) and used again every 2.5 s it hasn't opened
 > (the board after a retainer said "Cannot execute at this time"); a retainer's greeting is clicked
@@ -701,8 +722,10 @@ under the journey. After, a summary as Done's: what it got on how many trips for
 wasn't got, and why it stopped.
 
 The plan (`Core/Errands.cs`, `ErrandPlanner`, tested in `ErrandTests.cs`) is pure:
-from the shopping plan (`ShoppingPlanner`), units of each line, ordered retainers → vendors (by
-district, zone, NPC) → the market (by world), packed into trips by bag slots. The run
+from the shopping plan (`ShoppingPlanner`), units of each line, ordered vendors (by district, zone,
+NPC: one stop per NPC, each item with its own offer, `ErrandItem.Vendor`) → retainers (first instead
+when your home has a bell, `ErrandOptions.BellAtHome`) → the market (your own world first, then by
+world), packed into trips by bag slots. The run
 (`Session/ErrandRunner.cs`) is steps on the framework thread like the placing run's, every one logged:
 
 1. **Retainers**: a summoning bell in your house if there is one (looked for within 60 yalms when it
@@ -710,8 +733,9 @@ district, zone, NPC) → the market (by world), packed into trips by bag slots. 
    the retainer chosen in the list, their greeting (you click it through), **Entrust or withdraw
    items**, then each stack's menu (`AgentInventoryContext`) and **Retrieve** (the whole stack).
 2. **Vendors**: your own district's housing vendors are walked to from your home's teleport (it lands
-   you outside your door); others by teleporting to their zone's aetheryte. Talk to them, choose the
-   shop in their menu by its name, buy in lots of up to 99 (the row found by the item's name in the
+   you outside your door); others by teleporting to their zone's aetheryte. Walk up to 2 yalms, talk to
+   them, choose the shop in their menu by its name (each of their shops in turn, the last one closed
+   and their menu used again, or they're talked to again), buy in lots of up to 99 (the row found by the item's name in the
    window), answering the yes/no if one comes.
 3. **The market board**: Limsa's aetheryte (a world visit first, if the listing is on another world),
    the nearest board. **You** search for each item and open its listings (that click isn't known yet);

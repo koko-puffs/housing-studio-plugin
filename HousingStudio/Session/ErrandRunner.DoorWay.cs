@@ -153,9 +153,11 @@ public sealed partial class ErrandRunner
     }
 
     /// <summary>A shop asked another price than the game's data for one: kept for every estimate after, and said.</summary>
-    private void LearnPrice(uint itemId, uint unitPrice, uint planned)
+    /// <returns>Whether it was new (not already what the estimates use).</returns>
+    private bool LearnPrice(uint itemId, uint unitPrice, uint planned)
     {
-        if (shop.LearnPrice(itemId, unitPrice))
-            log.Info($"  Learnt: the shop asks {unitPrice:N0} gil for one {Name(itemId)}, not the {planned:N0} the game's data says. Estimates use {unitPrice:N0} from now on.");
+        if (!shop.LearnPrice(itemId, unitPrice)) return false;
+        log.Info($"  Learnt: the shop asks {unitPrice:N0} gil for one {Name(itemId)}, not the {planned:N0} the game's data says. Estimates use {unitPrice:N0} from now on.");
+        return true;
     }
 }

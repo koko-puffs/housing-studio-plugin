@@ -92,6 +92,22 @@ public sealed class GameData
     public uint ItemOfPlaced(uint baseId, bool yard) =>
         (yard ? yardObjectToItem : indoorFurnitureToItem).TryGetValue(baseId, out var item) ? item : 0;
 
+    /// <summary>
+    /// The Item behind a slot of the game's furniture memory, whose Id lacks its sheet's prefix (the
+    /// HousingFurniture or HousingYardObject row is 0x20000 or 0x30000 with it; which one isn't sure, and
+    /// only one is ever in a sheet): each tried, then the id as it is.
+    /// </summary>
+    public (uint Item, uint Row) ItemOfSlot(uint id, bool yard)
+    {
+        var low = id & 0xFFFF;
+        foreach (var row in new[] { 0x20000u | low, 0x30000u | low, id })
+        {
+            var item = ItemOfPlaced(row, yard);
+            if (item != 0) return (item, row);
+        }
+        return (0, 0);
+    }
+
     public string DyeName(byte stainId) =>
         stainId == 0 ? "Undyed" : dyesById.TryGetValue(stainId, out var d) && d.Name.Length > 0 ? d.Name : $"Dye {stainId}";
 

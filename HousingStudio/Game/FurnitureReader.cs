@@ -95,10 +95,8 @@ public sealed unsafe class FurnitureReader
                     if (f == null) continue;
                     var key = (int)(f - first);
                     if (key < 0 || key >= memory.Length || seen.Contains(key)) continue;
-                    // Its HousingFurniture row: 0x20000 | Id inside (the memory's Id lacks the prefix).
-                    var row = 0x20000u | (f->Id & 0xFFFF);
-                    var item = data.ItemOfPlaced(row, yard: false);
-                    if (item == 0) item = data.ItemOfPlaced(f->Id, yard: false);
+                    // Its HousingFurniture row (the memory's Id lacks the sheet's prefix).
+                    var (item, row) = data.ItemOfSlot(f->Id, yard: false);
                     if (item == 0) continue;
                     seen.Add(key);
                     fromMemory++;
@@ -152,27 +150,37 @@ public sealed unsafe class FurnitureReader
         }
 
         // The plot whose furnishings are being edited, else the one you're standing on (0-based).
-        var plotIndex = ot->EditingFurnishingsOfPlot >= 0 ? (byte)ot->EditingFurnishingsOfPlot : ot->HouseUnit.Value;
+        // Off every plot (the house id's plot is then 127 or more), there's no plot to read: 0.8.0 passed
+        // the raw value, 255, to the game's yard lookup.
+        int plotIndex = ot->EditingFurnishingsOfPlot >= 0 ? ot->EditingFurnishingsOfPlot : ot->HouseUnit.IsApartment ? -1 : ot->HouseUnit.PlotIndex;
+        if (plotIndex is < 0 or >= 60)
+        {
+            why = "Stand on your plot (or open Housing → Outdoor Furnishings on it).";
+            return null;
+        }
         var list = new List<LivePiece>();
         var mismatched = 0;
         for (var slot = 0; slot < container->Size; slot++)
         {
             var inv = container->GetInventorySlot(slot);
             if (inv == null || inv->IsEmpty()) continue;
-            int key = yardIndex(plotIndex, (ushort)slot);
+            int key = yardIndex((byte)plotIndex, (ushort)slot);
             if (key < 0 || key >= memory.Length) continue;
             ref var f = ref memory[key];
             var itemId = inv->GetBaseItemId();
             // The list is the plot whose Outdoor Furnishings were last opened; standing on another
             // plot, its slots would be that plot's pieces under this list's items.
-            var slotItem = data.ItemOfPlaced(f.Id, yard: true);
-            if (slotItem != 0 && slotItem != itemId) mismatched++;
+            // What stands in the slot is read from its spawned object (its BaseId is its full sheet row);
+            // 0.8.0 read the memory's Id, which lacks the sheet's prefix, so it found nothing and this
+            // check never caught another plot's pieces.
             nint instance = 0;
             var position = new Vector3(f.Position.X, f.Position.Y, f.Position.Z);
             var yaw = f.Rotation;
             if (objects.TryGetValue(key, out var objAddr))
             {
                 var ho = (HousingObject*)objAddr;
+                var slotItem = data.ItemOfPlaced(ho->GameObject.BaseId, yard: true);
+                if (slotItem != 0 && slotItem != itemId) mismatched++;
                 instance = (nint)ho->SharedGroupLayoutInstance;
                 position = Pos(&ho->GameObject);
                 yaw = ho->GameObject.Rotation;

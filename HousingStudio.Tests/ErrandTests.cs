@@ -32,19 +32,63 @@ public class ErrandPlannerTests
         new() { FreeSlots = free, MarketCeiling = ceiling, StackSize = _ => stack };
 
     [Fact]
-    public void OneTripInOrderRetainersVendorsMarket()
+    public void OneTripInOrderVendorsRetainersMarket()
     {
+        // Vendors first (a trip starts at home, where your district's are), then the bell and the
+        // boards, which are in the same city (0.8.0 went to the bell, home, then back to a city).
         var shop = Shop(new[] { new Need(300, 1, NeedKind.Piece), new Need(200, 2, NeedKind.Piece), new Need(100, 1, NeedKind.Piece) },
             new[] { Retainer(1, "Momo", (100, 1)) }, new[] { Offer(200, 1500) }, new[] { Quote(300, (5000, 1, "Lich")) });
         var plan = ErrandPlanner.Build(shop, Options());
         var trip = Assert.Single(plan.Trips);
-        Assert.Equal(new[] { StopKind.Retainer, StopKind.Vendor, StopKind.Market }, trip.Stops.Select(s => s.Kind));
+        Assert.Equal(new[] { StopKind.Vendor, StopKind.Retainer, StopKind.Market }, trip.Stops.Select(s => s.Kind));
         Assert.Equal(3000, plan.VendorGil);
         Assert.Equal(5250, plan.MarketGil);
         Assert.Equal(4, plan.Count);
         Assert.Equal("Lich", trip.Stops[2].World);
         Assert.Equal(5000u, trip.Stops[2].Items[0].MaxUnitPrice);
         Assert.Empty(plan.Left);
+    }
+
+    [Fact]
+    public void OneNpcsShopsAreOneStopEachItemAtItsOwnPrice()
+    {
+        // The Housing Merchant's chairs and partitions are two shops of one NPC: one visit (0.8.0 made
+        // a stop per shop, and kept the first item's offer for the stop, so a Stage Panel was checked
+        // against an Eorzean Map's price).
+        var chair = Offer(200, 5000) with { ShopId = 1, ShopName = "Purchase Furnishings (Chairs, Beds)" };
+        var map = Offer(201, 1000) with { ShopId = 2, ShopName = "Purchase Furnishings (Partitions, Wall Decorations)" };
+        var panel = Offer(202, 4000) with { ShopId = 2, ShopName = "Purchase Furnishings (Partitions, Wall Decorations)" };
+        var shop = Shop(new[] { new Need(200, 1, NeedKind.Piece), new Need(201, 1, NeedKind.Piece), new Need(202, 2, NeedKind.Piece) },
+            offers: new[] { chair, map, panel });
+        var plan = ErrandPlanner.Build(shop, Options());
+        var stop = Assert.Single(Assert.Single(plan.Trips).Stops);
+        Assert.Equal(StopKind.Vendor, stop.Kind);
+        Assert.Equal(3, stop.Items.Count);
+        Assert.Equal(4000u, stop.Items.Single(i => i.ItemId == 202).Vendor!.Price);
+        Assert.Equal(1000u, stop.Items.Single(i => i.ItemId == 201).Vendor!.Price);
+        Assert.Equal(1u, stop.Items.Single(i => i.ItemId == 200).Vendor!.ShopId);
+        Assert.Equal(2u, stop.Items.Single(i => i.ItemId == 202).Vendor!.ShopId);
+        Assert.Equal(5000 + 1000 + 8000, plan.VendorGil);
+    }
+
+    [Fact]
+    public void ABellAtHomeComesFirst()
+    {
+        var shop = Shop(new[] { new Need(200, 2, NeedKind.Piece), new Need(100, 1, NeedKind.Piece) },
+            new[] { Retainer(1, "Momo", (100, 1)) }, new[] { Offer(200, 1500) });
+        var plan = ErrandPlanner.Build(shop, Options() with { BellAtHome = true });
+        Assert.Equal(new[] { StopKind.Retainer, StopKind.Vendor }, Assert.Single(plan.Trips).Stops.Select(s => s.Kind));
+    }
+
+    [Fact]
+    public void YourOwnWorldsBoardComesFirst()
+    {
+        var shop = Shop(new[] { new Need(300, 1, NeedKind.Piece), new Need(301, 1, NeedKind.Piece) },
+            quotes: new[] { Quote(300, (100, 1, "Alpha")), Quote(301, (100, 1, "Zodiark")) });
+        var plan = ErrandPlanner.Build(shop, Options() with { HomeWorld = "Zodiark" });
+        Assert.Equal(new[] { "Zodiark", "Alpha" }, Assert.Single(plan.Trips).Stops.Select(s => s.World));
+        var other = ErrandPlanner.Build(shop, Options());
+        Assert.Equal(new[] { "Alpha", "Zodiark" }, Assert.Single(other.Trips).Stops.Select(s => s.World));
     }
 
     [Fact]
@@ -317,13 +361,13 @@ public class ErrandWordsTests
         var trip = Assert.Single(route);
         Assert.Equal("TRIP 1", trip.Label);
         Assert.Equal("5 of 10 bag slots", trip.Rest);
-        Assert.Equal(new[] { ErrandLeg.Bell, ErrandLeg.Vendor, ErrandLeg.Market, ErrandLeg.Home }, trip.Legs.Select(l => l.Kind));
-        Assert.Equal("Bell in your house", trip.Legs[0].Name);
-        Assert.Equal("Momo · Glade Shelf ×2", trip.Legs[0].What);
-        Assert.Equal("free", trip.Legs[0].Gil);
-        Assert.Equal("Mist · Material Supplier", trip.Legs[1].Name);
-        Assert.Equal("Riviera Table ×2", trip.Legs[1].What);
-        Assert.Equal("3,000", trip.Legs[1].Gil);
+        Assert.Equal(new[] { ErrandLeg.Vendor, ErrandLeg.Bell, ErrandLeg.Market, ErrandLeg.Home }, trip.Legs.Select(l => l.Kind));
+        Assert.Equal("Mist · Material Supplier", trip.Legs[0].Name);
+        Assert.Equal("Riviera Table ×2", trip.Legs[0].What);
+        Assert.Equal("3,000", trip.Legs[0].Gil);
+        Assert.Equal("Bell in your house", trip.Legs[1].Name);
+        Assert.Equal("Momo · Glade Shelf ×2", trip.Legs[1].What);
+        Assert.Equal("free", trip.Legs[1].Gil);
         // Another world's board says which.
         Assert.Equal("Limsa · Market board · Lich", trip.Legs[2].Name);
         Assert.Equal("≤ 5,250", trip.Legs[2].Gil);
@@ -339,7 +383,7 @@ public class ErrandWordsTests
         Assert.True(route.Count >= 2);
         Assert.Equal("2 of 2 bag slots", route[0].Rest);
         Assert.Equal("worked out again after trip 1", route[1].Rest);
-        Assert.Equal("Limsa · Summoning bell", route[0].Legs[0].Name);
+        Assert.Contains(route.SelectMany(t => t.Legs), l => l.Name == "Limsa · Summoning bell");
         // The home world's board doesn't name it.
         Assert.Contains(route.SelectMany(t => t.Legs), l => l.Name == "Limsa · Market board");
     }
@@ -352,7 +396,7 @@ public class ErrandWordsTests
         Assert.Equal("Ul'dah", city);
         Assert.Equal("Limsa", HousingStudio.UI.Model.ErrandWords.City(0));
         var route = HousingStudio.UI.Model.ErrandWords.Route(plan, Names, houseBell: false, homeWorld: "Lich", city: city);
-        Assert.Equal("Ul'dah · Summoning bell", route[0].Legs[0].Name);
+        Assert.Contains(route.SelectMany(t => t.Legs), l => l.Name == "Ul'dah · Summoning bell");
         Assert.Contains(route.SelectMany(t => t.Legs), l => l.Name == "Ul'dah · Market board");
     }
 

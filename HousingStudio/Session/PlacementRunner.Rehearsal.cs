@@ -118,7 +118,8 @@ public sealed unsafe partial class PlacementRunner
                 standIn = loaded.Where(p => p.Stain != 0).Concat(loaded.Where(p => p.Stain == 0 && data.Dyeable(p.ItemId)))
                     .Select(p => (LivePiece?)p)
                     .FirstOrDefault();
-                if (standIn == null)
+                if (standIn == null && live.Count == 0) none = "nothing is placed here yet to try it on";
+                else if (standIn == null)
                     none = $"none of the {live.Count} pieces placed here is dyed or takes a dye by the game's data ({live.Values.Count(p => p.Instance != 0)} loaded, "
                            + $"{live.Values.Count(p => data.Dyeable(p.ItemId))} dyeable, {live.Values.Count(p => p.Stain != 0)} dyed)";
             }

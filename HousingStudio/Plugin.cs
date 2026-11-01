@@ -61,64 +61,97 @@ public sealed class Plugin : IDalamudPlugin
             config.Save();
         }
 
-        Plots = PlotTable.LoadEmbedded();
-        data = new GameData();
-        data.WarmUp();
-        Shop = new Shopping(config, data);
-        Shop.WarmUp();
-        editor = new HousingEditor();
-        actions = new HousingActions();
-        recorder = new Automation.UiRecorder();
-        furniture = new FurnitureReader(data);
-        if (editor.Error != null) log.Warn(editor.Error);
-        if (furniture.GardenError != null) log.Warn(furniture.GardenError);
-        if (actions.DyeError != null) log.Warn(actions.DyeError);
-
-        session = new LayoutSession(data, furniture, Plots, log);
-        runner = new PlacementRunner(config, session, editor, actions, furniture, anywhere, data, log);
-        FixtureRun = new FixtureRunner(config, session, data, log);
-        Errands = new ErrandRunner(config, session, runner, data, log, Shop);
-        // The errands get the fixtures not in your bags too; Set them for me puts them up after placing.
-        Shop.FixturesToGet = () => FixtureRun.Plan().Where(t => t.State == FixtureState.NotOwned).Select(t => t.Fixture.ItemId).ToList();
-        BoardListings.Hook();
-        // One run acts at a time; the errands start the placing run themselves.
-        runner.OtherRunActive = () => FixtureRun.Active || (Errands.Active && !Errands.LetsPlace);
-        FixtureRun.OtherRunActive = () => runner.Active || Errands.Active;
-        Errands.OtherRunActive = () => FixtureRun.Active;
-        care = new Care(config, session, runner, data, log);
-
-        fonts = new Fonts();
-        Txt.Fonts = fonts;
-        overlay = new Overlay(config, session, runner, data);
-        window = new MainWindow(config, session, runner, data, log, fonts, recorder, overlay);
-        window.Use(care);
-        windows.AddWindow(window);
-
-        // The site link (0.7.0): the inbox, verified homes and visitors, shots from the game. Nothing of
-        // it starts while a run goes (the visitor panel's like, save and stamp excepted).
-        link = new GameLink(config, log, Plots, () => runner.Active || FixtureRun.Active || Errands.Active);
-        window.Use(link);
-        visitorPanel = new VisitorPanel(config, link, fonts, window.ShowSettings);
-        shotPanel = new ShotPanel(link, fonts);
-        windows.AddWindow(visitorPanel);
-        windows.AddWindow(shotPanel);
-
-        Services.Commands.AddHandler(Command, new CommandInfo(OnCommand)
+        try
         {
-            HelpMessage = "Open Housing Studio. /hstudio pause, resume, stop, or continue (step-by-step mode) control a run; /hstudio shot takes a shot of your verified home for its page on the site.",
-        });
+            Plots = PlotTable.LoadEmbedded();
+            data = new GameData();
+            data.WarmUp();
+            Shop = new Shopping(config, data);
+            Shop.WarmUp();
+            editor = new HousingEditor();
+            actions = new HousingActions();
+            recorder = new Automation.UiRecorder();
+            furniture = new FurnitureReader(data);
+            if (editor.Error != null) log.Warn(editor.Error);
+            if (furniture.GardenError != null) log.Warn(furniture.GardenError);
+            if (actions.DyeError != null) log.Warn(actions.DyeError);
 
-        Services.PluginInterface.UiBuilder.Draw += Draw;
-        Services.PluginInterface.UiBuilder.OpenMainUi += OpenMain;
-        Services.PluginInterface.UiBuilder.OpenConfigUi += OpenSettings;
-        Services.Framework.Update += OnUpdate;
-        Services.ClientState.TerritoryChanged += OnTerritoryChanged;
-        Services.ClientState.Logout += OnLogout;
-        Services.ClientState.Login += OnLogin;
+            session = new LayoutSession(data, furniture, Plots, log);
+            runner = new PlacementRunner(config, session, editor, actions, furniture, anywhere, data, log);
+            FixtureRun = new FixtureRunner(config, session, data, log);
+            Errands = new ErrandRunner(config, session, runner, data, log, Shop);
+            // The errands get the fixtures not in your bags too; Set them for me puts them up after placing.
+            Shop.FixturesToGet = () => FixtureRun.Plan().Where(t => t.State == FixtureState.NotOwned).Select(t => t.Fixture.ItemId).ToList();
+            BoardListings.Hook();
+            // One run acts at a time; the errands start the placing run themselves.
+            runner.OtherRunActive = () => FixtureRun.Active || (Errands.Active && !Errands.LetsPlace);
+            FixtureRun.OtherRunActive = () => runner.Active || Errands.Active;
+            Errands.OtherRunActive = () => FixtureRun.Active;
+            recorder.RunGoing = () => runner.Active || FixtureRun.Active || Errands.Active;
+            care = new Care(config, session, runner, data, log);
 
-        // Reopen the last design, so it's there when you come back to your house.
-        // (Safely: a file that fails to load mustn't leave the plugin half set up, its hooks in the game.)
-        if (config.RecentFiles.Count > 0 && System.IO.File.Exists(config.RecentFiles[0])) Safely(() => session.Load(config.RecentFiles[0]));
+            fonts = new Fonts();
+            Txt.Fonts = fonts;
+            overlay = new Overlay(config, session, runner, data);
+            window = new MainWindow(config, session, runner, data, log, fonts, recorder, overlay);
+            window.Use(care);
+            windows.AddWindow(window);
+
+            // The site link (0.7.0): the inbox, verified homes and visitors, shots from the game. Nothing of
+            // it starts while a run goes (the visitor panel's like, save and stamp excepted).
+            link = new GameLink(config, log, Plots, () => runner.Active || FixtureRun.Active || Errands.Active);
+            window.Use(link);
+            visitorPanel = new VisitorPanel(config, link, fonts, window.ShowSettings);
+            shotPanel = new ShotPanel(link, fonts);
+            windows.AddWindow(visitorPanel);
+            windows.AddWindow(shotPanel);
+
+            Services.Commands.AddHandler(Command, new CommandInfo(OnCommand)
+            {
+                HelpMessage = "Open Housing Studio. /hstudio pause, resume, stop, or continue (step-by-step mode) control a run; /hstudio shot takes a shot of your verified home for its page on the site.",
+            });
+
+            Services.PluginInterface.UiBuilder.Draw += Draw;
+            Services.PluginInterface.UiBuilder.OpenMainUi += OpenMain;
+            Services.PluginInterface.UiBuilder.OpenConfigUi += OpenSettings;
+            Services.Framework.Update += OnUpdate;
+            Services.ClientState.TerritoryChanged += OnTerritoryChanged;
+            Services.ClientState.Logout += OnLogout;
+            Services.ClientState.Login += OnLogin;
+
+            // Reopen the last design, so it's there when you come back to your house.
+            // (Safely: a file that fails to load mustn't leave the plugin half set up, its hooks in the game.)
+            if (config.RecentFiles.Count > 0 && System.IO.File.Exists(config.RecentFiles[0])) Safely(() => session.Load(config.RecentFiles[0]));
+        }
+        catch
+        {
+            // Dalamud doesn't dispose a plugin whose constructor threw: what was hooked into the game is
+            // let go of here, or the game would call into an unloaded plugin.
+            TearDownAfterFailedStart();
+            throw;
+        }
+    }
+
+    /// <summary>What a constructor that threw had set up, let go of (each part only if it was made).</summary>
+    private void TearDownAfterFailedStart()
+    {
+        Services.Framework.Update -= OnUpdate;
+        Services.ClientState.TerritoryChanged -= OnTerritoryChanged;
+        Services.ClientState.Logout -= OnLogout;
+        Services.ClientState.Login -= OnLogin;
+        Services.PluginInterface.UiBuilder.Draw -= Draw;
+        Services.PluginInterface.UiBuilder.OpenMainUi -= OpenMain;
+        Services.PluginInterface.UiBuilder.OpenConfigUi -= OpenSettings;
+        Safely(() => Services.Commands.RemoveHandler(Command));
+        Safely(anywhere.Dispose);
+        Safely(() => Errands?.Dispose());
+        Safely(BoardListings.Unhook);
+        Safely(windows.RemoveAllWindows);
+        Safely(() => link?.Dispose());
+        Safely(() => runner?.Dispose());
+        Safely(() => recorder?.Dispose());
+        Safely(() => fonts?.Dispose());
+        Safely(() => Shop?.Dispose());
     }
 
     private DateTime drawFailedAt;

@@ -36,16 +36,26 @@ public sealed record ErrandItem(Need Need, int Count, int Bought, int Slots, lon
 
     /// <summary>Exchange: the currency this costs (none of it gil).</summary>
     public long CurrencyCost { get; init; }
+
+    /// <summary>
+    /// Vendor: this item's own offer (its shop in the NPC's menu, and its price). A stop is one NPC, whose
+    /// items can be in several of their shops (0.8.0 kept the first item's offer for the whole stop, so a
+    /// Stage Panel was checked against an Eorzean Map's 1,000 gil).
+    /// </summary>
+    public VendorOffer? Vendor { get; init; }
 }
 
 /// <summary>One stop of a trip: a retainer, a vendor or a world's market board, and what to get there.</summary>
-/// <param name="Key">The place, so stops at the same one are put together ("r:123", "v:339:1025800:262144", "m:Lich").</param>
+/// <param name="Key">The place, so stops at the same one are put together ("r:123", "v:339:Mist:1025800", "m:Lich").</param>
 public sealed record ErrandStop(StopKind Kind, string Key, IReadOnlyList<ErrandItem> Items)
 {
     /// <summary><see cref="StopKind.Retainer"/>: the retainer to take it from.</summary>
     public RetainerStock? Retainer { get; init; }
 
-    /// <summary><see cref="StopKind.Vendor"/> and <see cref="StopKind.Exchange"/>: the NPC to buy from (and where).</summary>
+    /// <summary>
+    /// <see cref="StopKind.Vendor"/> and <see cref="StopKind.Exchange"/>: the NPC to buy from (and where). A
+    /// vendor's items each have their own offer (<see cref="ErrandItem.Vendor"/>: the shop and the price).
+    /// </summary>
     public VendorOffer? Vendor { get; init; }
 
     /// <summary><see cref="StopKind.Market"/>: the world whose board the listings are on.</summary>
@@ -56,7 +66,7 @@ public sealed record ErrandStop(StopKind Kind, string Key, IReadOnlyList<ErrandI
     public int Count => Items.Sum(i => i.Count);
 }
 
-/// <summary>One trip: its stops in order (retainers, then vendors by place and NPC, then the market by world), then home to place what was got.</summary>
+/// <summary>One trip: its stops in order (vendors by place and NPC, then retainers, then the market by world), then home to place what was got.</summary>
 public sealed record ErrandTrip(int Number, IReadOnlyList<ErrandStop> Stops)
 {
     public int Slots => Stops.Sum(s => s.Slots);
@@ -134,6 +144,15 @@ public sealed record ErrandOptions
     /// </summary>
     public Func<uint, string, bool>? ListingAllowed { get; init; }
 
+    /// <summary>
+    /// Your home has a summoning bell (you start beside it): the retainers come first then, before you go
+    /// out to the vendors.
+    /// </summary>
+    public bool BellAtHome { get; init; }
+
+    /// <summary>Your home world: its board comes before other worlds' (you're there after the bell).</summary>
+    public string? HomeWorld { get; init; }
+
     /// <summary>Now, for how old Universalis's listings are (tests set it).</summary>
     public DateTime Now { get; init; } = DateTime.UtcNow;
 }
@@ -182,8 +201,8 @@ public sealed class ErrandPlan
 
 /// <summary>
 /// Turns a shopping plan into trips: what to fetch from each retainer, vendor and world's market board,
-/// as much as your free bag slots hold each time, in the order retainers → vendors (by place, then NPC)
-/// → the market board (by world). Each trip is followed by going home and placing what it got. The
+/// as much as your free bag slots hold each time, in the order vendors (by place, then NPC) → retainers
+/// → the market board (by world, your own first). Each trip is followed by going home and placing what it got. The
 /// market keeps under a ceiling: listings past it are left out. Pure, so it's tested.
 /// </summary>
 public static class ErrandPlanner
@@ -255,7 +274,9 @@ public static class ErrandPlanner
                         left.Add(new ErrandLeft(line.Need, line.Count, LeftReason.NoVendorReachable));
                         break;
                     }
-                    units.Add(new Unit(StopKind.Vendor, $"v:{offer.TerritoryId}:{offer.District}:{offer.NpcId}:{offer.ShopId}", 1, line.Need, line.Count, line.Count, stack,
+                    // One stop per NPC (0.8.0 had one per shop: the Housing Merchant's three shops were three
+                    // visits, in three trips); each item opens its own shop there.
+                    units.Add(new Unit(StopKind.Vendor, $"v:{offer.TerritoryId}:{offer.District}:{offer.NpcId}", 1, line.Need, line.Count, line.Count, stack,
                         (long)offer.Price * line.Count, true) { Vendor = offer });
                     break;
                 case SourceKind.Exchange when line.Exchange != null:
@@ -281,10 +302,11 @@ public static class ErrandPlanner
             }
         }
 
-        // Retainers by name, vendors by place and NPC, the market by world; each in the plan's order within.
+        // Vendors by place and NPC, retainers by name, the market by world (your own first); each in the
+        // plan's order within.
         var ordered = units.Select((u, i) => (u, i))
-            .OrderBy(x => x.u.Kind)
-            .ThenBy(x => PlaceOrder(x.u), StringComparer.Ordinal)
+            .OrderBy(x => KindOrder(x.u.Kind, o.BellAtHome))
+            .ThenBy(x => PlaceOrder(x.u, o.HomeWorld), StringComparer.Ordinal)
             .ThenBy(x => x.i)
             .Select(x => x.u)
             .ToList();
@@ -350,11 +372,27 @@ public static class ErrandPlanner
         return soFar;
     }
 
-    private static string PlaceOrder(Unit u) => u.Kind switch
+    /// <summary>
+    /// The order of a trip's stops: vendors first, then the bell, then the boards. A trip starts at home,
+    /// where your district's vendors are (0.8.0 went to the bell in a city first, then home to the
+    /// merchant, then back to a city for the board: a teleport more each trip); the bell and the boards
+    /// are in the same city. A bell in your home: the retainers first, there.
+    /// </summary>
+    private static int KindOrder(StopKind kind, bool bellAtHome) => kind switch
+    {
+        StopKind.Retainer when bellAtHome => -1,
+        StopKind.Vendor => 0,
+        StopKind.Exchange => 1,
+        StopKind.Retainer => 2,
+        _ => 3,
+    };
+
+    private static string PlaceOrder(Unit u, string? homeWorld) => u.Kind switch
     {
         StopKind.Retainer => (u.Retainer?.Name ?? string.Empty) + "\u0001" + u.Key,
         StopKind.Vendor or StopKind.Exchange => $"{u.Vendor?.District ?? "~"}\u0001{u.Vendor?.TerritoryId:D6}\u0001{u.Vendor?.NpcId:D10}\u0001{u.Key}",
-        _ => u.World ?? string.Empty,
+        // Your own world's board first (the bell's city is on it), then the others by name.
+        _ => (homeWorld != null && u.World == homeWorld ? "\u0000" : "\u0001") + (u.World ?? string.Empty),
     };
 
     /// <summary>
@@ -362,7 +400,7 @@ public static class ErrandPlanner
     /// stop (a retainer, a vendor, a world's board) goes into as few trips as it can: its parts are cut
     /// only where they don't fit one trip's slots, and the pieces are packed biggest first into the first
     /// trip with room (0.7.12 packed in order, so a world's board came back in trip after trip). Within
-    /// a trip, the plan's order (retainers, vendors by place, the board by world).
+    /// a trip, the plan's order (vendors by place, retainers, the board by world).
     /// </summary>
     private static List<ErrandTrip> Pack(List<Unit> units, int freeSlots, List<ErrandLeft> left)
     {
@@ -445,6 +483,7 @@ public static class ErrandPlanner
                 return new ErrandItem(need, i.Sum(u => u.Count), i.Sum(u => u.Bought), i.Sum(u => u.Slots), i.Sum(u => u.Gil))
                 {
                     Exchange = i.Select(u => u.Exchange).FirstOrDefault(e => e != null),
+                    Vendor = i.Select(u => u.Vendor).FirstOrDefault(v => v != null),
                     CurrencyCost = i.Sum(u => u.CurrencyCost),
                     MaxUnitPrice = i.Where(u => u.Listing != null).Select(u => u.Listing!.PricePerUnit).DefaultIfEmpty(0u).Max(),
                     Listings = i.Where(u => u.Listing != null).Select(u => u.Listing!).ToList(),

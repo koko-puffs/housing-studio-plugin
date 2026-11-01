@@ -604,6 +604,12 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             Stop("You left the home this was started in.");
             return;
         }
+        // A garden: the ward's plots share its zone, so another plot (being edited, or stood on) is checked too.
+        if (startKind == PlaceKind.Ward && startPlot != null && ctx.Plot is >= 1 and <= 60 && ctx.Plot != startPlot)
+        {
+            Stop($"You're at plot {ctx.Plot} now, not plot {startPlot} the run was started on.");
+            return;
+        }
         if (ctx.Busy)
         {
             Stop("The game got busy (combat, a cutscene, or a zone change).");
@@ -978,7 +984,9 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 Label = "It lands at its spot",
                 Key = "lands",
                 Run = () => Landed(key, job.Target) ? StepOutcome.Done : StepOutcome.Waiting,
-                Timeout = TimeSpan.FromSeconds(3),
+                // 5 s: the server's answer can lag (0.8.0's 3 s counted a slow one as a failure, and a few in
+                // a row stop the run).
+                Timeout = TimeSpan.FromSeconds(5),
                 OnTimeout = StepStatus.SkipJob,
                 TimeoutProblem = ProblemKind.DidNotLand,
                 TimeoutMessage = "It didn't end up at its spot. The game refuses floating or overlapping pieces; \"Place anywhere\" in Settings allows them.",
@@ -1191,6 +1199,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
     private Step ListSettles()
     {
         var settle = new Settle(5, Speed.Wait(250));
+        var next = DateTime.MinValue;
         return new Step
         {
             Label = "The furnishing list has filled in",
@@ -1198,6 +1207,9 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             Timeout = TimeSpan.FromSeconds(10),
             Run = () =>
             {
+                // Read every 40 ms, not every frame: a read decodes every row's name.
+                if (DateTime.UtcNow < next) return StepOutcome.Waiting;
+                next = DateTime.UtcNow + ListReadEvery;
                 var count = InventoryReader.StoreroomOccupied(side).Count;
                 var list = ListReader.Read(UiTable.FurnishingList).OrderByDescending(l => l.Rows.Count).FirstOrDefault();
                 // How many storeroom pages have loaded goes into the state too: the count climbs as they do.
@@ -1261,10 +1273,17 @@ public sealed unsafe partial class PlacementRunner : IDisposable
     /// fewer), watches the furnishing list settle and reads its names again, so it's ready by the time
     /// the next piece needs it (0.3.1 waited 265 ms for it before every piece). Cheap: no clicks.
     /// </summary>
+    private static readonly TimeSpan ListReadEvery = TimeSpan.FromMilliseconds(40);
+
+    private DateTime nextListWatch;
+
     private void WatchList()
     {
         RowLeft();
         if (listSettled || !rowsReady || listExpect == null) return;
+        // Every 40 ms, not every frame (a read decodes every row's name).
+        if (DateTime.UtcNow < nextListWatch) return;
+        nextListWatch = DateTime.UtcNow + ListReadEvery;
         if (!GameUi.IsOpen(UiTable.FurnishingList) || !InventoryReader.StoreroomTabShown()) return;
         var count = InventoryReader.StoreroomOccupied(side).Count;
         if (count > listExpect.Value)
@@ -1723,7 +1742,9 @@ public sealed unsafe partial class PlacementRunner : IDisposable
     /// </summary>
     private List<Step> BagSteps(RunJob job)
     {
-        if (BagRoute.First(side == Side.Interior) == BagWay.Held) return HeldAttempt(job);
+        // Through the storeroom only when its picking is on (Settings): else straight from the bag (0.8.0
+        // stored it, then picked it from the storeroom all the same).
+        if (BagRoute.First(side == Side.Interior) == BagWay.Held || !config.StoreroomAutomatic) return HeldAttempt(job);
         var name = Name(job);
         var stock = job.Entry?.Stock;
         var storedBefore = -1;

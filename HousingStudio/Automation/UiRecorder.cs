@@ -23,8 +23,22 @@ public sealed unsafe class UiRecorder : IDisposable
 {
     private const int MaxLines = 8000;
 
-    /// <summary>Long enough for a whole errands run (0.7.13 stopped after 10 minutes, mid-run).</summary>
+    /// <summary>Long enough for a whole errands run (0.7.13 stopped after 10 minutes, mid-run); not while a run still goes.</summary>
     private static readonly TimeSpan MaxDuration = TimeSpan.FromMinutes(60);
+
+    /// <summary>The longest a recording goes, a run or not.</summary>
+    private static readonly TimeSpan HardMaxDuration = TimeSpan.FromHours(3);
+
+    /// <summary>The first lines (the version, the client's language) are kept when old lines are let go of.</summary>
+    private const int HeaderLines = 3;
+
+    /// <summary>A line longer than this is cut (a window full of words), with how much was cut.</summary>
+    private const int LineAtMost = 4000;
+
+    /// <summary>Whether a run (placing, fixtures, errands) goes: the recording doesn't stop at <see cref="MaxDuration"/> then.</summary>
+    public Func<bool>? RunGoing { get; set; }
+
+    private int dropped;
 
     /// <summary>
     /// Windows whose clicks say nothing about housing or errands: other plugins' overlays and the HUD's
@@ -70,6 +84,7 @@ public sealed unsafe class UiRecorder : IDisposable
     {
         if (Recording) return;
         lines.Clear();
+        dropped = 0;
         lastState = string.Empty;
         started = DateTime.UtcNow;
         Recording = true;
@@ -105,7 +120,11 @@ public sealed unsafe class UiRecorder : IDisposable
     {
         var sb = new StringBuilder();
         sb.AppendLine("Housing Studio diagnostics recording");
-        foreach (var l in lines) sb.AppendLine(l);
+        for (var i = 0; i < lines.Count; i++)
+        {
+            if (i == Math.Min(HeaderLines, lines.Count) && dropped > 0) sb.AppendLine($"        ({dropped:N0} earlier lines let go of: a recording keeps the last {MaxLines:N0}.)");
+            sb.AppendLine(lines[i]);
+        }
         return sb.ToString();
     }
 
@@ -113,9 +132,10 @@ public sealed unsafe class UiRecorder : IDisposable
     public void Tick()
     {
         if (!Recording) return;
-        if (DateTime.UtcNow - started > MaxDuration)
+        var took = DateTime.UtcNow - started;
+        if ((took > MaxDuration && RunGoing?.Invoke() != true) || took > HardMaxDuration)
         {
-            Add($"Stopped after {MaxDuration.TotalMinutes:0} minutes.");
+            Add($"Stopped after {took.TotalMinutes:0} minutes.");
             Stop();
             return;
         }
@@ -215,8 +235,15 @@ public sealed unsafe class UiRecorder : IDisposable
     private void Add(string line)
     {
         if (started == default) started = DateTime.UtcNow;
+        if (line.Length > LineAtMost) line = $"{line[..LineAtMost]}… (+{line.Length - LineAtMost:N0} characters)";
         lines.Add($"{(DateTime.UtcNow - started).TotalSeconds,7:0.000}  {line}");
-        if (lines.Count > MaxLines) lines.RemoveRange(0, lines.Count - MaxLines);
+        // The oldest lines after the header go, a batch at a time (not one shift of the whole list per line).
+        if (lines.Count > MaxLines + 200)
+        {
+            var cut = lines.Count - MaxLines;
+            lines.RemoveRange(HeaderLines, cut);
+            dropped += cut;
+        }
     }
 
     public void Dispose()

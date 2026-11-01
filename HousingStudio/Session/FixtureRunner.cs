@@ -459,7 +459,10 @@ public sealed unsafe partial class FixtureRunner
                 return GameUi.Fire(apply) ? StepOutcome.Done : StepOutcome.Halt($"The {MenuName} window closed.");
             }));
             // "Proceed with fixture changes?" [Recording 2]: yes, only to that question.
-            steps.Add(Step.Wait("The game asks to proceed", () => GameUi.YesNoText() != null || !GameUi.IsOpen(Window), WindowWait, StepStatus.Done));
+            // Only the question ends this wait (0.8.0 also ended it when the window closed, which it can
+            // a frame before the question shows: then nobody said yes). The question coming later is
+            // answered while the run waits for the fixtures, below.
+            steps.Add(Step.Wait("The game asks to proceed", () => GameUi.YesNoText() != null, WindowWait, StepStatus.Done));
             steps.Add(new Step
             {
                 Label = "Answer yes to \"Proceed with fixture changes?\"",
@@ -473,6 +476,7 @@ public sealed unsafe partial class FixtureRunner
                 },
             });
         }
+        var saidYesAt = DateTime.MinValue;
         steps.Add(new Step
         {
             Label = apply != null ? "The fixtures are set" : $"You: apply the fixtures in the {MenuName} window (and say yes if it asks)",
@@ -482,6 +486,14 @@ public sealed unsafe partial class FixtureRunner
             {
                 // Applying may close the window: from here, that's expected.
                 watchWindow = false;
+                // The proceed question, if it came late: yes (the apply was the run's own click).
+                if (apply != null && DateTime.UtcNow - saidYesAt > TimeSpan.FromSeconds(1) && GameUi.YesNoText() is { } late
+                    && FixtureTable.ApplyWords.Any(w => late.Contains(w, StringComparison.OrdinalIgnoreCase)))
+                {
+                    saidYesAt = DateTime.UtcNow;
+                    GameUi.Fire(UiTable.YesNoYes);
+                    return StepOutcome.Waiting;
+                }
                 // The game's tables, read a few times a second (not every frame).
                 if (DateTime.UtcNow < nextSetCheck) return StepOutcome.Waiting;
                 nextSetCheck = DateTime.UtcNow + TimeSpan.FromMilliseconds(250);

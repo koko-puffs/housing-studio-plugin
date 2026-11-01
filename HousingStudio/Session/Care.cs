@@ -27,6 +27,14 @@ public sealed record DriftCheck(string Home, Side Side, DateTime SnapshotAt, Dri
 public sealed class Care
 {
     private static readonly TimeSpan ProgressEvery = TimeSpan.FromMilliseconds(500);
+
+    /// <summary>
+    /// How often the progress file is written while a run goes (at its start and end always): 0.8.0 wrote it
+    /// on the game's thread at each piece, which a slow disk (a synced folder, antivirus) turns into hitches.
+    /// </summary>
+    private static readonly TimeSpan WriteEvery = TimeSpan.FromSeconds(3);
+
+    private DateTime fileWrittenAt = DateTime.MinValue;
     private static readonly TimeSpan CountEvery = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan PutBackWait = TimeSpan.FromSeconds(10);
 
@@ -198,10 +206,12 @@ public sealed class Care
         writtenAt = DateTime.UtcNow;
         if (now == written) return;
         var p = new RunProgress(runDesign, runTitle, runHome, runSide, runPieces, now.Item1, Math.Max(1, now.Item2), now.Item3, DateTime.UtcNow);
+        Progress = p;
+        if (!force && DateTime.UtcNow - fileWrittenAt < WriteEvery) return;
+        fileWrittenAt = DateTime.UtcNow;
         // A write that fails (a full disk) is said once a run, not twice a second.
         if (Write(ResumePath, p.ToJson(), "the run's progress", quiet: writeFailed)) written = now;
         else writeFailed = true;
-        Progress = p;
     }
 
     private void RunEnded(HousingContext ctx)

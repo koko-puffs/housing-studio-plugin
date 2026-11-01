@@ -416,6 +416,26 @@ answered yes, `ShopExchangeCurrencyDialog` left for you. `RehearseExchange` find
 `ErrandRunner.KindOf`: the home's own kind when `Owned`. `PaceProfile.ErrandGapMs` sets the errands'
 `ActionGap`; the board's results wait `max(0.6 s, 1.5 s × WaitScale)`.
 
+**0.8.1**: `ErrandPlanner`'s vendor key is `v:{territory}:{district}:{npc}` (no shop): one stop per NPC,
+each `ErrandItem.Vendor` its own offer (shop, price). `AddVendor` groups a stop's items by shop: the
+first by `OpenShopSteps(offer)`, the next by `OpenShopSteps(offer, [Shop], another: true)` (close
+`Shop`; wait until it's gone and `FreeToUse()` for `max(0.3 s, 0.6 s × WaitScale)`, or the NPC's menu
+comes back; talk again unless it did; `Opens()` picks the shop by name). `BuySteps` / `RehearseBuy`
+take the item's offer. Stop order (`KindOrder`): vendors, exchanges, retainers, the market; retainers
+first with `ErrandOptions.BellAtHome`; the market by `HomeWorld` first, then by name.
+`ErrandWords.Legs` puts the bell's line where the trip's first retainer stop is. The board's results:
+`BoardResultsWait` (1.5 s, not paced) before the first pick and after a search again; a pick that
+opened nothing is tried again after 1.2 s. NPC walks end within `NpcReach` (2 yalms). `You(...)` logs
+"You: …" the first time it waits, "done, after" only past 0.25 s. `LearnPrice` returns whether it was
+new; the rehearsal's note says "Learnt" only then. Placing: `InventoryReader.StoreroomLoaded` is true
+once the loaded page count has held 300 ms; "It lands at its spot" times out at 5 s; `BagSteps` goes
+to `HeldAttempt` when `StoreroomAutomatic` is off; `ListSettles` and `WatchList` read every 40 ms.
+`FurnitureReader.ReadGarden` takes the plot from `EditingFurnishingsOfPlot` else `HouseUnit.PlotIndex`
+(null when not 0-59) and checks the list against the spawned objects' `BaseId`;
+`GameData.ItemOfSlot` tries the memory Id with 0x20000 and 0x30000, then as it is. `PlacementRunner.Tick`
+stops a garden run when `ctx.Plot` is another real plot. Fixtures: the wait after Apply ends only on
+the yes/no; "The fixtures are set" answers a late "Proceed…" question yes (once a second).
+
 **0.7.13**: `ErrandPlanner.Pack` cuts each stop's units (by `Key`) into pieces that fit a trip, then
 packs the pieces biggest first into the first trip with room (first-fit decreasing); a trip keeps the
 plan's order. `NeedKind.Fixture`: `Shopping.FixturesToGet` (the plugin sets it to `FixtureRun.Plan()`'s

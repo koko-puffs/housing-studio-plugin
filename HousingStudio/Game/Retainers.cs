@@ -119,6 +119,11 @@ public sealed unsafe class RetainerRecord
         if (changed || at - savedAt > SaveEvery) Save(at);
     }
 
+    private long saveNumber;
+
+    /// <summary>The newest save written (under <c>writing</c>'s lock).</summary>
+    private long writtenNumber;
+
     private void Save(DateTime at)
     {
         savedAt = at;
@@ -132,15 +137,19 @@ public sealed unsafe class RetainerRecord
             Services.Log.Warning(ex, "Couldn't save what your retainers hold");
             return;
         }
+        // Numbered: two saves close together can run in either order, and the older mustn't land last.
+        var number = Interlocked.Increment(ref saveNumber);
         System.Threading.Tasks.Task.Run(() =>
         {
             try
             {
                 lock (writing)
                 {
+                    if (number <= writtenNumber) return;
                     var temp = path + ".tmp";
                     File.WriteAllText(temp, json);
                     File.Move(temp, path, true);
+                    writtenNumber = number;
                 }
             }
             catch (Exception ex)

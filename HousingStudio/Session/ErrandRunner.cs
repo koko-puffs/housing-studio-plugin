@@ -37,6 +37,9 @@ public sealed partial class ErrandRunner : IDisposable
     /// <summary>How close is close enough to talk to someone or use something.</summary>
     private const float Reach = 3f;
 
+    /// <summary>How near an NPC the errands walk before talking to them.</summary>
+    private const float NpcReach = 2f;
+
     /// <summary>A gil shop sells at most this many in one purchase.</summary>
     private const int MaxPerPurchase = 99;
 
@@ -103,12 +106,15 @@ public sealed partial class ErrandRunner : IDisposable
         queue.StepsPerTick = 4;
         queue.Trace += (step, what) =>
         {
-            if (what == "start" && step.Label.StartsWith("You:", StringComparison.Ordinal)) log.Info($"  … {step.Label}");
-            else if (what != "start" && what != "done") log.Warn($"  ✕ {what}");
+            // Steps that wait for you say so themselves, once they have to wait (You).
+            if (what != "start" && what != "done") log.Warn($"  ✕ {what}");
         };
         queue.Timed += (step, took) =>
         {
-            if (step.Label.StartsWith("You:", StringComparison.Ordinal)) log.Info($"  … done, after {took.TotalSeconds:0.#} s.");
+            if (step.Label.StartsWith("You:", StringComparison.Ordinal))
+            {
+                if (took > TimeSpan.FromMilliseconds(250)) log.Info($"  … done, after {took.TotalSeconds:0.#} s.");
+            }
             else log.Info($"  {(step.IsAction ? "→" : "…")} {step.Label} ({took.TotalMilliseconds:0} ms)");
         };
     }
@@ -231,6 +237,8 @@ public sealed partial class ErrandRunner : IDisposable
             PreferDistrict = at.District,
             WorldAllowed = config.ErrandsOtherWorlds ? w => w == world || Travel.CanVisit(w) != false : w => w == world,
             ListingAllowed = (item, w) => !emptyBoards.Contains((item, w)),
+            HomeWorld = ErrandGame.HomeWorld(),
+            BellAtHome = Active ? houseBell : BellNearby(),
         };
         return ErrandPlanner.Build(shopping, options);
     }
@@ -1026,13 +1034,30 @@ public sealed partial class ErrandRunner : IDisposable
     };
 
     /// <summary>Waits for you to do something (only if it isn't done already).</summary>
-    private static Step You(string what, Func<bool> done, TimeSpan? timeout = null) => new()
+    /// <remarks>
+    /// Said in the log only when it has to wait (0.8.0 said "You: Close the retainer's windows" when they
+    /// were closed already, and then "done, after 0 s").
+    /// </remarks>
+    private Step You(string what, Func<bool> done, TimeSpan? timeout = null)
     {
-        Label = $"You: {what}",
-        Run = () => done() ? StepOutcome.Done : StepOutcome.Waiting,
-        Timeout = timeout ?? YouWait,
-        TimeoutMessage = $"Waited {(timeout ?? YouWait).TotalMinutes:0} minutes for you to {what[..1].ToLowerInvariant()}{what[1..]}.",
-    };
+        var said = false;
+        return new Step
+        {
+            Label = $"You: {what}",
+            Run = () =>
+            {
+                if (done()) return StepOutcome.Done;
+                if (!said)
+                {
+                    said = true;
+                    log.Info($"  … You: {what}");
+                }
+                return StepOutcome.Waiting;
+            },
+            Timeout = timeout ?? YouWait,
+            TimeoutMessage = $"Waited {(timeout ?? YouWait).TotalMinutes:0} minutes for you to {what[..1].ToLowerInvariant()}{what[1..]}.",
+        };
+    }
 
     /// <summary>
     /// Clicks through an NPC's (or a retainer's) words until <paramref name="done"/>, as clicking them
@@ -1243,9 +1268,21 @@ public sealed partial class ErrandRunner : IDisposable
     {
         var v = stop.Vendor!;
         Add($"Going to {v.Where()}", () => VendorTravelSteps(v), WindowCleanup, ErrandLeg.Vendor, true, v.NpcName);
-        Add($"Opening {v.NpcName}'s shop", () => OpenShopSteps(v), WindowCleanup, ErrandLeg.Vendor, who: v.NpcName);
-        foreach (var item in stop.Items)
-            Add($"Buying {Thing(item)} from {v.NpcName}", () => Rehearsal ? RehearseBuy(v, item) : BuySteps(v, item), WindowCleanup, ErrandLeg.Vendor, who: v.NpcName, item: item);
+        // One visit for all of this NPC's items: each shop of theirs opened in turn (the Housing Merchant's
+        // chairs, then their partitions…), each item bought at its own offer's price.
+        var first = true;
+        foreach (var group in stop.Items.GroupBy(i => (i.Vendor ?? v).ShopId))
+        {
+            var shopOffer = group.First().Vendor ?? v;
+            if (first) Add($"Opening {v.NpcName}'s shop", () => OpenShopSteps(shopOffer), WindowCleanup, ErrandLeg.Vendor, who: v.NpcName);
+            else Add($"Opening {v.NpcName}'s \"{shopOffer.ShopName}\"", () => OpenShopSteps(shopOffer, new[] { ErrandTable.Shop }, another: true), WindowCleanup, ErrandLeg.Vendor, who: v.NpcName);
+            first = false;
+            foreach (var item in group)
+            {
+                var offer = item.Vendor ?? v;
+                Add($"Buying {Thing(item)} from {v.NpcName}", () => Rehearsal ? RehearseBuy(offer, item) : BuySteps(offer, item), WindowCleanup, ErrandLeg.Vendor, who: v.NpcName, item: item);
+            }
+        }
         Add($"Closing {v.NpcName}'s shop", () => new List<Step>
         {
             Step.Act("Close the shop", () =>
@@ -1289,14 +1326,20 @@ public sealed partial class ErrandRunner : IDisposable
             }
             return n;
         }
-        steps.AddRange(WalkSteps(v.NpcName, () => Target()));
+        // Up close: from 3 yalms the game said "Unable to execute action from this location" (0.8.0's
+        // merchant), and they had to be talked to again.
+        steps.AddRange(WalkSteps(v.NpcName, () => Target(), NpcReach));
         return steps;
     }
 
     private List<Step> OpenShopSteps(VendorOffer v) => OpenShopSteps(v, new[] { ErrandTable.Shop });
 
-    /// <summary>Talks to the vendor and goes through their menus until one of <paramref name="windows"/> (their shop) opens.</summary>
-    private List<Step> OpenShopSteps(VendorOffer v, string[] windows)
+    /// <summary>
+    /// Talks to the vendor and goes through their menus until one of <paramref name="windows"/> (their shop) opens.
+    /// <paramref name="another"/>: another of their shops, after one: the open one is closed first, and their
+    /// menu used if it comes back by itself (some NPCs' does), else they're talked to again.
+    /// </summary>
+    private List<Step> OpenShopSteps(VendorOffer v, string[] windows, bool another = false)
     {
         var menus = 0;
         var used = DateTime.MinValue;
@@ -1348,9 +1391,45 @@ public sealed partial class ErrandRunner : IDisposable
                 return GameUi.Fire(call, UiCallValues.Of(("index", i))) ? StepOutcome.Done : StepOutcome.Halt($"{v.NpcName}'s menu closed.");
             },
         };
+        if (!another)
+            return new List<Step>
+            {
+                Use(v.NpcName, () => ErrandGame.NpcOrNamed(v.NpcId, v.NpcName, Reach + 3)),
+                Opens(),
+            };
+        var closedAt = DateTime.MinValue;
         return new List<Step>
         {
-            Use(v.NpcName, () => ErrandGame.NpcOrNamed(v.NpcId, v.NpcName, Reach + 3)),
+            Step.Act("Close the last shop", () =>
+            {
+                GameUi.Close(ErrandTable.Shop);
+                return StepOutcome.Done;
+            }),
+            new Step
+            {
+                Label = $"The shop closes ({v.NpcName}'s menu may come back)",
+                Run = () =>
+                {
+                    if (windows.Any(GameUi.IsOpen) || GameUi.IsOpen(ErrandTable.Shop)) return StepOutcome.Waiting;
+                    if (ErrandGame.MenuEntries() != null) return StepOutcome.Done;
+                    if (closedAt == DateTime.MinValue) closedAt = DateTime.UtcNow;
+                    // Free to talk again (the shop's close takes a moment), or their menu came back.
+                    return FreeToUse() && DateTime.UtcNow - closedAt > TimeSpan.FromMilliseconds(Math.Max(300, 600 * Speed.WaitScale)) ? StepOutcome.Done : StepOutcome.Waiting;
+                },
+                Timeout = TimeSpan.FromSeconds(5),
+                TimeoutMessage = $"{v.NpcName}'s shop didn't close.",
+            },
+            new Step
+            {
+                Label = $"Talk to {v.NpcName} again (unless their menu is up)",
+                IsAction = true,
+                Run = () =>
+                {
+                    if (ErrandGame.MenuEntries() != null) return StepOutcome.Done;
+                    if (ErrandGame.NpcOrNamed(v.NpcId, v.NpcName, Reach + 3) is not { } npc) return StepOutcome.Halt($"Couldn't find {v.NpcName} within reach. Near you: {ErrandGame.NamesNear(15)}.");
+                    return ErrandGame.Interact(npc) ? StepOutcome.Done : StepOutcome.Halt($"Couldn't talk to {v.NpcName}.");
+                },
+            },
             Opens(),
         };
     }
@@ -1814,6 +1893,9 @@ public sealed partial class ErrandRunner : IDisposable
         return steps;
     }
 
+    /// <summary>How long a board search's results take to come (the server's, so not the pace's).</summary>
+    private static readonly TimeSpan BoardResultsWait = TimeSpan.FromMilliseconds(1500);
+
     /// <summary>
     /// Opens an item's listings: the board searched for its name (as typing it does), its row found
     /// in the results, and opened; what opens is checked to be that item's before anything is bought.
@@ -1874,8 +1956,9 @@ public sealed partial class ErrandRunner : IDisposable
                         log.Info($"  {name} is result {index + 1} of the search ({string.Join(" | ", seen)}).");
                         return StepOutcome.Done;
                     }
-                    // The results come a moment after the search: 1.5 s at Steady, 1 s at Quick, 0.6 s at Daring.
-                    if (DateTime.UtcNow - searchedAt.Value < TimeSpan.FromMilliseconds(Math.Max(600, 1500 * Speed.WaitScale))) return StepOutcome.Waiting;
+                    // The results come from the server a moment after the search, whatever the pace: 1.5 s (0.8.0
+                    // waited 1 s at Quick, and a quarter of the picks went before the results and were lost).
+                    if (DateTime.UtcNow - searchedAt.Value < BoardResultsWait) return StepOutcome.Waiting;
                     // The results' names aren't in the window's values (0.7.6's log): searched by its full
                     // name, the item is the first result (as you opened it, [i:5, i:0]); whose listings
                     // open is checked next, and another item's are closed and left to you.
@@ -1938,14 +2021,14 @@ public sealed partial class ErrandRunner : IDisposable
                             queue.InsertNext(new[] { YouOpen("Search the board for") });
                             return StepOutcome.Done;
                         }
-                        pickedAt = now + TimeSpan.FromMilliseconds(Math.Max(1200, 2000 * Speed.WaitScale));
+                        pickedAt = now + BoardResultsWait;
                         picks = 0;
                         return StepOutcome.Waiting;
                     }
                     if (redoAt != null || resultOpen) return StepOutcome.Waiting;
                     // Nothing opened: the pick went before the results were there (0.7.13: three items
-                    // waited 15 s and were left). Picked again every 2.5 s, three times, then searched again.
-                    if (now < pickedAt + TimeSpan.FromMilliseconds(picks == 0 ? 0 : 2500)) return StepOutcome.Waiting;
+                    // waited 15 s and were left). Picked again every 1.2 s, three times, then searched again.
+                    if (now < pickedAt + TimeSpan.FromMilliseconds(picks == 0 ? 0 : 1200)) return StepOutcome.Waiting;
                     if (picks < 3 && GameUi.IsOpen(ErrandTable.ItemSearch))
                     {
                         if (picks > 0) log.Info($"  {name}'s listings didn't open: picking result {index + 1} again.");
