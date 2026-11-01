@@ -50,7 +50,8 @@ public sealed partial class MainWindow
         // Recent at the bottom. On a first start (nothing pinned or recent) the load row is the big one.
         var pins = vm.Pinned();
         var firstStart = pins.Count == 0 && vm.RecentCount == 0;
-        if (!firstStart)
+        // 0.9.1: no Pinned at all until something is pinned (Recent's ☆ says how).
+        if (pins.Count > 0)
         {
             DrawPins(pins);
             Kit.Gap(14);
@@ -270,6 +271,12 @@ public sealed partial class MainWindow
                 cant ?? "What's placed here, straight into your builds on Housing Studio"))
             SendHome();
         ShotButton(ref row, bh);
+        // 0.9.1: everything placed here put away, whatever design is loaded (or none).
+        const string clear = "Clear out";
+        var nothing = placed == 0;
+        if (Kit.Button("##clear-home", row.Next(Kit.ButtonWidth(clear, BtnSize.Tiny, Icon.Inbox), bh), clear, Btn.Glass, BtnSize.Tiny, Icon.Inbox, 0,
+                nothing || runner.Active, nothing ? "Nothing is placed here." : $"Puts away everything placed {(side == Side.Garden ? "in this garden" : "in this house")}: to the storeroom, your bags, or both (it asks)"))
+            AskClearHome(side, placed);
         row.End();
         DrawSendState();
         DrawShotHint();

@@ -94,6 +94,19 @@ public sealed class LayoutSession
         return false;
     }
 
+    /// <summary>
+    /// An empty design for the home you're in, named <paramref name="title"/> (no file): matched against
+    /// what's placed, everything is outside it. Clear out this house runs it with clear out (0.9.1).
+    /// </summary>
+    public void LoadEmpty(string title, string? houseSize, string? district)
+    {
+        Layout = new Layout { BuildName = title, HouseSize = houseSize, District = district };
+        FilePath = null;
+        LoadError = null;
+        Plan = null;
+        PlanSide = null;
+    }
+
     public void Unload()
     {
         Layout = null;

@@ -70,7 +70,8 @@ public sealed partial class MainWindow
 
         // Header (0.9.0, the shared one): back at the top left (closes the design, which stays in Recent),
         // the eyebrow and the name on up to two lines, the pin ☆ and Settings on the right; the pill under it.
-        Frame.BeginHeader(24);
+        // 20, as every screen with the back arrow (0.9.1: Ready's 24 put it 4 px lower than the rest).
+        Frame.BeginHeader(20);
         var w = Kit.Width;
         var kind = layout.BuildName != null ? "Build" : "MakePlace";
         var path = session.FilePath;

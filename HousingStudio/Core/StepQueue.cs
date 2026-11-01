@@ -54,6 +54,12 @@ public sealed class Step
     /// <summary>What kind of step this is, for the timing summary ("pick-row", "place"…); the label when unset.</summary>
     public string? Key { get; init; }
 
+    /// <summary>
+    /// The least time since the last action before this one (an action only), when not the queue's
+    /// <see cref="StepQueue.ActionGap"/>: the dye window's clicks answer at once, and need less (0.9.1).
+    /// </summary>
+    public TimeSpan? Gap { get; init; }
+
     /// <summary>A short wait before the step first runs (the game needs a moment after a click).</summary>
     public TimeSpan Delay { get; init; }
 
@@ -205,7 +211,7 @@ public sealed class StepQueue
         var t = now();
         if (!started)
         {
-            if (step.IsAction && t - lastAction < ActionGap) return;
+            if (step.IsAction && t - lastAction < (step.Gap is { } gap && gap < ActionGap ? gap : ActionGap)) return;
             if (step.IsAction && StepByStep && !approved)
             {
                 State = QueueState.AwaitingContinue;

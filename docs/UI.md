@@ -12,7 +12,7 @@ Paths are under `HousingStudio/UI/`.
 | View state | `ViewModel.cs` | The run's figure and piece count, whether Done is waiting, the step in words, missing dyes (cached per plan), the Recent list. |
 | Game-free logic | `Model/*.cs` | Words (counts, home sizes, "about 25 minutes"), `PaceSetting`, `When` ("today 05.24"), `PieceRows` (stacking, chip counts), `StartSummary`, `FixtureTicks`, `ReadyWords` (Ready's button, Keep / Clear out / Swap, the estimate; `ReadyMode`), `DoneWords` (Done's line), `AfterPlacing` (when the fixtures follow a run), `CareWords.HouseLine` / `Changed` (This house), `StepWords`, `SvgPath`, `Dashes` (the dashed edge, with bounded loops). Tested in `HousingStudio.Tests/UiModelTests.cs`. |
 | Tokens | `Kit/Palette.cs` | Every `hs-*` colour from tokens.json, radii, control heights. Translucent tokens keep their alpha; panel glass is flattened over ink (ImGui can't blur). |
-| Fonts | `Kit/Fonts.cs` | Geist 400 (15/14/13/12), 500 (15/14/13), 600 (15/14); Geist Mono (13/12/11/10, 10 for the Beta tag); Cormorant Garamond 500 (56/32/28/26/22) and 400 italic (32), through Dalamud's font atlas. CSS sizes are converted to ImGui's line-based sizes (Geist ×1.3, Cormorant ×1.211) so 14px is 14px. |
+| Fonts | `Kit/Fonts.cs` | Geist 400 (15/14/13/12), 500 (15/14/13), 600 (15/14); Geist Mono (13/12/11/10, 10 for the Beta tag); Source Serif 4 400 (56/32/28/26/22) and 400 italic (32), the site's serif since 0.9.1 (the mockups had Cormorant Garamond), through Dalamud's font atlas. CSS sizes are converted to ImGui's line-based sizes (Geist ×1.3, Source Serif 4 ×1.371) so 14px is 14px. |
 | Window frame | `Kit/Theme.cs` → `PushFrame` | Dalamud's title bar in walnut with ivory words, a 10px window radius and the 0.2 ivory edge. Only colours and the frame are pushed before `ImGui.Begin`: the title bar's font, height and ☰ ▼ × buttons are Dalamud's own, so they sit and hit as in every Dalamud window. |
 | Layout | `Kit/Frame.cs` | Header (fixed), body (scrolls), footer (walnut, pinned, faint top line); `BeginBottom` is the mockups' `flex:1` spacer; toasts. |
 | Text | `Kit/Txt.cs` | CSS line boxes (half-leading), letter-spacing glyph by glyph, ellipses, wrapped runs of mixed styles with inline links and dye swatches. |
@@ -333,6 +333,14 @@ After a rehearsal (`runner.Rehearsal`, or the errands' `Rehearsal` in their summ
   Dalamud's installer can't open to). The Limits' Change opens the rows in place and also holds Trust the
   new clicks. Running's title names the vendor as the game does ("At *Material Supplier*") rather than
   lower-casing it. The Got and Spent figures are serif 22 (the kit's nearest to the mock's 20).
+
+**0.9.1.** Home's Pinned shows only once a design is pinned (the dashed "Pin a design from Recent"
+tiles only beside a pin). The piece's card while placing is always three one-line rows (name; dye and
+floor; the step) and the errands' card two, each line cut short with "…" and whole on hover, so the
+cards keep their height and nothing under them moves; between two pieces the last one stays on the
+card. Ready's header starts 20 px down, as every screen with the back arrow. This house has **Clear
+out** beside Save as a build and Send (it asks where the pieces go, as a choice of three). The serif is
+the site's, Source Serif 4, in place of the mockups' Cormorant Garamond.
 
 ## What the runner could add
 

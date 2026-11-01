@@ -172,8 +172,14 @@ public class FixtureJobsTests
         Assert.Equal(2, FixtureJobs.MenuEntry(menu, new[] { "Fixtures" }));
         Assert.Equal(-1, FixtureJobs.MenuEntry(menu, new[] { "Lighting" }));
         Assert.True(FixtureJobs.MenuInPlace(menu));
-        // A title read first moves every entry along one: not trusted.
-        Assert.False(FixtureJobs.MenuInPlace(new[] { "Housing", "Indoor Furnishings", "Furnishing Color" }));
+        Assert.Equal(0, FixtureJobs.MenuOffset(menu));
+        // The game's own words (0.9.1's log): the menu's title first, every entry one along.
+        var titled = new[] { "Housing", "Indoor Furnishings", "Furnishing Color", "Remodel Interior", "Lighting" };
+        Assert.Equal(1, FixtureJobs.MenuOffset(titled));
+        Assert.Equal(3, FixtureJobs.MenuEntry(titled, new[] { "Remodel Interior", "Interior Fixtures", "Fixtures" }));
+        // Two titles, or entries not where they were recorded: not trusted.
+        Assert.Equal(-1, FixtureJobs.MenuOffset(new[] { "Housing", "Menu", "Indoor Furnishings", "Furnishing Color" }));
+        Assert.False(FixtureJobs.MenuInPlace(new[] { "Remodel Interior", "Indoor Furnishings" }));
     }
 }
 

@@ -105,6 +105,18 @@ public static unsafe class InventoryReader
     /// </summary>
     public static int? StoreroomRoom(Side side)
     {
+        if (StoreroomCount(side) is not { } n) return null;
+        // 0.9.1: the pages are not always the storeroom's size: a company's private chambers had 8 pages
+        // (400 slots) and held 150, so a clear-out read "room for 400" and went round and round. The size
+        // the game showed by refusing is kept for the home, and caps the pages.
+        // (A size it holds more than is wrong: not used.)
+        var slots = SizeHere(side) is { } size && size >= n.Used ? Math.Min(size, n.Slots) : n.Slots;
+        return Math.Max(0, slots - n.Used);
+    }
+
+    /// <summary>The storeroom's pages' slots and the pieces in them on a side; null before the game has sent it.</summary>
+    public static (int Slots, int Used)? StoreroomCount(Side side)
+    {
         var mgr = InventoryManager.Instance();
         if (mgr == null) return null;
         int slots = 0, used = 0;
@@ -121,7 +133,55 @@ public static unsafe class InventoryReader
                 if (item != null && !item->IsEmpty()) used++;
             }
         }
-        return loaded ? Math.Max(0, slots - used) : null;
+        return loaded ? (slots, used) : null;
+    }
+
+    /// <summary>
+    /// Storeroom sizes learnt from the game's "Insufficient space in storeroom" (the configuration's, by
+    /// <see cref="SizeKey"/>), and how to save them. Set by the plugin at load.
+    /// </summary>
+    public static Dictionary<string, int>? LearntSizes { get; set; }
+
+    public static Action? SaveSizes { get; set; }
+
+    /// <summary>A company's private chambers hold 150 furnishings in the storeroom (the game's pages say 400).</summary>
+    public const int ChamberSize = 150;
+
+    /// <summary>"&lt;house id&gt;:interior": the home you're in and the side, or null when you aren't in one.</summary>
+    public static string? SizeKey(Side side)
+    {
+        var hm = HousingManager.Instance();
+        if (hm == null) return null;
+        ulong id = hm->IndoorTerritory != null ? hm->IndoorTerritory->HouseId.Id : hm->OutdoorTerritory != null ? hm->OutdoorTerritory->HouseId.Id : 0;
+        return id == 0 ? null : $"{id:X16}:{(side == Side.Interior ? "interior" : "garden")}";
+    }
+
+    /// <summary>The storeroom's real size where you are, when it's known (learnt here, or private chambers').</summary>
+    public static int? SizeHere(Side side)
+    {
+        if (SizeKey(side) is { } key && LearntSizes != null && LearntSizes.TryGetValue(key, out var learnt) && learnt > 0) return learnt;
+        var hm = HousingManager.Instance();
+        if (side == Side.Interior && hm != null && hm->IndoorTerritory != null)
+        {
+            var id = hm->IndoorTerritory->HouseId;
+            if (!id.IsApartment && !id.IsWorkshop && id.RoomNumber > 0) return ChamberSize;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// The game said the storeroom is full: what's in it now is its size here, kept for this home.
+    /// Returns that size (null when it couldn't be read).
+    /// </summary>
+    public static int? LearnFull(Side side)
+    {
+        if (StoreroomCount(side) is not { } n || n.Used <= 0 || SizeKey(side) is not { } key || LearntSizes == null) return null;
+        if (!LearntSizes.TryGetValue(key, out var had) || had != n.Used)
+        {
+            LearntSizes[key] = n.Used;
+            SaveSizes?.Invoke();
+        }
+        return n.Used;
     }
 
     /// <summary>How long the storeroom's pages stay as they are before it counts as sent.</summary>

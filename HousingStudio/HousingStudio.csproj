@@ -6,7 +6,7 @@
     from HousingStudio.json and, in Release, zips the plugin to bin\x64\Release\HousingStudio\latest.zip.
   -->
   <PropertyGroup>
-    <Version>0.9.0.0</Version>
+    <Version>0.9.1.0</Version>
     <AssemblyName>HousingStudio</AssemblyName>
     <RootNamespace>HousingStudio</RootNamespace>
     <Description>Load a Housing Studio build or a MakePlace layout and furnish your house from it.</Description>
@@ -23,7 +23,7 @@
     <!-- The plugin's licence and the fonts' (the OFL asks for its text to travel with the fonts). -->
     <Content Include="..\LICENSE" Link="LICENSE.txt" CopyToOutputDirectory="PreserveNewest" Visible="false" />
     <Content Include="Resources\Fonts\OFL-Geist.txt" Link="OFL-Geist.txt" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="Resources\Fonts\OFL-CormorantGaramond.txt" Link="OFL-CormorantGaramond.txt" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Resources\Fonts\OFL-SourceSerif4.txt" Link="OFL-SourceSerif4.txt" CopyToOutputDirectory="PreserveNewest" />
     <!-- The installer shows images\icon.png for dev builds. -->
     <Content Include="images\icon.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

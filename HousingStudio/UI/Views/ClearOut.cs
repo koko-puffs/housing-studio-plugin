@@ -184,6 +184,59 @@ public sealed partial class MainWindow
             });
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // Clear out this house (0.9.1): everything placed, wherever you choose, design or none.
+
+    private static readonly string[] ClearHomeChoices =
+    {
+        "The storeroom, then your bags once it's full",
+        "The storeroom only",
+        "Your bags only",
+    };
+
+    /// <summary>Asks where everything placed here goes, then clears it out (an empty design for this home, with clear out).</summary>
+    private void AskClearHome(Side side, int? placed)
+    {
+        var room = InventoryReader.StoreroomRoom(side);
+        var bags = ErrandGame.FreeSlots();
+        var what = placed is { } n ? Words.Count(n, "piece") : "Everything";
+        var where = side == Side.Garden ? "in this garden" : "in this house";
+        AskChoice("Clear out this house?",
+            $"{what} placed {where} {(placed == 1 ? "is" : "are")} put away, whatever design is loaded. Pieces standing on others and those on walls go first. "
+            + $"Room now: {(room?.ToString() ?? "?")} in the storeroom, {bags} in your bags."
+            + (config.BackupBeforePlacing ? " A backup of what's placed is saved first, to put it all back." : " No backup is saved first (Settings)."),
+            ClearHomeChoices, "Clear out", "Not now", i => Later(() => ClearHome(side, i switch
+            {
+                1 => PutAwayTo.Storeroom,
+                2 => PutAwayTo.Bags,
+                _ => PutAwayTo.StoreroomThenBags,
+            })));
+        confirmPick = 0;
+    }
+
+    private void ClearHome(Side side, PutAwayTo to)
+    {
+        if (runner.Active || Plugin.FixtureRun.Active || Plugin.Errands.Active)
+        {
+            Notify("Wait until the other run is done");
+            return;
+        }
+        var ctx = session.Context;
+        var district = ctx.District != null ? Districts.Display(ctx.District) : null;
+        var plot = side == Side.Garden ? ctx.Plot : FixtureReader.PlotOfInterior();
+        session.LoadEmpty($"Clear out · {SwapNames.Home(side, ctx.HouseSize, district, plot)}", ctx.HouseSize, ctx.District);
+        session.Refresh(HousingContext.Read(Plugin.Plots));
+        var pieces = session.Plan?.Extras;
+        if (pieces is not { Count: > 0 })
+        {
+            Notify(session.Plan == null ? session.Warnings.FirstOrDefault() ?? "What's placed couldn't be read" : "Nothing is placed here");
+            return;
+        }
+        vm.Dismiss();
+        runner.NextPutAwayTo = to;
+        StartRun(false, new List<PlanEntry>(), pieces.ToList());
+    }
+
     /// <summary>How many more pieces the storeroom of the side being placed takes (asked once, when Start is pressed).</summary>
     private int? StoreroomRoomHere() => InventoryReader.StoreroomRoom(session.PlanSide ?? session.Context.Side ?? Side.Interior);
 

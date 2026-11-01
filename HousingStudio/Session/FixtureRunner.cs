@@ -62,6 +62,51 @@ public sealed unsafe partial class FixtureRunner
 
     private DateTime nextSetCheck;
 
+    /// <summary>The window's container by slot as last seen (when it opened, then after each piece you put in).</summary>
+    private Dictionary<int, uint> slotsAtOpen = new();
+
+    /// <summary>The parts' slots known this run: seen holding what's set, kept from earlier runs, learnt from you.</summary>
+    private List<FixtureJobs.KnownSlot> known = new();
+
+    /// <summary>Each fixture's slot, as worked out from what's known (null: not known).</summary>
+    private readonly Dictionary<FixtureTask, int?> slotOf = new();
+
+    private int? SlotOf(FixtureTask task) => slotOf.TryGetValue(task, out var s) ? s : task.Slot;
+
+    /// <summary>
+    /// Works out every fixture's slot from what's known, and whether the plugin may put them in: each
+    /// one to set has a slot, and no two the same.
+    /// </summary>
+    private bool WorkOutSlots()
+    {
+        slotOf.Clear();
+        foreach (var t in toSet) slotOf[t] = FixtureJobs.SlotFor(side, t.Fixture.Level, t.Fixture.Type, known);
+        var slots = toSet.Select(t => slotOf[t]).ToList();
+        return slots.All(x => x != null) && slots.Distinct().Count() == slots.Count;
+    }
+
+    /// <summary>A piece you put in by hand: the one slot it went to is its part's, kept for next time.</summary>
+    private void LearnFromYou(FixtureTask task)
+    {
+        var held = ContainerItems();
+        if (held == null) return;
+        var item = task.Fixture.ItemId;
+        var went = held.Where(kv => kv.Value == item && (!slotsAtOpen.TryGetValue(kv.Key, out var was) || was != item)).Select(kv => kv.Key).ToList();
+        slotsAtOpen = held;
+        if (went.Count != 1) return;
+        var slot = went[0];
+        known.RemoveAll(k => FixtureJobs.Norm(k.Level) == FixtureJobs.Norm(task.Fixture.Level) && FixtureJobs.Norm(k.Type) == FixtureJobs.Norm(task.Fixture.Type));
+        known.Add(new FixtureJobs.KnownSlot(task.Fixture.Level, task.Fixture.Type, slot));
+        config.FixtureSlots[FixtureJobs.SlotKey(side, task.Fixture.Level, task.Fixture.Type)] = slot;
+        config.Save();
+        log.Info($"  Learnt: the {Describe(task)} goes in slot {slot} of the window (kept for next time).");
+        if (!slotsTrusted && WorkOutSlots())
+        {
+            slotsTrusted = true;
+            log.Info("  The rest's slots follow from what's known now: the plugin puts them in.");
+        }
+    }
+
     /// <summary>How many of each item the window's container held when it opened (to see a piece you put in, when the slots aren't trusted).</summary>
     private Dictionary<uint, int> containerBefore = new();
 
@@ -169,6 +214,9 @@ public sealed unsafe partial class FixtureRunner
         watchWindow = false;
         dropped.Clear();
         containerBefore = new Dictionary<uint, int>();
+        slotsAtOpen = new Dictionary<int, uint>();
+        known = new List<FixtureJobs.KnownSlot>();
+        slotOf.Clear();
         // While any of it is a guess, every action waits for Continue.
         queue.StepByStep = !FixtureTable.Verified || config.StepByStep;
         queue.StepsPerTick = 4;
@@ -329,9 +377,11 @@ public sealed unsafe partial class FixtureRunner
         var words = side == Side.Interior ? FixtureTable.InteriorMenuWords(Services.ClientState.ClientLanguage) : FixtureTable.ExteriorMenuWords(Services.ClientState.ClientLanguage);
         var entry = FixtureJobs.MenuEntry(entries, words);
         log.Info($"  The Housing menu's words: {(entries.Count == 0 ? "none read" : string.Join(" | ", entries.Select((e, i) => $"{i}:{e}")))}.");
-        if (entry >= 0 && FixtureJobs.MenuInPlace(entries))
+        var offset = FixtureJobs.MenuOffset(entries);
+        if (entry >= offset && offset >= 0)
         {
-            var blanks = UiCallValues.Of(("entry", entry));
+            // Its click is its place among the entries (the menu's title, read first, isn't one).
+            var blanks = UiCallValues.Of(("entry", entry - offset));
             steps.Add(Step.Act($"Choose \"{entries[entry]}\": {FixtureTable.MenuEntry.Describe(blanks)} (a guess: its place in the menu)", () =>
                 GameUi.Fire(FixtureTable.MenuEntry, blanks) ? StepOutcome.Done : StepOutcome.Halt("The Housing menu closed.")));
             steps.Add(Step.Wait($"The {MenuName} window ({Window}) opens", () => GameUi.IsOpen(Window), WindowWait, StepStatus.Done));
@@ -373,12 +423,19 @@ public sealed unsafe partial class FixtureRunner
             if (held == null) return StepOutcome.Waiting;
             watchWindow = true;
             containerBefore = held.Values.GroupBy(i => i).ToDictionary(g => g.Key, g => g.Count());
+            slotsAtOpen = held;
             log.Info($"  Its slots: {(held.Count == 0 ? "all empty" : string.Join(", ", held.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key}: {data.AnyItemName(kv.Value)}")))}.");
             var current = Current(side, session.Context) ?? new List<CurrentFixture>();
-            slotsTrusted = FixtureJobs.LayoutAgrees(held, current, side, out var why);
+            // 0.9.1: the slots seen holding what's set, and those kept from earlier runs (what's seen now wins).
+            var seen = FixtureJobs.SlotsSeen(held, current);
+            known = seen.Concat(FixtureJobs.KeptSlots(config.FixtureSlots, side)
+                .Where(k => !seen.Any(x => FixtureJobs.Norm(x.Level) == FixtureJobs.Norm(k.Level) && FixtureJobs.Norm(x.Type) == FixtureJobs.Norm(k.Type)))).ToList();
+            log.Info($"  Slots known: {(known.Count == 0 ? "none" : string.Join(", ", known.Select(k => $"{k.Level.ToLowerInvariant()} {k.Type.ToLowerInvariant()} → {k.Slot}")))}.");
+            slotsTrusted = WorkOutSlots();
             log.Info(slotsTrusted
-                ? "  The slots hold what's set, in the order expected: the plugin puts each fixture in its slot."
-                : $"  The slots can't be told apart ({why}): you put each fixture in, and the window is watched for it.");
+                ? $"  Each fixture's slot follows from those: {string.Join(", ", toSet.Select(t => $"{Describe(t)} → {SlotOf(t)}"))}. The plugin puts each one in."
+                : $"  Not every fixture's slot follows from what's known ({(known.Count == 0 ? "nothing set here is in the window to go by" : "the slots seen don't fit one order")}): "
+                  + "you put in the ones it can't tell, and the slot each goes to is learnt for next time.");
             return StepOutcome.Done;
         },
     };
@@ -387,7 +444,6 @@ public sealed unsafe partial class FixtureRunner
     {
         var name = data.AnyItemName(task.Fixture.ItemId);
         var where = Describe(task);
-        var slot = task.Slot!.Value;
         return new List<Step>
         {
             new Step
@@ -396,7 +452,7 @@ public sealed unsafe partial class FixtureRunner
                 Run = () =>
                 {
                     if (InSlot(task)) return StepOutcome.Done;
-                    if (!slotsTrusted)
+                    if (!slotsTrusted || SlotOf(task) is not { } slot)
                     {
                         queue.InsertNext(new[] { YouPut(task) });
                         return StepOutcome.Done;
@@ -440,7 +496,13 @@ public sealed unsafe partial class FixtureRunner
 
     private Step YouPut(FixtureTask task) => YouWaitFor(
         $"You: put {data.AnyItemName(task.Fixture.ItemId)} in the {Describe(task)} slot of the {MenuName} window",
-        () => InSlot(task),
+        () =>
+        {
+            // (Counted, as you may put it anywhere the game takes it; the slot it went to is learnt.)
+            if (!InSlotByCount(task)) return false;
+            LearnFromYou(task);
+            return true;
+        },
         $"{data.AnyItemName(task.Fixture.ItemId)} wasn't put in its slot.");
 
     /// <summary>
@@ -598,7 +660,15 @@ public sealed unsafe partial class FixtureRunner
     {
         var held = ContainerItems();
         if (held == null) return false;
-        if (slotsTrusted) return held.TryGetValue(task.Slot!.Value, out var item) && item == task.Fixture.ItemId;
+        if (slotsTrusted && SlotOf(task) is { } slot) return held.TryGetValue(slot, out var item) && item == task.Fixture.ItemId;
+        return InSlotByCount(task, held);
+    }
+
+    /// <summary>One more of the fixture in the window than when it opened (and than the ones before it of the same item).</summary>
+    private bool InSlotByCount(FixtureTask task, Dictionary<int, uint>? held = null)
+    {
+        held ??= ContainerItems();
+        if (held == null) return false;
         var wanted = containerBefore.GetValueOrDefault(task.Fixture.ItemId) + toSet.TakeWhile(t => t != task).Count(t => t.Fixture.ItemId == task.Fixture.ItemId) + 1;
         return held.Values.Count(i => i == task.Fixture.ItemId) >= wanted;
     }

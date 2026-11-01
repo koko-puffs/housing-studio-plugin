@@ -8,7 +8,24 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.9.0. Placing works in the game; the newer features haven't all been tried in it yet.**
+> **Status: 0.9.1. Placing works in the game; the newer features haven't all been tried in it yet.**
+> 0.9.1: **Clear out this house** (Home's This house): everything placed there is put away, whatever
+> design is loaded (or none), tabletop and wall-mounted pieces first, to the storeroom, your bags, or
+> the storeroom and then your bags (it asks). **The storeroom's real size**: a company's private
+> chambers hold 150, but the game sends 8 pages of 50, so a clear out read "room for 400", and each
+> "Insufficient space in storeroom" piece was put off and tried again, round and round, with nothing
+> going to your bags. Now that refusal means full: what it holds is kept as its size in that home
+> (chambers start at 150), and the rest go to your bags. **Quicker dyes**: the dye window's clicks are a
+> third of the click gap apart (it answers within a frame), the clicks that did nothing are gone, the
+> shade's list is read as soon as it shows (not after 300 ms), and the dye is held for 0.3 s, not 0.7.
+> **A piece refused where the game shows it** ("Unable to place item.", a Tier 4 Aquarium) is tried
+> again at once with its preview at its own spot (0.9.0 waited 6 s, then tried the same spot).
+> **Fixtures**: the Housing menu's words start with its title, which 0.9.0 took for an entry, so you
+> were asked to choose Remodel Interior; and the window's slots are now worked out from the ones
+> holding what's set (of a few likely orders, the one that fits), and a fixture you put in by hand
+> teaches its slot for next time. The window: Pinned shows only once something is pinned; the piece's
+> card (placing and errands) keeps one height, its lines cut short with the whole on hover; the back
+> arrow sits at the same height on every screen; the serif is the site's (Source Serif 4).
 > 0.9.0: **the window redesigned**, every screen from the approved mockups ([docs/UI.md](docs/UI.md),
 > "0.9.0"): one header (back at the top left, the design's name on up to two lines), one footer (the
 > next step in brass at the bottom left), design names with spaces for underscores, one way to say gil,
@@ -558,7 +575,24 @@ go by with the room at 0), the rest of the first ones wait too (`PutOffClearOut`
 being refused, and later pieces aren't tried until the room changes. Any still without room at the end
 are under **Needs you**: make room and Try again, or put them in your bags by hand. A preview or
 rehearsal lists the waiting ones last, where a run would put them away. A run stopped before the end
-leaves them placed (the log says so). Not yet seen in the game: Store mode from the plugin (also new in Put
+leaves them placed (the log says so).
+
+**The storeroom's real size** (0.9.1): the pages the game sends aren't always the storeroom's size. A
+company's private chambers had 8 pages (400 slots) and hold 150, so a clear out read room for 400,
+the game said "Insufficient space in storeroom" for every piece, and each was put off and tried again
+without end. Now that refusal (its English words; another client's: the same words for a third
+different piece in a row) means the storeroom is full: what it holds then is kept as its size in that
+home (`Configuration.StoreroomSizes`, by house id and side; `InventoryReader.LearnFull`), and caps the
+pages from then on (`InventoryReader.StoreroomRoom`; a size it already holds more than is ignored).
+Private chambers start at 150. Once full, the rest go to your bags while they have room.
+
+**Clear out this house** (0.9.1, Home's This house → **Clear out**): everything placed there is put
+away, whatever design is loaded or none. It asks where: **the storeroom, then your bags once it's
+full** (picked to begin with), **the storeroom only**, or **your bags only** (the editor's "to your
+bags" mode). It loads an empty design for the home (no file; `LayoutSession.LoadEmpty`) and runs it with
+everything placed as the clear out (`PlacementRunner.NextPutAwayTo` for where), so it's the clear out
+above: tabletop and wall-mounted pieces first, the backup saved first (Put them back undoes it), and
+the pieces with no room left under Needs you. Not yet seen in the game: Store mode from the plugin (also new in Put
 them back, 0.3.5).
 
 **Swap** (Ready's Place stage; not for a backup loaded as the design; the brass button then reads
@@ -593,15 +627,21 @@ says: before each action it holds, shows it, and waits for **Continue** (in Read
 1. The furnishing editor is closed (its own close) or the Housing menu opened (the housing agent),
    and **Remodel Interior** (or Remodel Exterior) chosen by its words, at its place in the menu
    (inside it's the third, [i:2], as recorded); only when the menu's first two entries read as
-   Indoor Furnishings and Furnishing Color (the recorded [i:0] and [i:1]); otherwise you're asked
-   to choose it. If the window
+   Indoor Furnishings and Furnishing Color (the recorded [i:0] and [i:1]), first or after the menu's
+   title (0.9.1: the game reads "Housing | Indoor Furnishings | Furnishing Color | Remodel Interior…",
+   and the title isn't an entry; `FixtureJobs.MenuOffset`); otherwise you're asked to choose it. If the window
    (`HousingEditInterior` / `HousingEditExterior`) doesn't open, by itself or by you, it stops.
-2. The window's container (InventoryType 2012 inside, 2011 outside) is read and logged, and its slots
-   checked against what's set: floor by floor, five parts each (wall, window, door, flooring,
-   light; the outside's eight parts in their order). Only if what's set is where that order says is
-   a fixture put in its slot by the plugin, with the game's item move from your bag (what dragging
-   it there does); if it doesn't go in 3 s, or the slots can't be told apart, you're asked to put it
-   in, and the window is watched for it.
+2. The window's container (InventoryType 2012 inside, 2011 outside) is read and logged, and each
+   fixture's slot worked out (0.9.1; `FixtureJobs.SlotFor`, tested): a part whose item sits in one
+   slot only is known to go there; slots kept from earlier runs are known too; a part not known takes
+   the slot that every likely order agreeing with all the known ones gives it (floor by floor or part
+   by part, the five parts or the three set here, the ground floor or the basement first; the outside's
+   eight parts in their order). 0.9.0 trusted only the first of those orders, which didn't hold in the
+   game ("the ground floor's wall is set, but slot 0 is empty"). When every fixture has a slot (and no
+   two the same), each is put in by the plugin, with the game's item move from your bag (what dragging
+   it there does); if it doesn't go in 3 s, or the slots can't be worked out, you're asked to put it in,
+   and the window is watched for it. The slot a fixture you put in went to is kept for that part
+   (`Configuration.FixtureSlots`), and once the rest follow from what's known, the plugin puts them in.
 3. The window's apply (`HousingEditInterior` [i:0, empty, empty, empty, empty], as recorded; the
    outside's taken to be the same), then yes to "Proceed with fixture changes?" (only to that
    question); the window closes. The run waits up to 5 minutes for the game's tables
@@ -1198,7 +1238,7 @@ The housing editor's patterns and offsets were found by the MakePlace plugin (ja
 kept current by its forks (RemakePlace, DisPlace); the furnishing dye flow and its values come from
 RemakePlace; placing from the storeroom through the furnishing list and aiming its preview from
 Refurnish; context-menu and callback conventions from ECommons. Fonts: Geist and Geist Mono (Vercel)
-and Cormorant Garamond (the Cormorant Project), under the SIL Open Font License 1.1
+and Source Serif 4 (the Source Serif 4 Project Authors), under the SIL Open Font License 1.1
 (`HousingStudio/Resources/Fonts`). Icons: drawn from Lucide's paths (ISC licence).
 
 Licensed under the GNU AGPL-3.0 (`LICENSE`).

@@ -61,6 +61,8 @@ public sealed class Plugin : IDalamudPlugin
             config.Save();
         }
 
+        InventoryReader.LearntSizes = config.StoreroomSizes;
+        InventoryReader.SaveSizes = config.Save;
         try
         {
             Plots = PlotTable.LoadEmbedded();

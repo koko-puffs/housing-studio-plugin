@@ -130,6 +130,18 @@ public sealed partial class Configuration : IPluginConfiguration
     /// </summary>
     public Dictionary<string, SavedRows> StoreroomRows { get; set; } = new();
 
+    /// <summary>
+    /// Storeroom sizes the game showed by refusing ("Insufficient space in storeroom"), by house id and
+    /// side (0.9.1): its pages can be more than the storeroom holds.
+    /// </summary>
+    public Dictionary<string, int> StoreroomSizes { get; set; } = new();
+
+    /// <summary>
+    /// The fixtures window's slot for each part (0.9.1): learnt from a fixture you put in by hand, by
+    /// side, floor and part ("in|Ground Floor|Wall").
+    /// </summary>
+    public Dictionary<string, int> FixtureSlots { get; set; } = new();
+
     public void AddRecent(string path)
     {
         RecentFiles.RemoveAll(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase));

@@ -65,6 +65,6 @@ Releasing is in [docs/PUBLISHING.md](docs/PUBLISHING.md).
 ## Credits and licence
 
 Built on what the MakePlace plugin (jawslouis) and its forks RemakePlace and DisPlace found,
-with ideas from Refurnish and ECommons. Fonts: Geist, Geist Mono and Cormorant Garamond (SIL
+with ideas from Refurnish and ECommons. Fonts: Geist, Geist Mono and Source Serif 4 (SIL
 Open Font License). Icons drawn from Lucide (ISC). Licensed under the GNU AGPL-3.0
 (see `LICENSE`).

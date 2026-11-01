@@ -15,8 +15,30 @@ namespace HousingStudio.Session;
 /// you'll know ("Medium house in Mist before Winter Lodge"); Swap back loads that backup as the
 /// design and runs it with clear out.
 /// </summary>
+/// <summary>Where a run puts pieces away (0.9.1's Clear out this house asks; other runs use the storeroom, then your bags).</summary>
+public enum PutAwayTo
+{
+    /// <summary>The storeroom, and your bags once it's full.</summary>
+    StoreroomThenBags,
+
+    /// <summary>The storeroom only: what it has no room for is left placed.</summary>
+    Storeroom,
+
+    /// <summary>Your bags (the editor's "to your bags").</summary>
+    Bags,
+}
+
 public sealed unsafe partial class PlacementRunner
 {
+    /// <summary>Where the next run puts pieces away; taken by its start (and back to the storeroom, then bags, after).</summary>
+    public PutAwayTo NextPutAwayTo { get; set; } = PutAwayTo.StoreroomThenBags;
+
+    /// <summary>Where this run puts pieces away.</summary>
+    private PutAwayTo putAwayTo = PutAwayTo.StoreroomThenBags;
+
+    /// <summary>May this run put pieces in your bags (and do they have room)?</summary>
+    private bool BagsTakeIt => putAwayTo != PutAwayTo.Storeroom && ErrandGame.FreeSlots() > 0;
+
     /// <summary>Another run that acts in the home (setting fixtures): a placing run doesn't start while it goes.</summary>
     public Func<bool>? OtherRunActive { get; set; }
 
@@ -167,7 +189,13 @@ public sealed unsafe partial class PlacementRunner
         var garden = session.Context.Side == Side.Garden;
         // A storeroom without room for them all: what fits goes first, the rest once the design is
         // placed (each piece placed from the storeroom makes room for one).
-        var room = InventoryReader.StoreroomRoom(garden ? Side.Garden : Side.Interior);
+        int? room = putAwayTo switch
+        {
+            PutAwayTo.Bags => ErrandGame.FreeSlots(),
+            // (Your bags take what the storeroom can't.)
+            PutAwayTo.StoreroomThenBags => InventoryReader.StoreroomRoom(garden ? Side.Garden : Side.Interior) is { } r ? r + ErrandGame.FreeSlots() : (int?)null,
+            _ => InventoryReader.StoreroomRoom(garden ? Side.Garden : Side.Interior),
+        };
         // What sits on other pieces or hangs on walls goes first, the pieces under them after: the game
         // won't put away a piece with something on it ("Another furnishing has been placed on that item";
         // a clear out to an empty backup put a round table away before what stood on it). OrderBy keeps
@@ -175,7 +203,7 @@ public sealed unsafe partial class PlacementRunner
         pieces = pieces.OrderByDescending(p => data.GoesOnSomethingElse(p.ItemId)).ToList();
         var (first, later) = ClearOutSplit.Split(pieces, room);
         if (later.Count > 0)
-            log.Warn($"The storeroom has room for {Words(first.Count)} of the {Words(pieces.Count)} to clear out: {(first.Count > 0 ? $"those go first, and " : string.Empty)}"
+            log.Warn($"{(putAwayTo == PutAwayTo.Bags ? "Your bags have" : putAwayTo == PutAwayTo.StoreroomThenBags ? "The storeroom and your bags have" : "The storeroom has")} room for {Words(first.Count)} of the {Words(pieces.Count)} to clear out: {(first.Count > 0 ? $"those go first, and " : string.Empty)}"
                      + $"the other {later.Count} once the design is placed (placing from the storeroom makes room). Any it still has no room for are left for you.");
         var stores = first.Select(p => StoreJob(p, garden)).ToList();
         clearOutCount = pieces.Count;
@@ -191,7 +219,7 @@ public sealed unsafe partial class PlacementRunner
         jobs.Clear();
         jobs.AddRange(stores);
         clearOutReplan = true;
-        log.Info($"Clearing out first: {Words(stores.Count)} placed here and not in the design go to the storeroom (Store mode); "
+        log.Info($"Clearing out first: {Words(stores.Count)} placed here and not in the design go to {PutAwayWords} (the editor's {(putAwayTo == PutAwayTo.Bags ? "to your bags" : "Store")} mode); "
                  + "then the design is matched again against what's placed, and placed.");
     }
 
@@ -210,7 +238,8 @@ public sealed unsafe partial class PlacementRunner
     private bool PutOffClearOut()
     {
         if (!clearOutReplan || index >= jobs.Count || jobs[index].Kind != JobKind.Store) return false;
-        if (!StoreroomRefuses()) return false;
+        // (Your bags take them, while they have room and may.)
+        if (putAwayTo == PutAwayTo.Bags ? ErrandGame.FreeSlots() > 0 : !StoreroomRefuses() || BagsTakeIt) return false;
         var n = 0;
         while (index + n < jobs.Count && jobs[index + n].Kind == JobKind.Store && jobs[index + n].Outcome == JobOutcome.Pending) n++;
         if (n == 0) return false;
@@ -346,6 +375,13 @@ public sealed unsafe partial class PlacementRunner
         config.Save();
         return path;
     }
+
+    private string PutAwayWords => putAwayTo switch
+    {
+        PutAwayTo.Bags => "your bags",
+        PutAwayTo.Storeroom => "the storeroom",
+        _ => "the storeroom (your bags once it's full)",
+    };
 
     private static string Words(int n) => n == 1 ? "1 piece" : $"{n} pieces";
 }

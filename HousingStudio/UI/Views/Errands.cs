@@ -735,8 +735,6 @@ public sealed partial class MainWindow
         return r;
     }
 
-    private readonly Run[] errandNote = new Run[1];
-
     /// <summary>The Got and Spent cards' words, made again only when the numbers change.</summary>
     private (int Got, int Of, long Spent, long Agreed, string GotV, string GotOf, string SpentV, string SpentOf) errandCards = (-1, 0, -1, 0, "", "", "", "");
 
@@ -857,21 +855,23 @@ public sealed partial class MainWindow
         var dl = Kit.Dl;
         var x = at.X + S(34) + S(12);
         var tw = at.X + w - x;
-        Run[]? noteRuns = null;
-        if (r.Note != null)
-        {
-            errandNote[0] = new Run(r.Note, Face.Sans, 12, Palette.Dim);
-            noteRuns = errandNote;
-        }
-        var noteH = noteRuns != null ? Txt.Flow(Vector2.Zero, tw, noteRuns, 18, out _, draw: false) : 0;
-        var wordsH = S(20) + (noteRuns != null ? S(2) + noteH : 0);
+        // 0.9.1: always two rows of one line (what it's doing, and its note), so the card keeps its height
+        // from step to step; a line cut short shows in full on hover.
+        var wordsH = S(20) + S(2) + S(18);
         var h = MathF.Max(S(34), wordsH);
         var thumb = new Vector2(at.X, at.Y + (h - S(34)) / 2);
         if (r.ItemIcon != 0) Kit.Thumb(thumb, S(34), S(8), r.ItemIcon);
         else IconThumb(thumb, S(34), r.Icon);
         var y = at.Y + (h - wordsH) / 2;
-        Txt.Line(dl, new Vector2(x, y), Txt.Fit(r.Doing, Face.SansMedium, 14, tw), Face.SansMedium, 14, Palette.Ivory, 20);
-        if (noteRuns != null) Txt.Flow(new Vector2(x, y + S(22)), tw, noteRuns, 18, out _);
+        var doing = Txt.Fit(r.Doing, Face.SansMedium, 14, tw);
+        Txt.Line(dl, new Vector2(x, y), doing, Face.SansMedium, 14, Palette.Ivory, 20);
+        CutShortTip(doing, r.Doing, new Vector2(x, y), new Vector2(tw, S(20)));
+        if (r.Note != null)
+        {
+            var note = Txt.Fit(r.Note, Face.Sans, 12, tw);
+            Txt.Line(dl, new Vector2(x, y + S(22)), note, Face.Sans, 12, Palette.Dim, 18);
+            CutShortTip(note, r.Note, new Vector2(x, y + S(22)), new Vector2(tw, S(18)));
+        }
         Kit.Reserve(at, w, h);
         Kit.EndPanel();
     }

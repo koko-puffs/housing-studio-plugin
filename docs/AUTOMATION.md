@@ -199,10 +199,11 @@ put-away comes first.
 the game; it goes step by step. The windows `HousingEditInterior` and `HousingEditExterior` and their
 edit containers (InventoryType 2012 and 2011) are from FFXIVClientStructs. The Housing menu's
 fixtures entry ("Remodel Interior", recorded as [i:2]) is fired as `HousingMenu ← [i:entry]`, its
-place among the menu's text values, only when the first two read as Indoor Furnishings and
-Furnishing Color (the recorded [i:0] and [i:1]); a fixture is put in its slot with
-`InventoryManager.MoveItemSlot` (bag → edit container), only when the container's slots hold what's
-set in the guessed order (floors in the game's order, five parts each). The game's own way, recorded,
+place among the menu's text values (less the menu's title when it's read first, 0.9.1), only when the
+first two entries read as Indoor Furnishings and Furnishing Color (the recorded [i:0] and [i:1]); a
+fixture is put in its slot with `InventoryManager.MoveItemSlot` (bag → edit container), only when every
+fixture's slot is known: seen holding what's set, kept from a fixture put in by hand earlier, or given
+by the one likely order that fits those (`FixtureJobs.SlotFor`, 0.9.1). The game's own way, recorded,
 is a slot clicked (`HousingEditInterior ← [i:2, u:0, empty, empty, u:1]`) and a fixture chosen from
 its icons (`ContextIconMenu ← [i:0, i:0, u:51218, u:0, empty]`), not decoded yet. The apply is
 `HousingEditInterior ← [i:0, empty, empty, empty, empty]` (recorded), then yes to "Proceed with
@@ -277,7 +278,9 @@ me" off, the run waits for you to put each down and then sets it.
    1.5 s), then its menu `[i:1, u:row]` and "Paint".
 3. Find the dye's row in the window's list: its names start at value 203 "No Color" (row 0) and end
    where "No Color" comes round again, so Snow White is row 1 and Soot Black row 6. If the dye isn't
-   in the list shown, the shade is picked first (`[i:4, i:shade]`, RemakePlace, **unconfirmed**).
+   in the list shown, the shade is picked first (`[i:4, i:shade]`, RemakePlace, **unconfirmed**), and
+   the row is read as soon as the shade's list shows the dye (0.9.1; 0.9.0 waited 300 ms whatever),
+   else its place in the dye sheet after 0.4 s.
 4. `ColorantColoring ← [i:5, i:row, i:stain, i:0]` (recorded: Snow White [5, 1, 1, 0], Soot Black
    [5, 6, 6, 0]; the third value matches both row and Stain id there), Dye `[i:0]`, confirm
    `MiragePrismMiragePlateConfirm ← [i:0]`, close `ColorantColoring ← [i:-2]`; check the dye changed.
@@ -285,7 +288,14 @@ me" off, the run waits for you to put each down and then sets it.
    (`HousingFurniture.Stain`): the dye chosen, or a shade's first dye when the shade is switched (0.8.2's
    rehearsal read Sunset Orange there just after switching to the browns), and puts the piece's own back when the
    window closes without Dye. So the dye before is read with the window closed, and the dye after only
-   counts with the window closed and the reading steady for 0.5 s (`DyeHeld`).
+   counts with the window closed and the reading steady for 0.3 s (`DyeHeld`; 0.7 s before 0.9.1).
+
+   **Speed (0.9.1).** The dye window's clicks (interact, shade, pick, Dye, Yes, close) wait only a
+   third of the pace's click gap after the last action (`Step.Gap`, `DyeGap`: 67 ms at Quick, never
+   under 40), as the window answers within a frame; RemakePlace/plugin waits 100 ms in all between its
+   own. "Close the dye window if it's open" and "If it didn't, open it from the list" aren't actions any
+   more (they click only when needed), so no click gap is spent on them, and the dye shown is checked
+   from the first frame after the pick (no 250 ms delay first).
 
 **How many to dye** is one calculation (`DyeCounts.Needs`) for the run's first line and the dye phase:
 each piece you have, placed (the dye it has now) or still to place (the dye it will have: storeroom

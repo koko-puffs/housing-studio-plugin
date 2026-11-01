@@ -22,17 +22,18 @@ public enum Face
     /// <summary>Geist Mono 400: eyebrows, counts, figures, times.</summary>
     Mono,
 
-    /// <summary>Cormorant Garamond 500: names and headings.</summary>
+    /// <summary>Source Serif 4 400: names and headings (the site's serif, 0.9.1).</summary>
     Serif,
 
-    /// <summary>Cormorant Garamond 400 italic: a title's one italic word.</summary>
+    /// <summary>Source Serif 4 400 italic: a title's one italic word.</summary>
     SerifItalic,
 }
 
 /// <summary>
 /// The faces at the sizes the mockups use, loaded through Dalamud's font atlas (so they follow
 /// Dalamud's global scale and rebuild with it): Geist 15/14/13/12 (400), 15/14/13 (500), 15/14
-/// (600); Geist Mono 13/12/11/10 (10: the Beta tag); Cormorant Garamond 56/32/28/26/22 (500) and 32 italic (400). All
+/// (600); Geist Mono 13/12/11/10 (10: the Beta tag); Source Serif 4 56/32/28/26/22 and 32 italic (400, its 32 px optical size,
+/// as the site has it since it left the mockups' Cormorant Garamond). All
 /// under the SIL Open Font License 1.1, unmodified, with their licences (Resources/Fonts).
 ///
 /// Sizes are CSS sizes (the em). ImGui sizes a font by its line (ascent to descent), so each face
@@ -45,7 +46,7 @@ public sealed class Fonts : IDisposable
 {
     /// <summary>(hhea ascent − descent) / em, read from the font files.</summary>
     private const float GeistLine = 1.3f;
-    private const float CormorantLine = 1.211f;
+    private const float SerifLine = 1.371f;
 
     /// <summary>Latin, punctuation, currency, letterlike symbols and arrows: what names and headings need.</summary>
     private static readonly ushort[] SerifGlyphs = { 0x0020, 0x024F, 0x2000, 0x206F, 0x20A0, 0x20CF, 0x2100, 0x214F, 0x2190, 0x21FF, 0 };
@@ -77,11 +78,11 @@ public sealed class Fonts : IDisposable
                 Face.SansMedium => "Geist-Medium.ttf",
                 Face.SansSemibold => "Geist-SemiBold.ttf",
                 Face.Mono => "GeistMono-Regular.ttf",
-                Face.Serif => "CormorantGaramond-Medium.ttf",
-                _ => "CormorantGaramond-Italic.ttf",
+                Face.Serif => "SourceSerif4-Regular.ttf",
+                _ => "SourceSerif4-Italic.ttf",
             };
             var serif = face is Face.Serif or Face.SerifItalic;
-            var line = serif ? CormorantLine : GeistLine;
+            var line = serif ? SerifLine : GeistLine;
             var glyphs = serif ? px >= 56 ? FigureGlyphs : SerifGlyphs : null;
             var dalamudFont = japanese && face is Face.Sans or Face.SansMedium or Face.SansSemibold;
             handles[(face, px)] = Make(atlas, file, px * line, glyphs, dalamudFont);

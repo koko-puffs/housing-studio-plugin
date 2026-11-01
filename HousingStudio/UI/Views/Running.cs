@@ -67,7 +67,11 @@ public sealed partial class MainWindow
         DrawFigure(preview);
         Kit.Gap(18);
         DrawPhases();
-        if (runner.Current is { } job)
+        // 0.9.1: between two pieces (a moment with none in hand) the last one stays, so what's under the
+        // card doesn't jump up and down.
+        if (cardRun != runner.RunNumber) (cardJob, cardRun) = (null, runner.RunNumber);
+        if (runner.Current is { } now) cardJob = now;
+        if ((runner.Current ?? cardJob) is { } job)
         {
             Kit.Gap(18);
             DrawCurrent(job, preview);
@@ -203,26 +207,36 @@ public sealed partial class MainWindow
         var x = at.X + S(52) + S(16);
         var tw = at.X + w - x - (preview ? 0 : skipW + S(12));
         var nameH = Txt.Natural(Face.SansMedium, 15);
-        var note = new System.Collections.Generic.List<Run>();
-        if (job.Target.Stain != 0)
-        {
-            note.Add(Run.Dot(data.DyeRgb(job.Target.Stain)));
-            note.Add(Run.Note($"{data.DyeName(job.Target.Stain)} · "));
-        }
-        note.Add(Run.Note(Floors.Name(job.Target.Floor)));
+        var lineH = S(19.5f);
+        // 0.9.1: always three rows of one line each (the name, its dye and floor, the step), so the card
+        // is the same height from piece to piece and step to step; a line cut short shows in full on hover.
+        var dyed = job.Target.Stain != 0;
+        var noteFull = dyed ? $"{data.DyeName(job.Target.Stain)} · {Floors.Name(job.Target.Floor)}" : Floors.Name(job.Target.Floor);
+        var dotW = dyed ? S(16) + S(2) : 0;
+        var noteShown = Txt.Fit(noteFull, Face.Sans, 13, tw - dotW);
+        currentNote.Clear();
+        if (dyed) currentNote.Add(Run.Dot(data.DyeRgb(job.Target.Stain)));
+        currentNote.Add(Run.Note(noteShown));
         var step = vm.StepText;
-        var stepRuns = step != null ? new[] { Run.Note(step, Palette.Text) } : Array.Empty<Run>();
-        var noteH = Txt.Flow(Vector2.Zero, tw, note, 19.5f, out _, draw: false);
-        var stepH = step != null ? Txt.Flow(Vector2.Zero, tw, stepRuns, 19.5f, out _, draw: false) : 0;
-        var wordsH = nameH + S(4) + noteH + (step != null ? S(4) + stepH : 0);
+        var stepShown = step != null ? Txt.Fit(step, Face.Sans, 13, tw) : null;
+        var wordsH = nameH + S(4) + lineH + S(4) + lineH;
         var h = MathF.Max(S(52), wordsH);
         Kit.Thumb(new Vector2(at.X, at.Y + (h - S(52)) / 2), S(52), S(Palette.RadiusMd), data.ItemIcon(job.Target.ItemId), S(22));
         var y = at.Y + (h - wordsH) / 2;
-        Txt.Line(dl, new Vector2(x, y), Txt.Fit(data.ItemName(job.Target.ItemId), Face.SansMedium, 15, tw), Face.SansMedium, 15, Palette.Ivory);
+        var name = data.ItemName(job.Target.ItemId);
+        var nameShown = Txt.Fit(name, Face.SansMedium, 15, tw);
+        Txt.Line(dl, new Vector2(x, y), nameShown, Face.SansMedium, 15, Palette.Ivory);
+        CutShortTip(nameShown, name, new Vector2(x, y), new Vector2(tw, nameH));
         y += nameH + S(4);
-        Txt.Flow(new Vector2(x, y), tw, note, 19.5f, out _);
-        y += noteH + S(4);
-        if (step != null) Txt.Flow(new Vector2(x, y), tw, stepRuns, 19.5f, out _);
+        // One line: the fitted words with the dot can't wrap (Flow keeps the dot's own spacing).
+        Txt.Flow(new Vector2(x, y), tw + S(40), currentNote, 19.5f, out _);
+        CutShortTip(noteShown, noteFull, new Vector2(x, y), new Vector2(tw, lineH));
+        y += lineH + S(4);
+        if (stepShown != null)
+        {
+            Txt.Line(dl, new Vector2(x, y), stepShown, Face.Sans, 13, Palette.Text, 19.5f);
+            CutShortTip(stepShown, step!, new Vector2(x, y), new Vector2(tw, lineH));
+        }
         if (!preview)
         {
             var skipH = Kit.ButtonHeight(BtnSize.Sm);
@@ -237,6 +251,20 @@ public sealed partial class MainWindow
         }
         Kit.Reserve(at, w, h);
         Kit.EndPanel();
+    }
+
+    private readonly System.Collections.Generic.List<Run> currentNote = new();
+
+    /// <summary>The piece the card last showed (kept while the run goes on between pieces).</summary>
+    private RunJob? cardJob;
+
+    private int cardRun = -1;
+
+    /// <summary>A line drawn cut short ("…"): its whole text on hover.</summary>
+    private static void CutShortTip(string shown, string full, Vector2 pos, Vector2 size)
+    {
+        if (ReferenceEquals(shown, full) || shown == full || Kit.Blocked || !ImGui.IsWindowHovered()) return;
+        if (ImGui.IsMouseHoveringRect(pos, pos + size)) Kit.Tooltip(full);
     }
 
     /// <summary>

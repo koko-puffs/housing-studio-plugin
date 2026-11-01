@@ -307,6 +307,9 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         // A rehearsal (Rehearse) is a real run's steps that commit nothing; any other start is a real run or a preview.
         var rehearse = rehearseNext && !dryRun;
         rehearseNext = false;
+        // Taken whether or not it starts (a later run doesn't find it set).
+        var to = NextPutAwayTo;
+        NextPutAwayTo = PutAwayTo.StoreroomThenBags;
         var problem = CanStart(dryRun);
         if (problem != null)
         {
@@ -315,6 +318,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             return;
         }
 
+        putAwayTo = to;
         entries = shown.ToList();
         jobs.Clear();
         jobsVersion++;
@@ -379,6 +383,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         listMissesStored = false;
         storeAheadTried.Clear();
         storeDeferrals.Clear();
+        storeRefusals = default;
         deferring = false;
         dyesOut.Clear();
         dyeMisses.Clear();
@@ -1227,9 +1232,11 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 },
             },
         };
-        if (config.MovePreviewBeforePlace)
+        // The second go always aims it (0.9.1): the first was refused where the game showed it ("Unable to
+        // place item.": a Tier 4 Aquarium in front of you, where it didn't fit), and its own spot fits.
+        if (config.MovePreviewBeforePlace || attempt > 0)
         {
-            steps.Add(Step.Act($"Move the preview of {name} to its spot (option)", () =>
+            steps.Add(Step.Act($"Move the preview of {name} to its spot{(attempt > 0 ? " (it was refused where the game showed it)" : " (option)")}", () =>
             {
                 HousingActions.AimPreview(job.Target.Position, job.Target.Yaw);
                 return StepOutcome.Done;
@@ -1271,6 +1278,10 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             {
                 AnswerYes();
                 var key = IdentifyNew(job, previewAt);
+                // Refused ("Unable to place item."): no new piece and the count as it was, a moment after the
+                // game said so. The check below tries again at once (0.9.0 waited the 6 s out first).
+                if (key == null && lastToast != null && queue.Elapsed > RefusalWait && FurnitureReader.PlacedCount(side == Side.Garden) == placedBefore)
+                    return StepOutcome.Done;
                 if (key != null)
                 {
                     var count = FurnitureReader.PlacedCount(side == Side.Garden);
@@ -1325,7 +1336,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             if (lastToast == null && queue.Elapsed < TimeSpan.FromSeconds(4)) return StepOutcome.Waiting;
             if (attempt == 0)
             {
-                log.Warn($"  The game didn't place it ({placedBefore} → {count} pieces placed).{toast} Trying once more.");
+                log.Warn($"  The game didn't place it ({placedBefore} → {count} pieces placed).{toast} Trying once more, with the preview at its spot.");
                 GameUi.Close(UiTable.ContextMenu);
                 queue.InsertNext(StoreroomAttempt(job, 1));
                 return StepOutcome.Done;
@@ -2387,12 +2398,18 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         return new List<Step>
         {
             EnsureMode(EditorMode.Dye),
-            Step.Act($"Close the dye window if it's open: {UiTable.DyeClose.Describe()}", () =>
+            // Not an action (0.9.1): it clicks only when a window is open, and the click gap before it
+            // was spent for nothing on every piece.
+            new Step
             {
-                if (GameUi.IsOpen(UiTable.DyeConfirm)) GameUi.Fire(UiTable.DyeConfirmNo);
-                else if (GameUi.IsOpen(UiTable.DyeWindow)) GameUi.Fire(UiTable.DyeClose);
-                return StepOutcome.Done;
-            }),
+                Label = $"Close the dye window if it's open: {UiTable.DyeClose.Describe()}",
+                Run = () =>
+                {
+                    if (GameUi.IsOpen(UiTable.DyeConfirm)) GameUi.Fire(UiTable.DyeConfirmNo);
+                    else if (GameUi.IsOpen(UiTable.DyeWindow)) GameUi.Fire(UiTable.DyeClose);
+                    return StepOutcome.Done;
+                },
+            },
             Step.Wait("The dye window is closed", () => !GameUi.IsOpen(UiTable.DyeConfirm) && !GameUi.IsOpen(UiTable.DyeWindow) || CloseDyeWindowAgain(), WindowWait, StepStatus.SkipJob),
             Step.Act($"Pick {name}", () =>
             {
@@ -2424,6 +2441,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 // Furnishing Color, then picked list rows one by one (about 20 s a piece).
                 Label = "Open the dye window on it (the game's \"interact\" with the picked piece)",
                 IsAction = true,
+                Gap = DyeGap,
                 Delay = Speed.Wait(100),
                 Timeout = TimeSpan.FromSeconds(1),
                 OnTimeout = StepStatus.Done, // not picked: the list's way, below
@@ -2444,54 +2462,85 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 OnTimeout = StepStatus.Done,
                 Run = () => GameUi.IsOpen(UiTable.DyeWindow) ? StepOutcome.Done : StepOutcome.Waiting,
             },
-            Step.Act("If it didn't, open it from Furnishing Color's list (\"Paint\")", () =>
+            // (Not an action: it only adds the list's steps, which are.)
+            new Step
             {
-                if (GameUi.IsOpen(UiTable.DyeWindow)) return StepOutcome.Done;
-                queue.InsertNext(DyeListSteps(job, instance));
-                return StepOutcome.Done;
-            }),
-            Step.Wait($"The dye window ({UiTable.DyeWindow}) is open", () => GameUi.IsOpen(UiTable.DyeWindow), WindowWait, StepStatus.SkipJob),
-            Step.Act($"Find {dye} in the dye window's list", () =>
-            {
-                var r = Menus.DyeRow(GameUi.TextValues(UiTable.DyeWindow), dye, UiTable.DyeListFirstValue);
-                if (r == null && slot is { } sl && UiTable.ShadeIndex(sl.Shade) is { } shade)
+                Label = "If it didn't, open it from Furnishing Color's list (\"Paint\")",
+                Run = () =>
                 {
-                    var values = UiCallValues.Of(("shade", shade));
-                    log.Info($"  {dye} isn't in the list shown: {UiTable.DyeShade.Describe(values)}");
-                    GameUi.Fire(UiTable.DyeShade, values);
-                    queue.InsertNext(new[]
-                    {
-                        Step.Act($"Find {dye} in the shade's list", () =>
-                        {
-                            row[0] = Menus.DyeRow(GameUi.TextValues(UiTable.DyeWindow), dye, UiTable.DyeListFirstValue) ?? Fallback();
-                            return StepOutcome.Done;
-                        }, Speed.Wait(300)),
-                    });
+                    if (GameUi.IsOpen(UiTable.DyeWindow)) return StepOutcome.Done;
+                    queue.InsertNext(DyeListSteps(job, instance));
                     return StepOutcome.Done;
-                }
-                row[0] = r ?? Fallback();
-                return StepOutcome.Done;
-
-                int Fallback()
-                {
-                    var f = slot?.SubOrder ?? 0;
-                    log.Info($"  {dye} not found by name in the window; using its place in the dye sheet ({f}).");
-                    return f;
-                }
-            }),
-            Step.Act($"Choose {dye}", () =>
+                },
+            },
+            Step.Wait($"The dye window ({UiTable.DyeWindow}) is open", () => GameUi.IsOpen(UiTable.DyeWindow), WindowWait, StepStatus.SkipJob),
+            new Step
             {
-                var values = UiCallValues.Of(("row", row[0]), ("stain", job.Target.Stain));
-                log.Info($"  → {UiTable.DyePick.Describe(values)}");
-                if (Rehearsal) queue.InsertNext(RehearseDyeEnd(job, key, stainBefore[0]));
-                return FireOrSkip(UiTable.DyePick, values);
-            }),
+                Label = $"Find {dye} in the dye window's list",
+                IsAction = true,
+                Gap = DyeGap,
+                Run = () =>
+                {
+                    var r = Menus.DyeRow(GameUi.TextValues(UiTable.DyeWindow), dye, UiTable.DyeListFirstValue);
+                    if (r == null && slot is { } sl && UiTable.ShadeIndex(sl.Shade) is { } shade)
+                    {
+                        var values = UiCallValues.Of(("shade", shade));
+                        log.Info($"  {dye} isn't in the list shown: {UiTable.DyeShade.Describe(values)}");
+                        GameUi.Fire(UiTable.DyeShade, values);
+                        // 0.9.1: as soon as the shade's list shows it (0.9.0 waited 300 ms whatever; the list
+                        // comes in the next frame or two), else its place in the dye sheet after half a second.
+                        queue.InsertNext(new[]
+                        {
+                            new Step
+                            {
+                                Label = $"Find {dye} in the shade's list",
+                                Timeout = TimeSpan.FromSeconds(2),
+                                Run = () =>
+                                {
+                                    if (Menus.DyeRow(GameUi.TextValues(UiTable.DyeWindow), dye, UiTable.DyeListFirstValue) is { } found)
+                                    {
+                                        row[0] = found;
+                                        return StepOutcome.Done;
+                                    }
+                                    if (queue.Elapsed < Speed.Wait(600)) return StepOutcome.Waiting;
+                                    row[0] = Fallback();
+                                    return StepOutcome.Done;
+                                },
+                            },
+                        });
+                        return StepOutcome.Done;
+                    }
+                    row[0] = r ?? Fallback();
+                    return StepOutcome.Done;
+
+                    int Fallback()
+                    {
+                        var f = slot?.SubOrder ?? 0;
+                        log.Info($"  {dye} not found by name in the window; using its place in the dye sheet ({f}).");
+                        return f;
+                    }
+                },
+            },
+            new Step
+            {
+                Label = $"Choose {dye}",
+                IsAction = true,
+                Gap = DyeGap,
+                Run = () =>
+                {
+                    var values = UiCallValues.Of(("row", row[0]), ("stain", job.Target.Stain));
+                    log.Info($"  → {UiTable.DyePick.Describe(values)}");
+                    if (Rehearsal) queue.InsertNext(RehearseDyeEnd(job, key, stainBefore[0]));
+                    return FireOrSkip(UiTable.DyePick, values);
+                },
+            },
             DyeShownCheck(job, key, () => instance, () => stainBefore[0]),
-            Step.Act($"Press Dye: {UiTable.DyeApply.Describe()}", () => FireOrSkip(UiTable.DyeApply)),
+            new Step { Label = $"Press Dye: {UiTable.DyeApply.Describe()}", IsAction = true, Gap = DyeGap, Run = () => FireOrSkip(UiTable.DyeApply) },
             new Step
             {
                 Label = $"Confirm: {UiTable.DyeConfirmYes.Describe()}",
                 IsAction = true,
+                Gap = DyeGap,
                 Run = () =>
                 {
                     if (GameUi.IsOpen(UiTable.DyeConfirm))
@@ -2521,11 +2570,17 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 TimeoutProblem = ProblemKind.DyeFailed,
                 TimeoutMessage = "The dye confirmation didn't close after Yes.",
             },
-            Step.Act("Close the dye window", () =>
+            new Step
             {
-                if (GameUi.IsOpen(UiTable.DyeWindow)) GameUi.Fire(UiTable.DyeClose);
-                return StepOutcome.Done;
-            }),
+                Label = "Close the dye window",
+                IsAction = true,
+                Gap = DyeGap,
+                Run = () =>
+                {
+                    if (GameUi.IsOpen(UiTable.DyeWindow)) GameUi.Fire(UiTable.DyeClose);
+                    return StepOutcome.Done;
+                },
+            },
             Step.Wait("The dye window is closed", () => !GameUi.IsOpen(UiTable.DyeWindow), WindowWait, StepStatus.Done),
             DyeHeld(key, job.Target.Stain, $"{name} turns {dye}", TimeSpan.FromSeconds(4), () =>
             {
@@ -2569,7 +2624,18 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         };
     }
 
-    private static readonly TimeSpan DyeSettle = TimeSpan.FromMilliseconds(700);
+    /// <summary>
+    /// How long the dye must hold with the window closed (a preview the game puts back goes within a
+    /// frame or two of closing; 0.9.0 waited 700 ms after every piece).
+    /// </summary>
+    private static readonly TimeSpan DyeSettle = TimeSpan.FromMilliseconds(300);
+
+    /// <summary>
+    /// The least time between two of the dye window's clicks (0.9.1): a third of the pace's click gap
+    /// (67 ms at Quick), as the window answers within a frame. RemakePlace/plugin waits 100 ms in all
+    /// between its window's clicks.
+    /// </summary>
+    private TimeSpan DyeGap => TimeSpan.FromMilliseconds(Math.Max(40, Speed.ClickGapMs / 3));
 
     /// <summary>
     /// Before Dye is pressed: the window must be on this piece and, once its preview shows, show the dye
@@ -2586,7 +2652,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         return new Step
         {
             Label = $"The dye window shows {dye} on {name}",
-            Delay = Speed.Wait(250),
+            // (No delay first, 0.9.1: it's done as soon as the preview shows the dye.)
             Timeout = TimeSpan.FromSeconds(3),
             OnTimeout = StepStatus.SkipJob,
             TimeoutProblem = ProblemKind.DyeFailed,
@@ -3111,8 +3177,10 @@ public sealed unsafe partial class PlacementRunner : IDisposable
     {
         var name = Name(job);
         var key = job.Key!.Value;
+        // Clear out this house, to your bags (0.9.1).
+        if (putAwayTo == PutAwayTo.Bags) toBags = true;
         // A full storeroom (0.8.5's chamber): the editor's "to your bags" instead, while the bags have room.
-        if (!toBags && StoreroomRefuses() && ErrandGame.FreeSlots() > 0)
+        if (!toBags && StoreroomRefuses() && BagsTakeIt)
         {
             toBags = true;
             log.Info($"  The storeroom is full: {name} goes to your bags instead ({ErrandGame.FreeSlots()} free slots).");
@@ -3202,6 +3270,16 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                         if (!said && queue.Elapsed <= TimeSpan.FromSeconds(3.5)) return StepOutcome.Waiting;
                         var room = InventoryReader.StoreroomRoom(side);
                         log.Warn($"  {name} wasn't put away ({(said ? $"the game said \"{lastToast}\"" : "nothing changed in 3.5 s")}; room for {room?.ToString() ?? "?"} in the storeroom).");
+                        // 0.9.1: "Insufficient space in storeroom" while its pages read room (a company's
+                        // chambers: 8 pages of 50, a size of 150), or the same words for a second piece in a
+                        // row: the storeroom is full whatever its pages say. Its size here is kept, and the
+                        // rest go to your bags (0.9.0 put each off three times, round and round).
+                        if (said && !toBags && room is > 0 && StoreroomFullSaid(lastToast!, job))
+                        {
+                            var size = InventoryReader.LearnFull(side);
+                            log.Warn($"  The storeroom is full{(size != null ? $" at {size} pieces (its pages showed more): kept as its size in this home" : string.Empty)}.");
+                            room = 0;
+                        }
                         // The game refused this piece while the storeroom has room: something stands on it
                         // ("Unable to remove. Another furnishing has been placed on that item."). Not a full
                         // storeroom (0.8.6 took it for one and sent 100 pieces to your bags): it's put away
@@ -3217,7 +3295,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                         {
                             if (!toBags) refusedAtRoom = room;
                             // The storeroom said no: your bags instead, while they have room.
-                            if (!toBags && ErrandGame.FreeSlots() > 0)
+                            if (!toBags && BagsTakeIt)
                             {
                                 log.Info($"  Putting {name} in your bags instead ({ErrandGame.FreeSlots()} free slots).");
                                 queue.InsertNext(StoreSteps(job, toBags: true));
@@ -3229,11 +3307,31 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                         }
                         return StepOutcome.Skip("It wasn't put away (Store mode didn't take it from the plugin). Put it in the storeroom by hand.", ProblemKind.Other);
                     }
+                    if (!toBags) storeRefusals = default;
                     job.Note = toBags ? "Put away in your bags (the storeroom was full)." : "Put away in the storeroom.";
                     return StepOutcome.Done;
                 },
             },
         };
+    }
+
+    /// <summary>Refusals in a row while putting away to the storeroom: their words, the last piece's item, how many.</summary>
+    private (string? Said, uint Item, int Count) storeRefusals;
+
+    /// <summary>
+    /// Do the game's words say the storeroom is full: its English words, or (another language) the same
+    /// words for a third different piece in a row, words that aren't the ones for something standing on it.
+    /// </summary>
+    private bool StoreroomFullSaid(string said, RunJob job)
+    {
+        if (said.Contains("storeroom", StringComparison.OrdinalIgnoreCase)
+            && (said.Contains("space", StringComparison.OrdinalIgnoreCase) || said.Contains("full", StringComparison.OrdinalIgnoreCase)))
+            return true;
+        if (said.Contains("placed on", StringComparison.OrdinalIgnoreCase)) return false;
+        storeRefusals = storeRefusals.Said == said && storeRefusals.Item != job.Target.ItemId
+            ? (said, job.Target.ItemId, storeRefusals.Count + 1)
+            : storeRefusals.Said == said ? storeRefusals : (said, job.Target.ItemId, 1);
+        return storeRefusals.Count >= 3;
     }
 
     /// <summary>Dyes the run found it's out of: later pieces needing them are skipped at once.</summary>
