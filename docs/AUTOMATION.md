@@ -240,7 +240,11 @@ placed), while placing from the storeroom works. So inside a house:
    in "0:Place | 1:Store | 2:Dye | …"; in other languages the game's own words, below, untried there;
    a menu without it goes to step 3).
 2. Wait until the storeroom holds one more of it and your bags one fewer (3 frames, 0.1 s), then the
-   storeroom's steps above place it and move it to its spot.
+   storeroom's steps above place it and move it to its spot. Since 0.9.0 the next bag pieces of the
+   same floor and pass are stored right after it (`StoreAhead`, up to 10, while the storeroom has room
+   for more than one), so the list is made again once for them all; each is marked `StoredAhead` and
+   placed with the storeroom's steps in its turn. One that can't be stored ahead (gone from the bags,
+   no "Store", refused) is simply placed from the bags in its turn, as before.
 3. If the game won't store it (an error message, such as a full storeroom, or no change in 3.5 s):
    the bag's own way, "Place" `[i:0, i:0, u:0, empty, empty]`, the editor holds it, the plugin aims it
    and calls the editor's set-down with **place anywhere switched on for that one set-down** (put back
@@ -252,11 +256,15 @@ me" off, the run waits for you to put each down and then sets it.
 
 **Dye**, as Recordings 1 and 2:
 1. Furnishing Color mode.
-2. Open the dye window on the piece: first the editor's pick-up on it (clicking the piece in the room
-   opened the window in Recording 1); if the window doesn't open in a second, through Furnishing
-   Color's list as in Recording 2: rows with the piece's name are picked (`HousingGoodsStain ←
-   [i:0, u:row]`) until the editor's active item is this piece, then its menu `[i:1, u:row]` and
-   "Paint"; if the list's names can't be read, RemakePlace's "interact with the picked item" function.
+2. Open the dye window on the piece (0.9.0, as RemakePlace/plugin's `SetItemDye`): the editor's
+   pick-up on it, then, once the editor's active item is this piece (1 s at most), the housing agent's
+   "interact" with the picked item (`HousingActions.OpenDyeWindow`: the "selected housing item" getter
+   and `AgentHousing`'s interact, RemakePlace's patterns), which opens the window on it. 0.8.6 waited
+   a second for the pick alone to open it (it doesn't in Furnishing Color) and then walked the list,
+   20 s a piece. If the window still isn't open after 1.5 s, through Furnishing Color's list as in
+   Recording 2: rows with the piece's name are picked (`HousingGoodsStain ← [i:0, u:row]`) until the
+   editor's active item is this piece (a row that picks another piece is passed at once, not after
+   1.5 s), then its menu `[i:1, u:row]` and "Paint".
 3. Find the dye's row in the window's list: its names start at value 203 "No Color" (row 0) and end
    where "No Color" comes round again, so Snow White is row 1 and Soot Black row 6. If the dye isn't
    in the list shown, the shade is picked first (`[i:4, i:shade]`, RemakePlace, **unconfirmed**).
@@ -538,7 +546,17 @@ less the occupied slots), `ClearOutSplit.Split` at the start, `PutOffClearOut` b
 (room 0, or a refusal at this room → the rest wait), `PlanClearOutLater` at the end (after dyes and
 Put them back's pieces; found again by item and position within 0.25). `StoreSteps` decides in its
 wait: still placed after a toast and 1 s, or after 3.5 s → skipped; with a toast or room 0 it records
-`refusedAtRoom`, and later stores aren't picked while the room is unchanged. The fixtures window's close: a recording of putting a fixture in its slot and closing the window
+`refusedAtRoom`, and later stores aren't picked while the room is unchanged. Since 0.9.0 a refusal
+while the storeroom has room isn't taken for a full one: it's the piece ("Unable to remove. Another
+furnishing has been placed on that item."), and the piece is moved after the other pieces put away in
+that stretch (`DeferStore`/`MoveLater`, 3 times at most, not counted as a failure). Clear out and Put
+them back's pieces are put away tabletop and wall-mounted first (`GameData.GoesOnSomethingElse`), and
+a piece whose furniture slot changed is found again by item and spot within 0.25.
+
+**A storeroom pick the game refuses** (0.9.0): the "Pick row" click clears the last error message; if
+the row then reads empty and "Unable to place item." comes within 0.4 s (or comes with no preview while
+waiting for it), the piece is skipped at once with that message (`Refused`). 0.8.6's Showcase waited
+6 s for a preview, and a rerun took the empty row for a changed list. The fixtures window's close: a recording of putting a fixture in its slot and closing the window
 without applying, saying whether it asked anything and whether the fixture went back to the bags.
 
 ## For the window (the run's state)

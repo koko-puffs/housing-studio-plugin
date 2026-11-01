@@ -371,6 +371,9 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         inTurnPicks.Clear();
         orderLogged.Clear();
         listMissesStored = false;
+        storeAheadTried.Clear();
+        storeDeferrals.Clear();
+        deferring = false;
         queue.Begin(Array.Empty<Step>());
         nextJobAt = DateTime.UtcNow;
         editorMayCloseUntil = DateTime.UtcNow + ModeSwitchGrace;
@@ -676,6 +679,12 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 failuresInARow = 0;
                 NextAfter(quick: false);
                 break;
+            case QueueState.Skipped when deferring:
+                // Put away later (something stood on it): not a failure, and the run goes straight on.
+                deferring = false;
+                MoveLater(job);
+                NextAfter(quick: true);
+                break;
             case QueueState.Skipped:
                 job.Outcome = JobOutcome.Failed;
                 job.EndedAt = DateTime.UtcNow;
@@ -824,6 +833,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
     {
         JobKind.Move => (MoveSteps(job, job.Key!.Value), HeldCleanup()),
         JobKind.PlaceFromStoreroom when side == Side.Interior && config.StoreroomAutomatic => (StoreroomSteps(job), MenuCleanup().Concat(HeldCleanup()).ToList()),
+        JobKind.PlaceFromBags when job.StoredAhead && side == Side.Interior && config.StoreroomAutomatic => (StoreroomSteps(job), MenuCleanup().Concat(HeldCleanup()).ToList()),
         JobKind.PlaceFromBags when config.BagsAutomatic => (BagSteps(job), MenuCleanup().Concat(HeldCleanup()).ToList()),
         JobKind.Dye => (DyeSteps(job), DyeCleanup()),
         JobKind.Store => (StoreSteps(job), StoreCleanup().Concat(HeldCleanup()).ToList()),
@@ -1130,6 +1140,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 TimeoutMessage = "The game didn't show the piece's preview (or didn't make it the piece being placed).",
                 Run = () =>
                 {
+                    if (lastToast != null && FurnitureReader.Preview() == null && queue.Elapsed > RefusalWait) return Refused(job);
                     var active = HousingEditor.ActiveItem;
                     var state = FurnitureReader.Preview() != null && active != 0 ? $"0x{active:X}" : null;
                     if (!previewSettle.Update(state, DateTime.UtcNow)) return StepOutcome.Waiting;
@@ -1636,11 +1647,28 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         for (var i = index + 1; i < jobs.Count; i++)
         {
             var j = jobs[i];
-            if (j.Outcome == JobOutcome.Pending && j.Kind == JobKind.PlaceFromStoreroom && j.Target.ItemId == job.Target.ItemId
+            if (j.Outcome == JobOutcome.Pending && (j.Kind == JobKind.PlaceFromStoreroom || j.Kind == JobKind.PlaceFromBags && j.StoredAhead) && j.Target.ItemId == job.Target.ItemId
                 && j.Target.Floor == job.Target.Floor && j.Target.Late == job.Target.Late && DyeWanted(j) == stain)
                 return j;
         }
         return null;
+    }
+
+    /// <summary>How long a storeroom pick that shows nothing waits for the game's refusal before going on.</summary>
+    private static readonly TimeSpan RefusalWait = TimeSpan.FromMilliseconds(400);
+
+    /// <summary>
+    /// The game refused a storeroom piece as soon as it was picked: skipped at once, its menu closed by the
+    /// clean-up. The usual reasons: the home already has as many of that kind as it allows, or there's no
+    /// room for it where you stand (the game puts a storeroom piece in front of you).
+    /// </summary>
+    private StepOutcome Refused(RunJob job)
+    {
+        var said = lastToast;
+        if (GameUi.IsOpen(UiTable.ContextMenu)) GameUi.Fire(UiTable.MenuCancel);
+        return StepOutcome.Skip(
+            $"The game refused it as soon as it was picked (\"{said}\"). The home may already have as many of this kind as it allows, "
+            + "or there's no room for it where you stand. Place it by hand to see the game's reason.", ProblemKind.DidNotLand);
     }
 
     /// <summary>The dye of the copy the plan chose (the design's, or one it will dye), the dye a storeroom row is checked for.</summary>
@@ -1720,7 +1748,12 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 Label = $"Pick row {row}: {UiTable.ListSelect.Describe(blanks)}",
                 Key = "pick row",
                 IsAction = true,
-                Run = () => GameUi.Fire(UiTable.ListSelect, blanks) ? StepOutcome.Done : StepOutcome.Halt("The furnishing list closed."),
+                Run = () =>
+                {
+                    // A refusal is the game's answer to this pick (0.8.6's Showcase: "Unable to place item." at once).
+                    lastToast = null;
+                    return GameUi.Fire(UiTable.ListSelect, blanks) ? StepOutcome.Done : StepOutcome.Halt("The furnishing list closed.");
+                },
             },
             new Step
             {
@@ -1742,6 +1775,13 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     var (container, slot) = picked;
                     var occupied = Occupied();
                     var held = occupied.FirstOrDefault(o => o.Container == container && o.Slot == slot);
+                    // The game refuses some pieces the moment they're picked ("Unable to place item."), before it
+                    // selects them, so the row reads empty: 0.8.6 took that for a changed list, made the list
+                    // again and picked the row again, then waited 6 s for a preview. Its answer is waited for briefly.
+                    if (held.ItemId == 0 && lastToast == null && queue.Elapsed < RefusalWait) return StepOutcome.Waiting;
+                    // Only this piece's refusal skips it (another piece's row refused while looking is passed over).
+                    if (lastToast != null && FurnitureReader.Preview() == null && (held.ItemId == job.Target.ItemId || held.ItemId == 0 && expected))
+                        return Refused(job);
                     var seen = new StoreroomRow(container, slot, held.ItemId, held.Stain);
                     if (held.ItemId != 0) rows.Learn(row, seen, occupied.Count(o => o.ItemId == held.ItemId));
                     rowsDirty = true;
@@ -1884,22 +1924,10 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                         var state = isStored ? $"{stored}|{inBags}" : null;
                         if (!settle.Update(state, DateTime.UtcNow)) return StepOutcome.Waiting;
                         log.Info($"  Stored: {stored} in the storeroom (was {storedBefore}), {inBags} in your bags (was {inBagsBefore}). Placing it from the storeroom.");
-                        // Its row goes where the list's order puts it, the rows after it moving down (rather than every row being learnt again).
-                        var occupiedNow = Occupied();
-                        if (rowsReady && rows.Count == occupiedNow.Count - 1)
-                        {
-                            var at = StoreroomOrder.FirstRow(occupiedNow.Select(o => o.ItemId).Where(i => i != job.Target.ItemId), data.SortKey, job.Target.ItemId);
-                            rows.Inserted(at);
-                            rowsDirty = true;
-                            log.Info($"  Its row should be {at}, by the list's order: the rows after it move down one.");
-                        }
-                        // The list has one more row now: read again before looking for it.
-                        namesStale = true;
-                        listSettled = false;
-                        listWatch.Reset();
-                        listExpect = null;
-                        listMissesStored = true;
-                        queue.InsertNext(StoreroomSteps(job));
+                        NoteStored(job.Target.ItemId);
+                        // The next bag pieces are stored now too, so the list is made again once for them all
+                        // (0.8.6 made it again for each: about 1.5 s a piece).
+                        queue.InsertNext(new[] { StoreAhead(job, 0) }.Concat(StoreroomSteps(job)));
                         return StepOutcome.Done;
                     }
                     log.Warn($"  It wasn't stored ({(refused ? $"the game said \"{lastToast}\"" : "nothing changed in 3.5 s")}; {stored} in the storeroom, {inBags} in your bags): placing it from the bag instead.");
@@ -1907,6 +1935,164 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     if (refused) refusedAtRoom = InventoryReader.StoreroomRoom(side) ?? 0;
                     if (GameUi.IsOpen(UiTable.ContextMenu)) GameUi.Fire(UiTable.MenuCancel);
                     queue.InsertNext(new[] { Step.Wait("Its menu closes", () => !GameUi.IsOpen(UiTable.ContextMenu), WindowWait, StepStatus.Done) }.Concat(HeldAttempt(job)));
+                    return StepOutcome.Done;
+                },
+            },
+        };
+    }
+
+    /// <summary>
+    /// A piece has just gone into the storeroom: its row goes where the list's order puts it, the rows after
+    /// it moving down (rather than every row being learnt again), and the list is read again (and made
+    /// again, as it shows a stored piece only then) before it's looked in.
+    /// </summary>
+    private void NoteStored(uint itemId)
+    {
+        var occupiedNow = Occupied();
+        if (rowsReady && rows.Count == occupiedNow.Count - 1)
+        {
+            var at = StoreroomOrder.FirstRow(occupiedNow.Select(o => o.ItemId).Where(i => i != itemId), data.SortKey, itemId);
+            rows.Inserted(at);
+            rowsDirty = true;
+            log.Info($"  Its row should be {at}, by the list's order: the rows after it move down one.");
+        }
+        namesStale = true;
+        listSettled = false;
+        listWatch.Reset();
+        listExpect = null;
+        listMissesStored = true;
+    }
+
+    /// <summary>At most this many bag pieces are stored ahead of their turn at once.</summary>
+    private const int StoreAheadMost = 10;
+
+    /// <summary>Bag pieces tried for storing ahead this run (each once).</summary>
+    private readonly HashSet<RunJob> storeAheadTried = new();
+
+    /// <summary>
+    /// The next bag piece still to place on the same floor and in the same pass, still in your bags and
+    /// not tried before, or null.
+    /// </summary>
+    private RunJob? NextToStoreAhead(RunJob current)
+    {
+        for (var i = index + 1; i < jobs.Count; i++)
+        {
+            var j = jobs[i];
+            if (j.Outcome == JobOutcome.Pending && j.Kind == JobKind.PlaceFromBags && !j.StoredAhead && !storeAheadTried.Contains(j)
+                && j.Target.Floor == current.Target.Floor && j.Target.Late == current.Target.Late)
+                return j;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// After a bag piece is stored: stores the next bag pieces too (each with its menu's "Store", while the
+    /// storeroom has room to spare), so the list is made again once for them all and each is then placed
+    /// from the storeroom in its turn. Nothing here skips or stops anything: a piece that isn't stored is
+    /// placed from your bags in its turn, as before.
+    /// </summary>
+    private Step StoreAhead(RunJob current, int done) => new()
+    {
+        Label = "Store the next pieces from your bags too, if any (the list is then made again once for them all)",
+        Timeout = WindowWait,
+        OnTimeout = StepStatus.Done,
+        Run = () =>
+        {
+            if (done >= StoreAheadMost || Rehearsal || !config.StoreroomAutomatic) return StepOutcome.Done;
+            // The last one's menu closes first.
+            if (GameUi.IsOpen(UiTable.ContextMenu)) return StepOutcome.Waiting;
+            if (NextToStoreAhead(current) is not { } next) return StepOutcome.Done;
+            // Room to spare: one is kept free.
+            if (InventoryReader.StoreroomRoom(side) is not > 1 || StoreroomRefuses()) return StepOutcome.Done;
+            queue.InsertNext(StoreOneAhead(current, next, done));
+            return StepOutcome.Done;
+        },
+    };
+
+    private List<Step> StoreOneAhead(RunJob current, RunJob next, int done)
+    {
+        var name = Name(next);
+        var stock = next.Entry?.Stock;
+        var storedBefore = -1;
+        var inBagsBefore = -1;
+        var settle = new Settle(3, Speed.Wait(100));
+        var storeWords = UiTable.StoreLabels(Services.ClientState.ClientLanguage);
+        // Not to be stored ahead after all (not in the bags, no menu, no "Store"): the rest of the steps pass.
+        var off = false;
+        return new List<Step>
+        {
+            Step.Act($"Open {name}'s menu, to store it ahead ({(stock != null ? InventoryReader.Describe(stock) : "bags")})", () =>
+            {
+                storeAheadTried.Add(next);
+                var slot = FindInBags(next.Target.ItemId, stock);
+                if (slot == null)
+                {
+                    off = true;
+                    queue.InsertNext(new[] { StoreAhead(current, done) });
+                    return StepOutcome.Done;
+                }
+                storedBefore = StoredCount(next.Target.ItemId);
+                inBagsBefore = BagCount(next.Target.ItemId);
+                lastToast = null;
+                if (!HousingActions.OpenBagItemMenu(slot.Container, slot.Slot)) off = true;
+                return StepOutcome.Done;
+            }),
+            new Step
+            {
+                Label = "Its menu opens",
+                Timeout = WindowWait,
+                OnTimeout = StepStatus.Done,
+                Run = () =>
+                {
+                    if (off || GameUi.IsOpen(UiTable.ContextMenu)) return StepOutcome.Done;
+                    if (queue.Elapsed > ClickWait) off = true;
+                    return off ? StepOutcome.Done : StepOutcome.Waiting;
+                },
+            },
+            new Step
+            {
+                Label = $"Choose \"{storeWords.FirstOrDefault()}\" in its menu",
+                IsAction = true,
+                Run = () =>
+                {
+                    if (off) return StepOutcome.Done;
+                    var menu = GameUi.MenuEntries();
+                    var entry = menu == null ? -1 : Menus.FindEntry(menu, storeWords);
+                    if (entry < 0)
+                    {
+                        off = true;
+                        if (GameUi.IsOpen(UiTable.ContextMenu)) GameUi.Fire(UiTable.MenuCancel);
+                        return StepOutcome.Done;
+                    }
+                    if (!GameUi.Fire(UiTable.MenuChoose, UiCallValues.Of(("entry", entry)))) off = true;
+                    return StepOutcome.Done;
+                },
+            },
+            new Step
+            {
+                Label = $"{name} goes into the storeroom",
+                Timeout = TimeSpan.FromSeconds(6),
+                OnTimeout = StepStatus.Done,
+                Run = () =>
+                {
+                    if (off) return StepOutcome.Done;
+                    var timedOut = queue.Elapsed > TimeSpan.FromSeconds(3.5);
+                    if (!timedOut && AnswerYes()) return StepOutcome.Waiting;
+                    var stored = StoredCount(next.Target.ItemId);
+                    var inBags = BagCount(next.Target.ItemId);
+                    if (BagRoute.Stored(storedBefore, stored, inBagsBefore, inBags))
+                    {
+                        if (!settle.Update($"{stored}|{inBags}", DateTime.UtcNow)) return StepOutcome.Waiting;
+                        next.StoredAhead = true;
+                        log.Info($"  Stored ahead: {name} ({stored} in the storeroom, {inBags} in your bags); it's placed from the storeroom in its turn.");
+                        NoteStored(next.Target.ItemId);
+                        queue.InsertNext(new[] { StoreAhead(current, done + 1) });
+                        return StepOutcome.Done;
+                    }
+                    if (lastToast == null && !timedOut) return StepOutcome.Waiting;
+                    log.Info($"  {name} wasn't stored ahead ({(lastToast != null ? $"the game said \"{lastToast}\"" : "nothing changed in 3.5 s")}); it's placed from your bags in its turn.");
+                    if (lastToast != null) refusedAtRoom = InventoryReader.StoreroomRoom(side) ?? 0;
+                    if (GameUi.IsOpen(UiTable.ContextMenu)) GameUi.Fire(UiTable.MenuCancel);
                     return StepOutcome.Done;
                 },
             },
@@ -2126,9 +2312,27 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             }),
             new Step
             {
-                Label = $"The dye window ({UiTable.DyeWindow}) opens",
-                Delay = Speed.Wait(200),
+                // RemakePlace/plugin's way: pick the piece, then the housing agent's "interact" with the picked
+                // piece opens the dye window on it. 0.8.6 waited 1 s for a window the pick never opens in
+                // Furnishing Color, then picked list rows one by one (about 20 s a piece).
+                Label = "Open the dye window on it (the game's \"interact\" with the picked piece)",
+                Delay = Speed.Wait(100),
                 Timeout = TimeSpan.FromSeconds(1),
+                OnTimeout = StepStatus.Done, // not picked: the list's way, below
+                Run = () =>
+                {
+                    if (GameUi.IsOpen(UiTable.DyeWindow)) return StepOutcome.Done;
+                    // Only on this piece: the window opens on whatever's picked, and dyeing another piece
+                    // would use up the dye on it.
+                    if (HousingEditor.ActiveItem != instance) return StepOutcome.Waiting;
+                    if (!actions.CanDye || !actions.OpenDyeWindow()) log.Info($"  The game's \"interact\" didn't open the dye window ({actions.DyeError ?? "it didn't say which piece is picked"}).");
+                    return StepOutcome.Done;
+                },
+            },
+            new Step
+            {
+                Label = $"The dye window ({UiTable.DyeWindow}) opens",
+                Timeout = TimeSpan.FromSeconds(1.5),
                 OnTimeout = StepStatus.Done,
                 Run = () => GameUi.IsOpen(UiTable.DyeWindow) ? StepOutcome.Done : StepOutcome.Waiting,
             },
@@ -2255,7 +2459,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         };
     }
 
-    private static readonly TimeSpan DyeSettle = TimeSpan.FromMilliseconds(1000);
+    private static readonly TimeSpan DyeSettle = TimeSpan.FromMilliseconds(700);
 
     /// <summary>
     /// Before Dye is pressed: the window must be on this piece and, once its preview shows, show the dye
@@ -2346,17 +2550,24 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             return new List<Step> { Step.Act("Give up on the list", () => StepOutcome.Skip("None of Furnishing Color's rows for it picked this piece.", ProblemKind.NotFound)) };
         var r = candidates[i];
         var values = UiCallValues.Of(("index", r));
+        var before = new nint[] { 0 };
         return new List<Step>
         {
-            Step.Act($"Pick row {r} in Furnishing Color's list: {UiTable.DyeListSelect.Describe(values)}", () => Fire(UiTable.DyeListSelect, values)),
+            Step.Act($"Pick row {r} in Furnishing Color's list: {UiTable.DyeListSelect.Describe(values)}", () =>
+            {
+                before[0] = HousingEditor.ActiveItem;
+                return Fire(UiTable.DyeListSelect, values);
+            }),
             new Step
             {
                 Label = "Is it this piece?",
-                Delay = Speed.Wait(250),
+                Delay = Speed.Wait(100),
                 Timeout = TimeSpan.FromSeconds(1.5),
                 Run = () =>
                 {
-                    if (HousingEditor.ActiveItem != instance) return StepOutcome.Waiting;
+                    var active = HousingEditor.ActiveItem;
+                    // Another piece picked: not this row (0.8.6 waited the full 1.5 s on each wrong row).
+                    if (active != instance) return active != 0 && active != before[0] ? StepOutcome.Done : StepOutcome.Waiting;
                     queue.InsertNext(new[]
                     {
                         Step.Act($"Open its menu: {UiTable.DyeListMenu.Describe(values)}", () => Fire(UiTable.DyeListMenu, values)),
@@ -2763,7 +2974,9 @@ public sealed unsafe partial class PlacementRunner : IDisposable
     {
         var live = ReadLive();
         if (live == null) return;
-        foreach (var p in toPutAway)
+        // What sits on other pieces or hangs on walls first: the game won't put away a piece with
+        // something on it ("Another furnishing has been placed on that item").
+        foreach (var p in toPutAway.OrderByDescending(p => data.GoesOnSomethingElse(p.ItemId)))
         {
             // The same piece, still where it was (a slot that came to hold another copy isn't put away).
             if (!live.TryGetValue(p.Key, out var now) || now.ItemId != p.ItemId || Vector3.Distance(now.Position, p.Position) > 0.25f) continue;
@@ -2825,11 +3038,21 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 Run = () =>
                 {
                     var live = ReadLive();
-                    // The same item at the same spot (a slot may be renumbered after a piece is stored:
-                    // another copy, one the design keeps, isn't put away in its place).
-                    if (live == null || !live.TryGetValue(key, out var piece) || piece.ItemId != job.Target.ItemId
+                    if (live == null) return StepOutcome.Skip("What's placed couldn't be read.", ProblemKind.Other);
+                    // The same item at the same spot. A slot may be numbered again after a piece is stored,
+                    // so it's found again by its item and spot (another copy elsewhere, one the design keeps,
+                    // isn't put away in its place).
+                    if (!live.TryGetValue(key, out var piece) || piece.ItemId != job.Target.ItemId
                         || Vector3.Distance(piece.Position, job.Target.Position) > 0.25f)
-                        return StepOutcome.Skip("It's no longer where it was (moved or put away already).", ProblemKind.NotFound);
+                    {
+                        var again = live.Values.Where(l => l.ItemId == job.Target.ItemId && Vector3.Distance(l.Position, job.Target.Position) <= 0.25f)
+                            .OrderBy(l => Vector3.Distance(l.Position, job.Target.Position)).Select(l => (LivePiece?)l).FirstOrDefault();
+                        if (again is not { } found)
+                            return StepOutcome.Skip("It's no longer where it was (moved or put away already).", ProblemKind.NotFound);
+                        piece = found;
+                        key = found.Key;
+                        job.Key = key;
+                    }
                     if (piece.Instance == 0) return StepOutcome.Skip("The game hasn't loaded it (walk closer to it).", ProblemKind.NotLoaded);
                     if (!toBags && StoreroomRefuses()) return StepOutcome.Skip(StoreroomFullWords, ProblemKind.Other);
                     if (toBags && ErrandGame.FreeSlots() <= 0) return StepOutcome.Skip("The storeroom is full and so are your bags: make room in one and Try again.", ProblemKind.Other);
@@ -2863,6 +3086,17 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                         if (!said && queue.Elapsed <= TimeSpan.FromSeconds(3.5)) return StepOutcome.Waiting;
                         var room = InventoryReader.StoreroomRoom(side);
                         log.Warn($"  {name} wasn't put away ({(said ? $"the game said \"{lastToast}\"" : "nothing changed in 3.5 s")}; room for {room?.ToString() ?? "?"} in the storeroom).");
+                        // The game refused this piece while the storeroom has room: something stands on it
+                        // ("Unable to remove. Another furnishing has been placed on that item."). Not a full
+                        // storeroom (0.8.6 took it for one and sent 100 pieces to your bags): it's put away
+                        // after the others, which take what stands on it off first.
+                        if (said && room is > 0 && DeferStore(job))
+                        {
+                            log.Info($"  The storeroom has room, so the game refused {name} itself (something on it?): it's put away after the others.");
+                            return StepOutcome.Skip("Put away later.", ProblemKind.Other);
+                        }
+                        if (said && room is > 0)
+                            return StepOutcome.Skip($"It wasn't put away (the game said \"{lastToast}\"). If something stands on it, take that off first; then Try again.", ProblemKind.Other);
                         if (said || room is <= 0)
                         {
                             if (!toBags) refusedAtRoom = room;
@@ -2884,6 +3118,42 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 },
             },
         };
+    }
+
+    /// <summary>The job being ended is moved after the others (<see cref="DeferStore"/>), not failed.</summary>
+    private bool deferring;
+
+    /// <summary>How many times each piece to put away was put off for what stands on it.</summary>
+    private readonly Dictionary<RunJob, int> storeDeferrals = new();
+
+    /// <summary>
+    /// A piece to put away that the game refused for what stands on it: put off until after the other
+    /// pieces put away in this stretch of the run (at most 3 times), when there are any. True when it was.
+    /// </summary>
+    private bool DeferStore(RunJob job)
+    {
+        if (index + 1 >= jobs.Count || jobs[index + 1].Kind != JobKind.Store) return false;
+        storeDeferrals.TryGetValue(job, out var n);
+        if (n >= 3) return false;
+        storeDeferrals[job] = n + 1;
+        deferring = true;
+        return true;
+    }
+
+    /// <summary>Moves the current job after the other pieces to put away that follow it, ready to run again.</summary>
+    private void MoveLater(RunJob job)
+    {
+        var at = index + 1;
+        while (at < jobs.Count && jobs[at].Kind == JobKind.Store) at++;
+        jobs.RemoveAt(index);
+        jobs.Insert(at - 1, job);
+        job.Outcome = JobOutcome.Pending;
+        job.StartedAt = null;
+        job.EndedAt = null;
+        job.Note = null;
+        job.Problem = ProblemKind.None;
+        index--;
+        jobsVersion++;
     }
 
     private const string StoreroomFullWords = "The storeroom is full, so it wasn't put away: make room in the storeroom and Try again, or put it in your bags by hand (the editor's inventory button).";
@@ -2984,6 +3254,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         JobKind.Store => $"put {Name(job)} away in the storeroom",
         JobKind.Move => $"move {Name(job)} to its spot",
         JobKind.PlaceFromStoreroom => $"place {Name(job)} from the storeroom at its spot",
+        JobKind.PlaceFromBags when job.StoredAhead => $"place {Name(job)} from the storeroom (stored ahead from your bags) at its spot",
         JobKind.PlaceFromBags => $"place {Name(job)} from {(job.Entry?.Stock is { } s ? InventoryReader.Describe(s) : "your bags")} at its spot",
         _ => $"dye {Name(job)} {data.DyeName(job.Target.Stain)}",
     };

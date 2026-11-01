@@ -9,6 +9,22 @@ press **Start placing**: the plugin moves what's placed, places what's in your b
 its exact spot, then dyes everything to match.
 
 > **Status: 0.8.6. Placing works in the game; the newer features haven't all been tried in it yet.**
+> Coming in 0.9.0, from a full placing run and a clear out: **dyes in seconds, not 20.** Furnishing
+> Color's pick doesn't open the dye window, so 0.8.6 waited a second and then picked the list's rows
+> one by one (1.7 s each) until one was the piece. Now, as RemakePlace/plugin does, the piece is
+> picked and the game's "interact" with it opens the window at once; the list is only the fallback, and
+> it moves to the next row as soon as a row picks another piece. **Bag pieces stored together**: each
+> bag piece was stored and then the storeroom's list made again for it alone (about 1.5 s a piece); now
+> the next bag pieces of the same floor and pass (up to 10, while the storeroom has room to spare) are
+> stored with it, the list is made again once, and each is then placed from the storeroom in its turn.
+> **A piece the game refuses when picked** ("Unable to place item.", a Showcase) is skipped at once
+> with the likely reason (a limit on that kind of furnishing, or no room where you stand), rather than
+> after 6 s with "didn't show the preview", or a rerun searching the list for it. **Clearing out
+> top-down**: tabletop and wall-mounted pieces are put away first (as they're placed last), and a piece
+> the game won't put away while the storeroom has room ("Another furnishing has been placed on that
+> item") is put away after the others; 0.8.6 took that refusal for a full storeroom and sent a hundred
+> pieces to your bags until they were full. A piece to put away whose furniture slot changed is found
+> again by its item and spot.
 > 0.8.6: **a click done by hand while it waits for Continue.** Taking from a retainer (and exchanging
 > currencies) has a click not yet seen working, so the errands hold before it for Continue. Its callout
 > showed the click's own words ("Choose “Retrieve…”"), which read as something for you to do; done by

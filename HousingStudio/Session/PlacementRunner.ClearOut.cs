@@ -168,6 +168,11 @@ public sealed unsafe partial class PlacementRunner
         // A storeroom without room for them all: what fits goes first, the rest once the design is
         // placed (each piece placed from the storeroom makes room for one).
         var room = InventoryReader.StoreroomRoom(garden ? Side.Garden : Side.Interior);
+        // What sits on other pieces or hangs on walls goes first, the pieces under them after: the game
+        // won't put away a piece with something on it ("Another furnishing has been placed on that item";
+        // a clear out to an empty backup put a round table away before what stood on it). OrderBy keeps
+        // the order otherwise.
+        pieces = pieces.OrderByDescending(p => data.GoesOnSomethingElse(p.ItemId)).ToList();
         var (first, later) = ClearOutSplit.Split(pieces, room);
         if (later.Count > 0)
             log.Warn($"The storeroom has room for {Words(first.Count)} of the {Words(pieces.Count)} to clear out: {(first.Count > 0 ? $"those go first, and " : string.Empty)}"
@@ -238,7 +243,7 @@ public sealed unsafe partial class PlacementRunner
         var used = new HashSet<int>();
         var garden = side == Side.Garden;
         var added = 0;
-        foreach (var p in waiting)
+        foreach (var p in waiting.OrderByDescending(p => data.GoesOnSomethingElse(p.ItemId)))
         {
             var key = live.TryGetValue(p.Key, out var same) && same.ItemId == p.ItemId && Vector3.Distance(same.Position, p.Position) <= 0.25f && !used.Contains(p.Key)
                 ? p.Key

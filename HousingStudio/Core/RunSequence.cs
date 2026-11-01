@@ -54,6 +54,12 @@ public sealed class RunJob
     public ProblemKind Problem { get; set; }
 
     /// <summary>When work on it started and ended (for the time left).</summary>
+    /// <summary>
+    /// A bag piece stored ahead of its turn, with others, so the storeroom's list was made again once for
+    /// them all: in its turn it's placed from the storeroom.
+    /// </summary>
+    public bool StoredAhead { get; set; }
+
     public DateTime? StartedAt { get; set; }
     public DateTime? EndedAt { get; set; }
 
