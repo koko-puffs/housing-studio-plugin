@@ -21,6 +21,8 @@ namespace HousingStudio.UI;
 /// </summary>
 public sealed partial class MainWindow
 {
+    private static readonly RehearsalAct[] RehearsalActs = Enum.GetValues<RehearsalAct>();
+
     private const string PreviewMenu = "##preview-menu";
 
     /// <summary>The errands' screen was opened from Rehearse the run: its button rehearses them.</summary>
@@ -256,7 +258,7 @@ public sealed partial class MainWindow
     /// <summary>The report counted nothing it would have done (it can still have issues).</summary>
     private static bool NothingCounted(RehearsalReport report)
     {
-        foreach (var act in Enum.GetValues<RehearsalAct>())
+        foreach (var act in RehearsalActs)
             if (report.Count(act) > 0) return false;
         return true;
     }

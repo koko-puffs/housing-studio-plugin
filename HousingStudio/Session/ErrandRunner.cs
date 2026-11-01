@@ -57,6 +57,14 @@ public sealed partial class ErrandRunner : IDisposable
 
     /// <summary>Items a world's board had none of (or none to buy) this run: not planned there again.</summary>
     private readonly HashSet<(uint Item, string World)> emptyBoards = new();
+
+    /// <summary>
+    /// Why a thing couldn't be bought on a board, the first time it couldn't ("Twintania: sold to someone
+    /// else first"): the summary's Not got says it rather than "not listed on the worlds the errands buy on".
+    /// </summary>
+    private readonly Dictionary<uint, string> boardWhy = new();
+
+    public IReadOnlyDictionary<uint, string> BoardWhy => boardWhy;
     private readonly StepQueue queue = new(() => DateTime.UtcNow);
 
     /// <summary>
@@ -156,6 +164,9 @@ public sealed partial class ErrandRunner : IDisposable
     public int Trip { get; private set; }
 
     public int TripsAtStart => tripsAtStart;
+
+    /// <summary>How many trips there are, as planned when this one began ("trip 2 of 3").</summary>
+    public int TripsPlanned { get; private set; }
 
     /// <summary>How many things the plan agreed to at the start had.</summary>
     public int CountAtStart { get; private set; }
@@ -350,6 +361,7 @@ public sealed partial class ErrandRunner : IDisposable
         Rehearsal = rehearse;
         rehearsalFailures = 0;
         emptyBoards.Clear();
+        boardWhy.Clear();
         // Nothing of a run before (a stop mid-way could leave its last plan's ending or segments).
         finishPending = false;
         pendingTrip = null;
@@ -373,6 +385,7 @@ public sealed partial class ErrandRunner : IDisposable
         trip = null;
         cycles = 0;
         Trip = 0;
+        TripsPlanned = 0;
         VendorSpent = MarketSpent = 0;
         got.Clear();
         travelling = false;
@@ -631,6 +644,9 @@ public sealed partial class ErrandRunner : IDisposable
     {
         trip = next;
         Trip++;
+        // This trip and those the plan has after it (a plan made again after a trip can need more or fewer;
+        // a rehearsal doesn't plan again).
+        TripsPlanned = Rehearsal ? Math.Max(Trip, tripsAtStart) : Math.Max(Trip, Trip - 1 + Plan.Trips.Count);
         cycles++;
         gotThisTrip = 0;
         emptiedThisTrip = 0;
@@ -2004,6 +2020,7 @@ public sealed partial class ErrandRunner : IDisposable
                         return GameUi.Fire(ErrandTable.ListingBuy, UiCallValues.Of(("index", l.Row))) ? StepOutcome.Done : StepOutcome.Halt($"{name}'s listings closed.");
                     }
                     log.Warn($"  No listing of {name} to buy here ({firstWhy ?? "none listed"}): {wanted - bought} left for now; this world isn't planned for it again this run.");
+                    boardWhy.TryAdd(item.ItemId, $"{ErrandGame.CurrentWorld()}: {firstWhy ?? "none listed"}");
                     if (emptyBoards.Add((item.ItemId, ErrandGame.CurrentWorld()))) emptiedThisTrip++;
                     return Finished();
                 },

@@ -164,7 +164,8 @@ public sealed partial class MainWindow
             var dim = false;
             if (unplanned)
             {
-                figure = config.DyeAfterPlacing ? "next" : "off";
+                // Try again and restores dye whatever the setting says.
+                figure = config.DyeAfterPlacing || runner.DyesStillExpected > 0 ? "next" : "off";
                 dim = true;
             }
             else if (total == 0)
@@ -225,9 +226,14 @@ public sealed partial class MainWindow
         if (!preview)
         {
             var skipH = Kit.ButtonHeight(BtnSize.Sm);
-            if (Kit.Button("##skip-card", new Vector2(at.X + w - skipW, at.Y + (h - skipH) / 2), skipCard, Btn.Quiet, BtnSize.Sm, null, 0, false,
-                    "Leaves this piece for now (it's listed at the end) and goes on to the next."))
-                OnFramework(runner.SkipCurrent);
+            var canSkip = runner.CanSkipNow;
+            if (Kit.Button("##skip-card", new Vector2(at.X + w - skipW, at.Y + (h - skipH) / 2), skipCard, Btn.Quiet, BtnSize.Sm, null, 0, !canSkip,
+                    canSkip ? "Leaves this piece for now (it's listed at the end) and goes on to the next."
+                        : "Skip comes up when this piece waits for a few seconds (not in the middle of its clicks)."))
+            {
+                var pressedFor = job;
+                OnFramework(() => runner.SkipCurrent(pressedFor));
+            }
         }
         Kit.Reserve(at, w, h);
         Kit.EndPanel();
@@ -285,7 +291,10 @@ public sealed partial class MainWindow
             OnFramework(runner.Continue);
         if (runner.Current != null && Kit.Button("##skip", new Vector2(row.X + w - cw - (step ? S(8) : 0) - sw, row.Y), skip, Btn.Quiet, BtnSize.Md, null, 0, false,
                 "Leaves this piece for now (it's listed at the end) and goes on to the next."))
-            OnFramework(runner.SkipCurrent);
+        {
+            var pressedFor = runner.Current;
+            OnFramework(() => runner.SkipCurrent(pressedFor));
+        }
         Kit.Reserve(row, w, S(40));
         Kit.EndPanel();
     }
@@ -309,7 +318,7 @@ public sealed partial class MainWindow
     private void DrawLogPanel(string id, ref bool open, bool counted, string? bottomId, DateTime? since)
     {
         var all = log.Lines;
-        var first = since is { } start ? LogFirstAt(all, start - LogStartGrace) : 0;
+        var first = since is { } start && start > DateTime.MinValue + LogStartGrace ? LogFirstAt(all, start - LogStartGrace) : 0;
         var earlier = first > 0 && logEarlierFor == since;
         var from = earlier ? 0 : first;
         var title = "What it's doing";

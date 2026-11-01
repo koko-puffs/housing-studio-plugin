@@ -130,6 +130,9 @@ public sealed partial class MainWindow
     /// </summary>
     internal void Tick()
     {
+        // A run's start and end are noticed with the window closed too (its log starts at the run's
+        // start, and Done waits for when it's opened).
+        vm.Observe();
         try
         {
             FixturesAfterPlacing();

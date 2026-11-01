@@ -222,21 +222,30 @@ public static class ErrandWords
     /// </summary>
     public static long Expected(ShoppingPlan shop, ErrandPlan plan)
     {
-        var market = new HashSet<Need>(plan.Stops(StopKind.Market).SelectMany(s => s.Items).Select(i => i.Need));
-        return plan.VendorGil + shop.Lines.Where(l => l.Source == SourceKind.Market && market.Contains(l.Need)).Sum(l => l.Gil);
+        // How many of each the trips buy on the board: a line the ceiling cut short counts only that part.
+        var bought = new Dictionary<Need, int>();
+        foreach (var item in plan.Stops(StopKind.Market).SelectMany(s => s.Items))
+            bought[item.Need] = bought.GetValueOrDefault(item.Need) + item.Count;
+        long market = 0;
+        foreach (var line in shop.Lines)
+            if (line.Source == SourceKind.Market && line.Count > 0 && bought.TryGetValue(line.Need, out var n))
+                market += line.Gil * Math.Min(n, line.Count) / line.Count;
+        return plan.VendorGil + market;
     }
 
     /// <summary>
-    /// The line under Set out (0.9.0): the expected gil and why the button's "up to" is more ("Expected
-    /// about 2,098,460. “Up to” leaves room for board prices that moved, at most a quarter more per item.
-    /// You can stop at any time."); without the board, or with nothing expected below the cap, as before.
+    /// The line under Set out (0.9.0): the shopping list's estimate when it's below the button's "up to"
+    /// ("Expected about 2,098,460 by the shopping list; it never spends more than “up to”. You can stop at
+    /// any time."). "Up to" is the listings the trips picked (dearer ones on your world alone, or with
+    /// older listings left out); a listing that moved is bought only within it. Without the board, or
+    /// with the estimate at the cap, as before.
     /// </summary>
     /// <param name="market">The trips buy on the market board.</param>
     public static string SetOutHint(long expected, long cap, bool market)
     {
         const string stop = "You can stop at any time.";
         if (!market || expected <= 0 || expected >= cap) return $"Nothing is bought above the price shown. {stop}";
-        return $"Expected about {Number(expected)}. “Up to” leaves room for board prices that moved, at most a quarter more per item. {stop}";
+        return $"Expected about {Number(expected)} by the shopping list; it never spends more than “up to”. {stop}";
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -428,7 +437,8 @@ public static class ErrandWords
     }
 
     /// <summary>"4,000" "of up to 61,400": the Spent card's figure and its words (0.9.0: set against the cap agreed to).</summary>
-    public static (string Value, string Of) SpentOf(long spent, long agreed) => (Number(spent), $"of up to {Number(agreed)}");
+    public static (string Value, string Of) SpentOf(long spent, long agreed) =>
+        agreed <= 0 && spent <= 0 ? ("0", "no gil to spend") : (Number(spent), $"of up to {Number(agreed)}");
 
     /// <summary>"6" "of 12": a Got or Spent card's figure and its words.</summary>
     public static (string Value, string Of) Of(long value, long of, bool gil) =>
@@ -453,7 +463,8 @@ public static class ErrandWords
     /// What wasn't got, a row per thing with why (the summary's Not got, 0.9.0): "Wine Glass ×2", "Past your
     /// market ceiling.", and where it would have come from ("board", "shop", "craft", "bags"); by reason, then name.
     /// </summary>
-    public static List<NotGotRow> NotGot(IReadOnlyList<ErrandLeft> left, Func<uint, string> name) =>
+    /// <param name="boardWhy">Why a board didn't sell it, the first time, by item (the run's own words), for board rows.</param>
+    public static List<NotGotRow> NotGot(IReadOnlyList<ErrandLeft> left, Func<uint, string> name, IReadOnlyDictionary<uint, string>? boardWhy = null) =>
         left.Where(l => l.Count > 0)
             .GroupBy(l => (l.Need.ItemId, l.Reason))
             .Select(g =>
@@ -463,7 +474,9 @@ public static class ErrandWords
                 var currency = g.Select(l => l.Exchange?.CurrencyName).FirstOrDefault(c => !string.IsNullOrEmpty(c));
                 var why = g.Key.Reason == LeftReason.Currency && currency != null
                     ? $"Sold for {currency}, which the errands may not spend or you haven't enough of: allow it in Settings → Getting → Currencies."
-                    : Words.Capital(Reason(g.Key.Reason)) + ".";
+                    : g.Key.Reason is LeftReason.NotListedHere or LeftReason.OverCeiling && boardWhy != null && boardWhy.TryGetValue(g.Key.ItemId, out var said)
+                        ? Words.Capital(said) + "."
+                        : Words.Capital(Reason(g.Key.Reason)) + ".";
                 return new NotGotRow(g.Key.ItemId, n, g.Key.Reason, n == 1 ? thing : $"{thing} ×{n}", why, NotGotKind(g.Key.Reason));
             })
             .OrderBy(r => r.Reason)

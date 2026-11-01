@@ -42,7 +42,7 @@ public class ErrandScreenTests
     [Fact]
     public void TheHintLinksTheExpectedGilToTheCap()
     {
-        Assert.Equal("Expected about 2,098,460. “Up to” leaves room for board prices that moved, at most a quarter more per item. You can stop at any time.",
+        Assert.Equal("Expected about 2,098,460 by the shopping list; it never spends more than “up to”. You can stop at any time.",
             ErrandWords.SetOutHint(2_098_460, 2_179_172, market: true));
         // Only shops: their prices are fixed.
         Assert.Equal("Nothing is bought above the price shown. You can stop at any time.", ErrandWords.SetOutHint(3_000, 3_000, market: false));
@@ -67,6 +67,16 @@ public class ErrandScreenTests
             new(leftOut, SourceKind.Market, 1) { Gil = 900_000 },
         });
         Assert.Equal(1_500 + 5_000, ErrandWords.Expected(shop, plan));
+    }
+
+    [Fact]
+    public void ExpectedCountsOnlyThePartTheCeilingLetsTheTripsBuy()
+    {
+        var need = new Need(300, 1, NeedKind.Piece);
+        var trip = new ErrandTrip(1, new[] { new ErrandStop(StopKind.Market, "m:Lich", new[] { new ErrandItem(need, 6, 6, 1, 6_000) }) { World = "Lich" } });
+        var plan = new ErrandPlan(new List<ErrandTrip> { trip }, new List<ErrandLeft>(), 10, 100_000);
+        var shop = new ShoppingPlan(new List<ShoppingLine> { new(need, SourceKind.Market, 10) { Gil = 10_000 } });
+        Assert.Equal(6_000, ErrandWords.Expected(shop, plan));
     }
 
     [Fact]
@@ -144,6 +154,15 @@ public class ErrandScreenTests
         Assert.EndsWith(".", rows[1].Why);
         Assert.Equal("1 from shops it doesn't go to",
             ErrandWords.LeftRows(new[] { new ErrandLeft(new Need(9, 1, NeedKind.Piece), 1, LeftReason.NoVendorReachable) }, _ => "Lamp")[0].Title);
+    }
+
+    [Fact]
+    public void ABoardsOwnReasonIsSaidForItsRow()
+    {
+        var left = new[] { new ErrandLeft(new Need(3, 1, NeedKind.Piece), 1, LeftReason.NotListedHere) };
+        var why = new Dictionary<uint, string> { [3] = "Twintania: sold to someone else first" };
+        Assert.Equal("Twintania: sold to someone else first.", ErrandWords.NotGot(left, _ => "Lamp", why)[0].Why);
+        Assert.StartsWith("Not listed", ErrandWords.NotGot(left, _ => "Lamp")[0].Why);
     }
 
     [Fact]

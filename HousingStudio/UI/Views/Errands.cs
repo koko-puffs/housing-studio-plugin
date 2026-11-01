@@ -677,6 +677,7 @@ public sealed partial class MainWindow
         public ErrandTrip? ForTrip;
         public string Title = string.Empty;
         public string Eyebrow = string.Empty;
+        public string EyebrowRehearsal = string.Empty;
         public string Plain = string.Empty;
         public string Italic = string.Empty;
 
@@ -713,7 +714,8 @@ public sealed partial class MainWindow
         r.Step = step;
         r.ForTrip = tripNow;
         r.Title = shortTitle;
-        r.Eyebrow = $"{shortTitle} · trip {Math.Max(1, e.Trip)} of {Math.Max(e.Trip, e.TripsAtStart)}";
+        r.Eyebrow = $"{shortTitle} · trip {Math.Max(1, e.Trip)} of {Math.Max(Math.Max(1, e.Trip), e.TripsPlanned > 0 ? e.TripsPlanned : e.TripsAtStart)}";
+        r.EyebrowRehearsal = $"{shortTitle} · rehearsal · trip {Math.Max(1, e.Trip)}";
         var leg = seg < 0 ? ErrandLeg.Bell : e.Leg;
         (r.Plain, r.Italic) = seg < 0 ? ("Setting", "out") : ErrandWords.Where(leg, e.Going, e.Who, e.Replanning);
         // Done and now by where the runner is: the trip's stop it's at, else home or placing.
@@ -759,7 +761,8 @@ public sealed partial class MainWindow
         if (rehearsing) RehearsalPill(new Vector2(at.X + w - pw, at.Y), pill);
         else Kit.StatusPill(new Vector2(at.X + w - pw, at.Y), pill, tone, tone == Tone.Live);
         var eyebrowH = Txt.Natural(Face.Mono, 12);
-        Kit.Eyebrow(new Vector2(at.X, at.Y + (S(28) - eyebrowH) / 2), r.Eyebrow, null, w - pw - S(12));
+        // A rehearsal that's paused or waiting has no Rehearsal pill: the eyebrow says it then.
+        Kit.Eyebrow(new Vector2(at.X, at.Y + (S(28) - eyebrowH) / 2), e.Rehearsal && !rehearsing ? r.EyebrowRehearsal : r.Eyebrow, null, w - pw - S(12));
         var titleH = FitTitle(new Vector2(at.X, at.Y + S(28) + S(6)), r.Plain, r.Italic, w);
         Kit.Reserve(at, w, S(28) + S(6) + titleH);
         Frame.EndHeader();
@@ -972,7 +975,10 @@ public sealed partial class MainWindow
                 var sw = Kit.ButtonWidth(skip, BtnSize.Md, null, Btn.Quiet);
                 if (Kit.Button("##errand-skip", new Vector2(row.X + Kit.Width - sw, row.Y), skip, Btn.Quiet, BtnSize.Md, null, 0, false,
                         "Leaves this piece for now (it's listed at the end) and goes on to the next."))
-                    OnFramework(runner.SkipCurrent);
+                {
+                    var pressedFor = runner.Current;
+                    OnFramework(() => runner.SkipCurrent(pressedFor));
+                }
                 Kit.Reserve(row, Kit.Width, S(40));
             }
         }
@@ -996,7 +1002,7 @@ public sealed partial class MainWindow
         /// <summary>A row per thing not got, with why (0.9.0).</summary>
         public List<NotGotRow> NotGot = new();
         public int NotGotCount;
-        public string NotGotLabel = string.Empty;
+        public string? NotGotLabel;
 
         /// <summary>"Got · 100 things", the fold's title (0.9.0: a hundred rows pushed Not got off the screen).</summary>
         public string GotTitle = string.Empty;
@@ -1033,12 +1039,14 @@ public sealed partial class MainWindow
             s.Why = why;
             s.Sentence = why != null ? $"{said}. {why}" : said + ".";
             s.Rows = ErrandWords.GotList(e.Got, data.AnyItemName);
-            s.NotGot = ErrandWords.NotGot(e.Plan.Left, data.AnyItemName);
+            s.NotGot = ErrandWords.NotGot(e.Plan.Left, data.AnyItemName, e.BoardWhy);
             s.NotGotCount = e.Plan.Left.Sum(l => l.Count);
-            s.NotGotLabel = s.NotGotCount.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            // Stopped part way, the plan's left-out things aren't all that's missing (the trips not done are
+            // too): no count then, and the line says so plainly.
+            s.NotGotLabel = stopped ? null : s.NotGotCount.ToString(System.Globalization.CultureInfo.InvariantCulture);
             s.GotTitle = s.Rows.Count > 0 ? $"Got · {Words.Count(e.GotCount, "thing")}" : "Got · nothing";
             s.GotText = string.Join("\n", s.Rows.Select(g => g.Words));
-            s.Hint = ErrandWords.NotGotHint(s.NotGotCount);
+            s.Hint = stopped ? "What's still missing stays on the shopping list." : ErrandWords.NotGotHint(s.NotGotCount);
         }
 
         Frame.BeginHeader(28);
@@ -1121,8 +1129,9 @@ public sealed partial class MainWindow
             errandGotOpen = false;
         }
         var rowH = S(46);
-        // The shopping list, where what wasn't got is (as Done's rows open it).
-        if (session.Plan != null)
+        // The shopping list, where what wasn't got is (as Done's rows open it). Not while the fixtures are
+        // due to start after the errands: they'd take the window over at once.
+        if (session.Plan != null && !afterPlacing.Armed)
         {
             const string list = "Shopping list";
             var lw = MathF.Min(fw, Kit.ButtonWidth(list, BtnSize.Lg, Icon.List, Btn.Glass));

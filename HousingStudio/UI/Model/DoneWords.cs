@@ -55,7 +55,8 @@ public readonly record struct RunFigure(int Done, int ToDo, int Dyed, int Dyes, 
     /// </summary>
     /// <param name="toDoAtStart">The pieces it was given to move or place (Ready's "to do").</param>
     /// <param name="dyesStillExpected">The dyes expected while the dye phase isn't planned (0 once it is).</param>
-    public static RunFigure From(IReadOnlyList<RunJob> jobs, bool clearingOutFirst, int toDoAtStart, int dyesStillExpected)
+    /// <param name="putAwayStillExpected">Pieces to put away not yet made jobs (planned later, or waiting for room).</param>
+    public static RunFigure From(IReadOnlyList<RunJob> jobs, bool clearingOutFirst, int toDoAtStart, int dyesStillExpected, int putAwayStillExpected = 0)
     {
         int done = 0, planned = 0, dyed = 0, dyes = 0, stored = 0, stores = 0;
         for (var i = 0; i < jobs.Count; i++)
@@ -79,7 +80,7 @@ public readonly record struct RunFigure(int Done, int ToDo, int Dyed, int Dyes, 
             }
         }
         var toDo = clearingOutFirst ? Math.Max(toDoAtStart, planned) : planned;
-        return new RunFigure(done, toDo, dyed, dyes + Math.Max(0, dyesStillExpected), stored, stores);
+        return new RunFigure(done, toDo, dyed, dyes + Math.Max(0, dyesStillExpected), stored, stores + Math.Max(0, putAwayStillExpected));
     }
 
     /// <summary>The big number: the to-do done; the dyes done when there's nothing else; the put-aways when that's all.</summary>

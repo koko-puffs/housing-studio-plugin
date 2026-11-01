@@ -262,6 +262,7 @@ public sealed partial class ErrandRunner
                 // A real run leaves the item for now and plans another world for it: not a stop, a note.
                 log.Warn($"  No listing of {name} a real run would buy here ({firstWhy ?? "none listed"}): it would be left for now and looked for on another world.");
                 Rehearsals.Report.Note($"{where}: no listing a real run would buy here ({firstWhy ?? "none listed"}); it would look on another world.");
+                boardWhy.TryAdd(item.ItemId, $"{ErrandGame.CurrentWorld()}: {firstWhy ?? "none listed"}");
                 if (emptyBoards.Add((item.ItemId, ErrandGame.CurrentWorld()))) emptiedThisTrip++;
                 return Finished();
             },

@@ -125,7 +125,7 @@ public sealed class ViewModel
     /// the figure was the design's pieces in place of all of them: with pieces still to buy it never
     /// reached its total, and a piece that only needed its dye counted as done from the start.
     /// </summary>
-    public RunFigure RunCounts => RunFigure.From(runner.Jobs, runner.ClearingOutFirst, RunToDoAtStart, runner.DyesStillExpected);
+    public RunFigure RunCounts => RunFigure.From(runner.Jobs, runner.ClearingOutFirst, RunToDoAtStart, runner.DyesStillExpected, runner.PutAwayStillExpected);
 
     /// <summary>The big figure (<see cref="RunFigure.Figure"/> of <see cref="RunCounts"/>).</summary>
     public int Figure => RunCounts.Figure;
@@ -196,8 +196,16 @@ public sealed class ViewModel
     public List<RecentRow> Recent(int max = 8)
     {
         Refresh();
-        return recentRows!.Where(r => !r.Backup && !IsPinned(r.Path)).Take(max).ToList();
+        if (recentShown.Max != max || !ReferenceEquals(recentShown.From, designRows))
+            recentShown = (designRows, max, designRows!.Take(max).ToList());
+        return recentShown.Rows;
     }
+
+    /// <summary>The designs in Recent (not backups, not pinned), made with the rows.</summary>
+    private List<RecentRow>? designRows;
+
+    /// <summary>The last list <see cref="Recent"/> gave, kept while the rows and the count asked are the same (it's asked every frame).</summary>
+    private (List<RecentRow>? From, int Max, List<RecentRow> Rows) recentShown = (null, 0, new List<RecentRow>());
 
     /// <summary>How many designs Recent has in all (for "Show all N").</summary>
     public int RecentCount
@@ -205,7 +213,7 @@ public sealed class ViewModel
         get
         {
             Refresh();
-            return recentRows!.Count(r => !r.Backup && !IsPinned(r.Path));
+            return designRows!.Count;
         }
     }
 
@@ -213,7 +221,7 @@ public sealed class ViewModel
     public List<RecentRow> BackupRows(int max = 12)
     {
         Refresh();
-        return backupRows!.Take(max).ToList();
+        return backupRows!.Count <= max ? backupRows : backupRows.Take(max).ToList();
     }
 
     /// <summary>The pinned designs, in the order pinned (Home's tiles).</summary>
@@ -229,8 +237,14 @@ public sealed class ViewModel
     private List<RecentRow>? backupRows;
     private List<RecentRow>? pinnedRows;
 
+    private int refreshedFrame = -1;
+
     private void Refresh()
     {
+        // Asked several times a frame (Pinned, Recent, its count, the backups): looked at once a frame.
+        var frame = Dalamud.Bindings.ImGui.ImGui.GetFrameCount();
+        if (recentRows != null && frame == refreshedFrame) return;
+        refreshedFrame = frame;
         var key = string.Join("|", config.RecentFiles) + "#" + string.Join("|", config.PinnedDesigns);
         bool pending;
         lock (parsing) pending = parsing.Count > 0;
@@ -266,6 +280,7 @@ public sealed class ViewModel
         var all = rows.OrderByDescending(r => r.At).Select(r => Row(r.Path, r.Backup, r.At, now)).ToList();
         recentRows = all;
         backupRows = all.Where(r => r.Backup).ToList();
+        designRows = all.Where(r => !r.Backup && !IsPinned(r.Path)).ToList();
         pinnedRows = config.PinnedDesigns.Where(p => !string.IsNullOrWhiteSpace(p))
             .Select(p => Row(p, IsBackup(p), OpenedAt(p), now)).ToList();
     }

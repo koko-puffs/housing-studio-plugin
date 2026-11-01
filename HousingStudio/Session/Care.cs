@@ -199,7 +199,7 @@ public sealed class Care
     /// </summary>
     private (int Done, int Total) Work()
     {
-        var f = RunFigure.From(runner.Jobs, runner.ClearingOutFirst, runToDoAtStart, runner.DyesStillExpected);
+        var f = RunFigure.From(runner.Jobs, runner.ClearingOutFirst, runToDoAtStart, runner.DyesStillExpected, runner.PutAwayStillExpected);
         var all = f.ToDo + f.Dyes;
         return all > 0 ? (f.Done + f.Dyed, all) : (f.PutAwayDone, f.PutAway);
     }
