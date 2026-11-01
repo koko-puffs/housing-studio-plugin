@@ -612,7 +612,9 @@ log**.
 "Get everything for me" (`Session/ErrandRunner.cs`) uses the same step queue for its trips: teleports
 and world visits through Lifestream's IPC, walking through vnavmesh's, talking to NPCs and using bells,
 boards and doors with the game's `TargetSystem.InteractWithObject`, and the windows' callbacks as
-above. Every window, callback and word it uses is in `Automation/ErrandTable.cs`. Recorded by hand:
+above. Each NPC, bell, board or door is targeted first, as a press on it would (0.9.6,
+`ErrandGame.TargetFirst`: your target is set, then 0.18 to 0.42 s go by, never the same, before it's
+used); before 0.9.6 nothing was ever targeted, and your target is sent to the server. Every window, callback and word it uses is in `Automation/ErrandTable.cs`. Recorded by hand:
 a gil shop's purchase (`Shop ← [i:0, row, count, empty]`), choosing a retainer (`RetainerList ←
 [i:2, u:row, empty, empty]`), "Retrieve from Retainer", buying a listing (`ItemSearchResult ← [i:2,
 row]`), and each one's question; a purchase's question is checked against its price before yes. The

@@ -399,11 +399,34 @@ public static unsafe class ErrandGame
         return names.Count == 0 ? "nothing" : string.Join("; ", names);
     }
 
-    /// <summary>Talks to (or uses) an object, as pressing on it does (the game's TargetSystem.InteractWithObject).</summary>
+    private static (nint Address, DateTime At, TimeSpan Wait) targeting;
+
+    /// <summary>
+    /// Targets an object before it's used, as you would (0.9.6: the errands used NPCs, the board, bells and
+    /// doors without ever targeting them, which the game sends to the server). True while it's still to
+    /// wait: it targets it now (if it isn't your target already), then a moment goes by (0.18 to 0.42 s,
+    /// never the same) before it's used. Already your target for a while: false at once.
+    /// </summary>
+    public static bool TargetFirst(IGameObject o)
+    {
+        var now = DateTime.UtcNow;
+        var current = Services.Targets.Target;
+        if (current == null || current.Address != o.Address)
+        {
+            Services.Targets.Target = o;
+            targeting = (o.Address, now, TimeSpan.FromMilliseconds(Random.Shared.Next(180, 420)));
+            return true;
+        }
+        return targeting.Address == o.Address && now - targeting.At < targeting.Wait;
+    }
+
+    /// <summary>Talks to (or uses) an object, as pressing on it does (the game's TargetSystem.InteractWithObject); it's your target then.</summary>
     public static bool Interact(IGameObject o)
     {
         var ts = TargetSystem.Instance();
         if (ts == null || o.Address == nint.Zero) return false;
+        // Your target too, if it isn't yet (a press on something targets it).
+        if (Services.Targets.Target?.Address != o.Address) Services.Targets.Target = o;
         ts->InteractWithObject((GameObjectStruct*)o.Address, true);
         return true;
     }

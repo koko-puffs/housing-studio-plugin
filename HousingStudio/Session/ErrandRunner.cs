@@ -1137,6 +1137,8 @@ public sealed partial class ErrandRunner : IDisposable
                 if (!FreeToUse()) return StepOutcome.Waiting;
                 if (uses >= 4) return StepOutcome.Halt($"{window} didn't open (used {what} {uses} times).");
                 if (find() is not { } o) return StepOutcome.Halt($"Couldn't find {what} within reach. Near you: {ErrandGame.NamesNear(15)}.");
+                // Targeted first, a moment before it's used (0.9.6).
+                if (ErrandGame.TargetFirst(o)) return StepOutcome.Waiting;
                 if (uses > 0) log.Info($"  {window} didn't open: using {what} again.");
                 uses++;
                 usedAt = DateTime.UtcNow;
@@ -1156,6 +1158,8 @@ public sealed partial class ErrandRunner : IDisposable
         {
             var o = find();
             if (o == null) return StepOutcome.Halt($"Couldn't find {what} within reach. Near you: {ErrandGame.NamesNear(15)}.");
+            // Targeted first, a moment before it's used (0.9.6).
+            if (ErrandGame.TargetFirst(o)) return StepOutcome.Waiting;
             return ErrandGame.Interact(o) ? StepOutcome.Done : StepOutcome.Halt($"Couldn't use {what}.");
         },
     };
@@ -1527,7 +1531,8 @@ public sealed partial class ErrandRunner : IDisposable
                     return StepOutcome.Done;
                 }
                 // Nothing opened (the game refused, say, mid-jump): talk to them again, twice at most.
-                if (DateTime.UtcNow - used > TimeSpan.FromSeconds(2.5) && again < 2 && ErrandGame.Settled && ErrandGame.NpcOrNamed(v.NpcId, v.NpcName, Reach + 3) is { } npc)
+                if (DateTime.UtcNow - used > TimeSpan.FromSeconds(2.5) && again < 2 && ErrandGame.Settled && ErrandGame.NpcOrNamed(v.NpcId, v.NpcName, Reach + 3) is { } npc
+                    && !ErrandGame.TargetFirst(npc))
                 {
                     again++;
                     used = DateTime.UtcNow;
@@ -1591,6 +1596,7 @@ public sealed partial class ErrandRunner : IDisposable
                 {
                     if (ErrandGame.MenuEntries() != null) return StepOutcome.Done;
                     if (ErrandGame.NpcOrNamed(v.NpcId, v.NpcName, Reach + 3) is not { } npc) return StepOutcome.Halt($"Couldn't find {v.NpcName} within reach. Near you: {ErrandGame.NamesNear(15)}.");
+                    if (ErrandGame.TargetFirst(npc)) return StepOutcome.Waiting;
                     return ErrandGame.Interact(npc) ? StepOutcome.Done : StepOutcome.Halt($"Couldn't talk to {v.NpcName}.");
                 },
             },
@@ -2440,6 +2446,7 @@ public sealed partial class ErrandRunner : IDisposable
                         HandOver($"Couldn't reach your door from here ({ErrandGame.DistanceTo(door.Value):0} yalms away).");
                         return StepOutcome.Done;
                     }
+                    if (ErrandGame.TargetFirst(o)) return StepOutcome.Waiting;
                     travelling = true;
                     if (uses > 0) log.Info("  The door didn't ask yet: using it again.");
                     uses++;
@@ -2677,6 +2684,7 @@ public sealed partial class ErrandRunner : IDisposable
                     walkTarget = null;
                     if (Up()) return StepOutcome.Done;
                     if (Door(8) is not { } o) return HandOver("The door isn't within reach.");
+                    if (ErrandGame.TargetFirst(o)) return StepOutcome.Waiting;
                     usedAt = DateTime.UtcNow;
                     return ErrandGame.Interact(o) ? StepOutcome.Done : HandOver("Couldn't use the door.");
                 },
@@ -2700,6 +2708,7 @@ public sealed partial class ErrandRunner : IDisposable
                         walkTarget = null;
                         approaching = false;
                         usedAt = now;
+                        // (Your target already: used at once.)
                         if (Door(8) is { } o) ErrandGame.Interact(o);
                         return StepOutcome.Waiting;
                     }
