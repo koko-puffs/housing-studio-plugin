@@ -88,7 +88,7 @@ Running (the errands, `DrawErrandsRunning`):
 | The journey | `Kit.Journey`: `ErrandWords.Journey(CurrentTrip)` (Bell, Vendors, Market as the trip has them, then Home and Place), the stop in hand `JourneyAt` |
 | The current card | `DrawErrandCurrent`: the item's icon (or the stop's), "Buying Riviera Table ×2" (`ErrandWords.Doing`), one dim line (`DoingNote`: the price, "the game asked, and the price matched", or the step) |
 | Got / Spent | `DrawErrandCards` → `KvCard`: "6 of 12" (`GotCount` of `CountAtStart`), "4,000 of 61,400" (`Spent` of `AgreedGil`), each with its bar |
-| Step by step, Waiting for you | `DrawErrandCallout` (the click it holds before with Continue, or what you do; while placing waits for you on a piece, Skip this piece → `runner.SkipCurrent`) |
+| Step by step, Waiting for you | `DrawErrandCallout` (the click it holds before with Continue, said as "Next, it will …" under "Its next click · waits for Continue", or what you do; while placing waits for you on a piece, Skip this piece → `runner.SkipCurrent`) |
 | "What it's doing" | `DrawLog` (Running's) |
 | Placing | the journey on Place over Running's `DrawFigure`, `DrawPhases` and `DrawCurrent` |
 | Pause / Resume, Stop, the hint | footer: "About N minutes left" while it places (`runner.TimeLeft`), else what Pause does |

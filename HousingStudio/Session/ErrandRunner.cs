@@ -476,6 +476,14 @@ public sealed partial class ErrandRunner : IDisposable
 
     private static string Words(int n, string word) => n == 1 ? $"1 {word}" : $"{n} {word}s";
 
+    /// <summary>
+    /// While a click not yet seen working waits for Continue: true once you've done it by hand (the item
+    /// came to your bags), so the errands carry on by themselves.
+    /// </summary>
+    private Func<bool>? guessByHand;
+
+    private bool menuReopened;
+
     private DateTime? vendorArrived;
     private DateTime? boardArrived;
 
@@ -578,6 +586,13 @@ public sealed partial class ErrandRunner : IDisposable
 
         // Clicks not yet seen working wait for Continue (step by step) until you trust them.
         queue.StepByStep = config.StepByStep || (!config.ErrandsTrustGuesses && queue.Current is { IsAction: true, Key: Guess });
+        // Such a click done by hand meanwhile (the item came to your bags): carried on, as Continue would.
+        if (queue.State == QueueState.AwaitingContinue && queue.Current?.Key == Guess && guessByHand?.Invoke() == true)
+        {
+            guessByHand = null;
+            log.Info("  You did that by hand: carrying on.");
+            queue.Continue();
+        }
         switch (queue.State)
         {
             case QueueState.Running:
@@ -1274,6 +1289,9 @@ public sealed partial class ErrandRunner : IDisposable
                     var room = ErrandGame.FreeSlots();
                     if (room < ErrandPlanner.Stacks(slot.Quantity, stack)) return StepOutcome.Halt($"Your bags are full ({room} free slots; the stack of {slot.Quantity} needs more).");
                     before = ErrandGame.BagCount(item.ItemId);
+                    menuReopened = false;
+                    // Held for Continue next (a click not seen working yet): taken by hand meanwhile carries on.
+                    guessByHand = () => ErrandGame.BagCount(item.ItemId) > before;
                     return ErrandGame.OpenRetainerItemMenu(slot.Container, slot.Slot) ? StepOutcome.Done : StepOutcome.Halt("Couldn't open the item's menu.");
                 },
             },
@@ -1283,10 +1301,28 @@ public sealed partial class ErrandRunner : IDisposable
                 Label = $"Choose \"{ErrandTable.RetrieveWords[^1]}\" (the whole stack)",
                 IsAction = true,
                 Key = Guess,
+                Timeout = TimeSpan.FromSeconds(8),
                 Run = () =>
                 {
+                    guessByHand = null;
+                    // Taken by hand while this waited for Continue (0.8.5: you retrieved it, then pressed
+                    // Continue, and the errands stopped on the closed menu): counted by the next step.
+                    if (ErrandGame.BagCount(item.ItemId) > before)
+                    {
+                        log.Info($"  {Name(item.ItemId)} was taken by hand: carrying on.");
+                        if (GameUi.IsOpen(UiTable.ContextMenu)) GameUi.Fire(UiTable.MenuCancel);
+                        return StepOutcome.Done;
+                    }
                     var entries = GameUi.MenuEntries();
-                    if (entries == null) return StepOutcome.Halt("The item's menu closed.");
+                    if (entries == null)
+                    {
+                        // The menu closed (by hand?) with nothing taken: opened again, once.
+                        if (menuReopened) return StepOutcome.Waiting;
+                        menuReopened = true;
+                        if (ErrandGame.RetainerSlot(item.ItemId) is not { } again) return StepOutcome.Halt("The item's menu closed, and the item isn't in the retainer's bags any more.");
+                        log.Info("  The item's menu closed before the choice: opening it again.");
+                        return ErrandGame.OpenRetainerItemMenu(again.Container, again.Slot) ? StepOutcome.Waiting : StepOutcome.Halt("The item's menu closed.");
+                    }
                     var i = ErrandGame.Find(entries, ErrandTable.RetrieveWords, ErrandTable.RetrieveQuantityWords);
                     if (i < 0)
                     {
@@ -1671,8 +1707,22 @@ public sealed partial class ErrandRunner : IDisposable
         long cost = 0;
         var askedYou = false;
         var stack = ErrandGame.StackSize(item.ItemId);
+        var handBefore = 0;
+        long handHave = 0;
         List<Step> Once() => new()
         {
+            new Step
+            {
+                // What's in your bags before the click that waits for Continue: one done by hand is counted.
+                Label = $"Note your {Name(item.ItemId)} and {ex.CurrencyName}",
+                Run = () =>
+                {
+                    handBefore = ErrandGame.BagCount(item.ItemId);
+                    handHave = ErrandGame.CurrencyCount(ex.Currency);
+                    guessByHand = () => ErrandGame.BagCount(item.ItemId) > handBefore;
+                    return StepOutcome.Done;
+                },
+            },
             new Step
             {
                 Label = $"Exchange {ex.CurrencyName} for {Name(item.ItemId)} at {v.NpcName} ({ErrandTable.ExchangeCurrencyBuy.Describe()})",
@@ -1680,6 +1730,19 @@ public sealed partial class ErrandRunner : IDisposable
                 Key = Guess,
                 Run = () =>
                 {
+                    guessByHand = null;
+                    // Exchanged by hand while this waited for Continue: counted, never exchanged again.
+                    var byHand = ErrandGame.BagCount(item.ItemId) - handBefore;
+                    if (byHand > 0)
+                    {
+                        var paid = Math.Max(0, handHave - ErrandGame.CurrencyCount(ex.Currency));
+                        currencySpent[ex.Currency] = currencySpent.GetValueOrDefault(ex.Currency) + paid;
+                        Count(item.ItemId, byHand);
+                        bought += byHand;
+                        handBefore += byHand;
+                        handHave -= paid;
+                        log.Info($"  {byHand} × {Name(item.ItemId)} exchanged by hand ({paid:N0} {ex.CurrencyName}): counted.");
+                    }
                     if (bought >= item.Count) return Finished();
                     if (ExchangeWindow() is not { } window) return StepOutcome.Halt($"{v.NpcName}'s exchange closed.");
                     n = Math.Min(item.Count - bought, Math.Min(MaxPerPurchase, stack));

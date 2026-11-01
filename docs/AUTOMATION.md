@@ -470,6 +470,12 @@ or the window closed by the game with the dye in place; then the window is close
 for the dye (4 s), skipping as `DyeFailed` after a Yes, else `DyeMissing`. `SayStillHeld` ignores
 Furnishing Color's active item (the piece selected for dyeing, not held).
 
+**0.8.6**: `ErrandRunner.guessByHand`: set before a held `Guess` click (the retainer's item menu opened,
+or a baseline step before the exchange); while `AwaitingContinue` on it, the item's bag count going up
+calls `queue.Continue()`. The retainer's choose step returns Done when the count went up (the next step
+counts it), and opens the menu again once when it closed with nothing taken (8 s limit). The exchange step
+counts what came by hand (bags and currency against its baseline) before working out the rest.
+
 **0.8.5**: `DyeShownCheck` between the pick and Dye: `HousingEditor.ActiveItem` must be the piece and its
 stored dye the target (the window's preview); after 1 s still its own dye → Dye anyway (no preview seen),
 another dye → `Skip(DyeFailed)`. The already-dyed test is in "Pick" (window closed, item checked). The

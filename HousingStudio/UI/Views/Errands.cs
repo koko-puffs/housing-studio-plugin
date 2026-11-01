@@ -892,16 +892,21 @@ public sealed partial class MainWindow
         var holding = placing ? runner.AwaitingContinue : e.AwaitingContinue;
         var label = (placing ? runner.StepLabel : e.StepLabel) ?? string.Empty;
         Kit.BeginPanel("##errand-callout", 16, 20, 16, Palette.Over(Palette.BrassNow, Palette.Ink), Palette.BrassEdge);
-        Kit.EyebrowRow(holding ? "Step by step · next" : "Waiting for you");
+        Kit.EyebrowRow(holding ? "Its next click · waits for Continue" : "Waiting for you");
         Kit.Gap(6);
         var words = label.StartsWith("You: ", StringComparison.Ordinal) ? label[5..] : label;
+        // A click it holds is said as what it will do, not as a thing for you to do (0.8.5: "Choose
+        // “Retrieve…”" was taken as an instruction, done by hand, and Continue then stopped the errands).
+        if (holding && words.Length > 1) words = $"Next, it will {char.ToLowerInvariant(words[0])}{words[1..]}";
         Txt.Para(new[] { new Run(words, Face.Sans, 15, Palette.Ivory) }, 15 * 1.4f);
         Kit.Gap(4);
         if (holding)
         {
             Txt.Para(new[]
             {
-                Run.Note(!placing && e.HoldingAGuess ? "This click hasn't been seen working yet: watch what it does, and send the log if it's wrong. " : "Nothing is clicked until you continue. "),
+                Run.Note(!placing && e.HoldingAGuess
+                    ? "Press Continue and it makes this click itself. It hasn't been seen working yet, so watch what it does and send the log if it's wrong. If you do it by hand instead, the errands carry on by themselves. "
+                    : "Nothing is clicked until you continue. "),
                 Run.Note("/hstudio continue", Palette.Dim),
                 Run.Note(" works too."),
             });

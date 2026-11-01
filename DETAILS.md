@@ -8,7 +8,14 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.8.5. Placing works in the game; the newer features haven't all been tried in it yet.**
+> **Status: 0.8.6. Placing works in the game; the newer features haven't all been tried in it yet.**
+> 0.8.6: **a click done by hand while it waits for Continue.** Taking from a retainer (and exchanging
+> currencies) has a click not yet seen working, so the errands hold before it for Continue. Its callout
+> showed the click's own words ("Choose “Retrieve…”"), which read as something for you to do; done by
+> hand, the menu closed, and Continue then stopped the errands. The callout now says what it will do
+> ("Next, it will choose…") and that Continue makes the click. Done by hand anyway, the errands see the
+> item come to your bags and carry on by themselves; Continue after it counts what came and never takes
+> or exchanges again; a menu closed with nothing taken is opened again once.
 > 0.8.5, a scan before a real run. **Dyeing** never presses Dye unless the window shows the dye chosen on
 > this piece (its preview, read in the piece's dye; when no preview shows, Dye is pressed and the dye
 > checked after, as before): another dye, or the window on another piece, skips the piece instead of
