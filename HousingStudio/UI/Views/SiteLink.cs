@@ -11,7 +11,7 @@ using static HousingStudio.UI.Theme;
 namespace HousingStudio.UI;
 
 /// <summary>
-/// Linking to Housing Studio (Settings → Getting): a token from the site, pasted once, kept masked,
+/// Linking to Housing Studio (Settings → Help): a token from the site, pasted once, kept masked,
 /// Unlink. Then Start's Send to my builds, beside Save as a build on This house: the same layout the save
 /// writes, sent to your builds on the site (Core/SiteLink.cs) off the framework thread, and how
 /// it went under the buttons. The token is never logged, nor put in the activity log.
@@ -33,7 +33,7 @@ public sealed partial class MainWindow
     private (string? Token, bool Refused, string Note) linkedNote = (null, false, string.Empty);
 
     /// <summary>
-    /// Settings → Getting, one row: "Housing Studio account · Linked · hsp_••••3f2a" with Unlink, or,
+    /// Settings → Help, one row: "Housing Studio account · Linked · hsp_••••3f2a" with Unlink, or,
     /// not linked, the token field (masked) with Link and Get a token under its words.
     /// </summary>
     private void DrawAccountRow(int index)
@@ -103,7 +103,7 @@ public sealed partial class MainWindow
 
     /// <summary>Why Send to my builds can't go now, or null.</summary>
     private string? CantSend() =>
-        !Linked ? "Link your Housing Studio account in Settings → Getting first"
+        !Linked ? "Link your Housing Studio account in Settings → Help first"
         : session.Context.Side == null ? "Go to your home first"
         : !session.Context.HasPermission ? "You can send a home you're allowed to decorate"
         : Sending ? "Sending…"
@@ -218,7 +218,7 @@ public sealed partial class MainWindow
         };
         var h = Txt.Flow(at, w, runs, 19.5f, out var link);
         if (link == "open" && s.Result?.BuildId is { } id) Dalamud.Utility.Util.OpenLink(SiteLink.BuildUrl(id));
-        if (link == "settings") OpenSettings(SettingsTab.Getting);
+        if (link == "settings") OpenSettings(SettingsTab.Help);
         Kit.Reserve(at, w, h);
     }
 }

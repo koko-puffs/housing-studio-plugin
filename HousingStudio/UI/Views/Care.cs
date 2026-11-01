@@ -301,7 +301,7 @@ public sealed partial class MainWindow
 
     private bool driftChecking;
     private (DateTime? Kept, DateTime Day, string Tip) changesTip = (null, DateTime.MinValue, string.Empty);
-    private (DriftCheck? Check, List<string> Lines) driftLines = (null, new List<string>());
+    private (DriftCheck? Check, string Head, List<(ChangeGroup Group, string Names)> Groups) driftLines = (null, string.Empty, new List<(ChangeGroup, string)>());
     private readonly Run[] driftHead = new Run[1];
 
     /// <summary>The changes chip's tooltip: when the snapshot was kept (made again only when it or the day changes).</summary>
@@ -336,8 +336,10 @@ public sealed partial class MainWindow
     }
 
     /// <summary>
-    /// Start, under This house: the changes since your last run (in a dashed detail), what moved, was
-    /// taken away, dyed again or added, with Show where they were and Put them back where they were.
+    /// Start, under This house: the changes since your last run (in a dashed detail), grouped by what
+    /// happened (0.9.0): each group a small head with its count ("Moved · 2", "Taken away · 1", "Dyed
+    /// again · 1", "Added · 3") and its pieces' names under it; the moved and the taken away have Show
+    /// where on their head. Put them back where they were is the one brass button, under them (it asks first).
     /// </summary>
     private void DrawChanges(DriftCheck? check)
     {
@@ -353,41 +355,63 @@ public sealed partial class MainWindow
         if (!ReferenceEquals(driftLines.Check, check))
         {
             // Made once per check, not every frame.
-            var made = new List<string> { $"{CareWords.Drift(r)} since your last run (checked {Clock(check.CheckedAt)})" };
-            if (r.Moved.Count > 0) made.Add($"Moved: {CareWords.Names(r.Moved.Select(m => m.Was.ItemId), data.ItemName)}");
-            if (r.Gone.Count > 0) made.Add($"Taken away: {CareWords.Names(r.Gone.Select(t => t.ItemId), data.ItemName)}");
-            if (r.Redyed.Count > 0) made.Add($"In another dye: {CareWords.Names(r.Redyed.Select(m => m.Was.ItemId), data.ItemName)}");
-            if (r.Added.Count > 0) made.Add($"Added since: {CareWords.Names(r.Added.Select(p => p.ItemId), data.ItemName)} (these stay)");
-            driftLines = (check, made);
+            var groups = new List<(ChangeGroup Group, string Names)>();
+            foreach (var g in ChangeGroups.Of(r))
+            {
+                var names = CareWords.Names(g.Items, data.ItemName);
+                groups.Add((g, g.Kind == ChangeKind.Added ? $"{names} (these stay)" : names));
+            }
+            driftLines = (check, $"{CareWords.Drift(r)} since your last run (checked {Clock(check.CheckedAt)})", groups);
         }
-        driftHead[0] = new Run(driftLines.Lines[0], Face.SansMedium, 13, r.Unchanged ? Palette.Success : Palette.Ivory);
+        driftHead[0] = new Run(driftLines.Head, Face.SansMedium, 13, r.Unchanged ? Palette.Success : Palette.Ivory);
         Txt.Para(driftHead);
-        for (var i = 1; i < driftLines.Lines.Count; i++)
+        var elsewhere = session.Context.Side != check.Side;
+        for (var i = 0; i < driftLines.Groups.Count; i++)
         {
+            var (group, names) = driftLines.Groups[i];
+            Kit.Gap(10);
+            if (i > 0)
+            {
+                // The faint line between groups.
+                var line = Kit.At;
+                Kit.Divider(line.X, line.X + Kit.Width, line.Y);
+                Kit.Gap(10);
+            }
+            ChangeGroupHead(group, elsewhere);
             Kit.Gap(2);
-            Txt.Note(driftLines.Lines[i]);
+            Txt.Note(names);
         }
         if (r.CanPutBack)
         {
-            Kit.Gap(10);
-            var row = new Kit.Wrap(8);
-            var h = Kit.ButtonHeight(BtnSize.Tiny);
-            if (r.Moved.Count + r.Gone.Count > 0)
-            {
-                const string show = "Show where they were";
-                var elsewhere = session.Context.Side != check.Side;
-                if (Kit.Button("##drift-show", row.Next(Kit.ButtonWidth(show, BtnSize.Tiny, Icon.MapPin), h), show, Btn.Glass, BtnSize.Tiny, Icon.MapPin, 0,
-                        elsewhere, elsewhere ? "Go back to the side of your home it checked" : null))
-                    ShowWhere(r.Moved.Select(m => m.Was).Concat(r.Gone));
-            }
+            Kit.Gap(14);
+            var at = Kit.At;
             const string put = "Put them back where they were";
             var cannot = runner.Active ? "Already running." : null;
-            if (Kit.Button("##drift-put", row.Next(Kit.ButtonWidth(put, BtnSize.Tiny, Icon.Undo), h), put, Btn.Glass, BtnSize.Tiny, Icon.Undo, 0, cannot != null,
+            if (Kit.Button("##drift-put", at, put, Btn.Primary, BtnSize.Md, Icon.Undo, 0, cannot != null,
                     cannot ?? "Moves the pieces moved since back, and places the ones taken away (asks first)."))
                 AskPutBack(check);
-            row.End();
+            Kit.Reserve(at, Kit.ButtonWidth(put, BtnSize.Md, Icon.Undo, Btn.Primary), Kit.ButtonHeight(BtnSize.Md));
         }
         Kit.EndDetail();
+    }
+
+    /// <summary>A group's head in the changes: "Moved · 2" on the left, Show where on the right (the moved and the taken away, where they were).</summary>
+    private void ChangeGroupHead(ChangeGroup group, bool elsewhere)
+    {
+        var at = Kit.At;
+        var w = Kit.Width;
+        const string show = "Show where";
+        var canShow = group.Where.Count > 0;
+        var bw = canShow ? Kit.ButtonWidth(show, BtnSize.Tiny, Icon.MapPin) : 0;
+        var bh = canShow ? Kit.ButtonHeight(BtnSize.Tiny) : 0;
+        var th = Txt.Natural(Face.SansMedium, 13);
+        var h = MathF.Max(th, bh);
+        var room = w - (canShow ? bw + S(12) : 0);
+        Txt.Draw(Kit.Dl, new Vector2(at.X, at.Y + (h - th) / 2), Txt.Fit(group.Head, Face.SansMedium, 13, room), Face.SansMedium, 13, Palette.Ivory);
+        if (canShow && Kit.Button($"##drift-show-{group.Kind}", new Vector2(at.X + w - bw, at.Y + (h - bh) / 2), show, Btn.Glass, BtnSize.Tiny, Icon.MapPin, 0,
+                elsewhere, elsewhere ? "Go back to the side of your home it checked" : "Lights where they were in your home."))
+            ShowWhere(group.Where);
+        Kit.Reserve(at, w, h);
     }
 
     private void AskPutBack(DriftCheck check)

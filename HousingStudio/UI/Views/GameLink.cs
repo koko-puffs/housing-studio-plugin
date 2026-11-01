@@ -171,7 +171,7 @@ public sealed partial class MainWindow
             case null:
                 return;
             case "settings":
-                OpenSettings(SettingsTab.Getting);
+                OpenSettings(SettingsTab.Help);
                 return;
             case "retry":
                 gameLink?.RetryHome();
@@ -261,7 +261,7 @@ public sealed partial class MainWindow
     }
 
     // ---------------------------------------------------------------------------------------------
-    // Settings → Getting.
+    // Settings → Help, under the Housing Studio account.
 
     /// <summary>The site link's two switches, after the account row.</summary>
     private void DrawGameLinkRows(int i)

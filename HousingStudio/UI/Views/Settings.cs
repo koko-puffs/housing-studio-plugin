@@ -21,12 +21,13 @@ public enum SettingsTab
 }
 
 /// <summary>
-/// Settings (the 0.6 flow, docs/mockups/flow.html), from the header: four tabs as small pills under the
-/// title, Placing (what Start does, the pace, markers, and More options), Getting (market prices, the
-/// errands' limits, the Housing Studio account and what it brings from the site) and Help
-/// (step by step, the recorder, the place words, the windows and clicks, trusting the errands' new
-/// clicks). Each setting is one row: its name, one line, the control on the right; the longer words
-/// are its tooltip. The version and What's new at the foot.
+/// Settings (the 0.6 flow, docs/mockups/flow.html; 0.9.0's header): back at the top left, the title,
+/// three tabs as small pills under it. Placing (what Start does, the pace, markers, and More options,
+/// its own screen whose header goes back to Placing, in three groups: where and how it places,
+/// markers, other), Getting in three groups (market board, shops with Currencies folded into one
+/// row, travel and bags) and Help in three (the Housing Studio account and what it brings from the
+/// site, how a run behaves, making a report). Each setting is one row: its name, one line, the
+/// control on the right; the longer words are its tooltip. The version and What's new at the foot.
 /// </summary>
 public sealed partial class MainWindow
 {
@@ -59,6 +60,7 @@ public sealed partial class MainWindow
     public void ShowSettings(SettingsTab tab)
     {
         settingsTab = tab;
+        moreOpen = false;
         sub = runner.Active || Plugin.FixtureRun.Active ? Sub.None : Sub.Settings;
         IsOpen = true;
     }
@@ -67,6 +69,7 @@ public sealed partial class MainWindow
     private void OpenSettings(SettingsTab tab)
     {
         settingsTab = tab;
+        moreOpen = false;
         sub = Sub.Settings;
     }
 
@@ -78,31 +81,40 @@ public sealed partial class MainWindow
 
     private void DrawSettings()
     {
+        // More options is its own screen under Placing (0.9.0): its header goes back to Placing.
+        if (moreOpen && settingsTab != SettingsTab.Placing) moreOpen = false;
+        var more = moreOpen;
         Frame.BeginHeader(20);
-        var at = Kit.At;
-        var w = Kit.Width;
-        Title(new Vector2(at.X, at.Y + (S(40) - S(32 * 1.1f)) / 2), "Settings", null, w - S(56));
-        if (Kit.IconButton("##back", new Vector2(at.X + w - S(40), at.Y), Icon.ArrowLeft, session.Layout != null ? $"Back to {session.Title}" : "Back"))
-            sub = Sub.None;
-        Kit.Reserve(at, w, S(40));
-        Kit.Gap(14);
-        var tab = (int)settingsTab;
-        if (tab < 0 || tab >= SettingsTabs.Length) tab = 0;
-        settingsTab = (SettingsTab)Kit.Tabs("##settings-tab", SettingsTabs, tab);
+        if (more)
+        {
+            if (ScreenHeader("Back to Placing", "Settings · placing", "More options")) moreOpen = false;
+        }
+        else
+        {
+            if (ScreenHeader(session.Layout != null ? $"Back to {session.Title}" : "Back", null, "Settings")) sub = Sub.None;
+            Kit.Gap(14);
+            var tab = (int)settingsTab;
+            if (tab < 0 || tab >= SettingsTabs.Length) tab = 0;
+            settingsTab = (SettingsTab)Kit.Tabs("##settings-tab", SettingsTabs, tab);
+        }
         Frame.EndHeader();
 
-        Frame.BeginBody(SettingsBodies[(int)settingsTab], null, 16, 22);
-        switch (settingsTab)
+        Frame.BeginBody(more ? "##settings-more" : SettingsBodies[(int)settingsTab], null, 16, 22);
+        if (more) DrawMoreOptions();
+        else
         {
-            case SettingsTab.Getting:
-                DrawGettingTab();
-                break;
-            case SettingsTab.Help:
-                DrawHelpTab();
-                break;
-            default:
-                DrawPlacingTab();
-                break;
+            switch (settingsTab)
+            {
+                case SettingsTab.Getting:
+                    DrawGettingTab();
+                    break;
+                case SettingsTab.Help:
+                    DrawHelpTab();
+                    break;
+                default:
+                    DrawPlacingTab();
+                    break;
+            }
         }
 
         Frame.BeginBottom("settings-bottom");
@@ -265,76 +277,48 @@ public sealed partial class MainWindow
             config.Save();
         }
 
-        // More options ›: the rest, under it in the same panel.
+        // More options ›: the rest, on their own screen (its header goes back here).
         var at = Kit.At;
         var count = MoreCount.ToString();
-        var chevron = moreOpen ? Icon.ChevronDown : Icon.ChevronRight;
         var cw = Txt.Measure(count, Face.Mono, 12).X;
-        SetRow(i++, "More options", "Place anywhere, floors, markers…", cw + S(6 + 14), S(20), p =>
+        SetRow(i, "More options", "Place anywhere, floors, markers…", cw + S(6 + 14), S(20), p =>
         {
             Txt.Line(Kit.Dl, p, count, Face.Mono, 12, Palette.Ash, 20);
-            Icons.Draw(Kit.Dl, chevron, new Vector2(p.X + cw + S(6), p.Y + S(3)), S(14), Palette.Ash);
+            Icons.Draw(Kit.Dl, Icon.ChevronRight, new Vector2(p.X + cw + S(6), p.Y + S(3)), S(14), Palette.Ash);
         });
         var rowH = ImGui.GetCursorScreenPos().Y - at.Y;
         var (clicked, hovered, _) = Kit.Hit("##more-row", at, new Vector2(Kit.Width, rowH));
-        if (hovered) Kit.RowFill(at, at + new Vector2(Kit.Width, rowH), Palette.RowHover, false, !moreOpen);
+        if (hovered) Kit.RowFill(at, at + new Vector2(Kit.Width, rowH), Palette.RowHover, false, true);
         Kit.FocusRing(at + new Vector2(S(4)), at + new Vector2(Kit.Width, rowH) - new Vector2(S(4)), S(10));
-        if (clicked) moreOpen = !moreOpen;
-        if (moreOpen) DrawMoreOptions(i);
+        if (clicked) moreOpen = true;
         Kit.EndPanel();
     }
 
-    private void DrawMoreOptions(int i)
+    /// <summary>
+    /// A labelled group of settings (0.9.0): the small mono section label, then its panel. Lay its
+    /// rows (from index 0), then <see cref="Kit.EndPanel"/>. <paramref name="first"/> leaves out the gap above.
+    /// </summary>
+    private static void SettingsGroup(string label, string panelId, bool first = false)
     {
+        if (!first) Kit.Gap(18);
+        Kit.Section(label);
+        Kit.Gap(10);
+        Kit.BeginPanel(panelId, 0, 0, 0);
+    }
+
+    /// <summary>
+    /// More options, its own screen under Placing (0.9.0): where and how it places, the markers, and
+    /// the rest. Every option as before.
+    /// </summary>
+    private void DrawMoreOptions()
+    {
+        // Where and how it places.
+        SettingsGroup("Where and how it places", "##more-placing", true);
+        var i = 0;
         if (SwitchRow(i++, "##anywhere", "Place anywhere", "Floating, sunk and overlapping pieces too", config.PlaceAnywhere,
                 "Lets floating, sunk and overlapping pieces be set (the MakePlace plugin's option). The game's own check is off only while a run lasts."))
         {
             config.PlaceAnywhere = !config.PlaceAnywhere;
-            config.Save();
-        }
-
-        var jitter = (int)MathF.Round(config.Jitter * 100);
-        var d = StepperRow(i++, "##jitter", "Pace variation", "How much the pause between pieces varies", $"±{jitter}%", jitter > 0, jitter < 50,
-            "So it never keeps an exact beat.");
-        if (d != 0)
-        {
-            config.Jitter = Math.Clamp(jitter + d * 5, 0, 50) / 100f;
-            config.Save();
-        }
-
-        var failures = config.MaxFailuresInARow;
-        d = StepperRow(i++, "##failures", "When to stop", "After this many pieces in a row don't work", failures.ToString(), failures > 1, failures < 10);
-        if (d != 0)
-        {
-            config.MaxFailuresInARow = Math.Clamp(failures + d, 1, 10);
-            config.Save();
-        }
-
-        if (SwitchRow(i++, "##chat", "Say what's needed in chat", "When the run pauses, stops or waits for you", config.ChatMessages))
-        {
-            config.ChatMessages = !config.ChatMessages;
-            config.Save();
-        }
-
-        var reach = (int)MathF.Round(config.NearMeRadius);
-        d = StepperRow(i++, "##near-reach", "How far Near me reaches", "While Near me is on", $"{reach} yalms", reach > 2, reach < 40,
-            "Pieces lists, and Start places, only what's this close to you while Near me (in Pieces) is on.");
-        if (d != 0)
-        {
-            config.NearMeRadius = Math.Clamp(reach + d, 2, 40);
-            config.Save();
-        }
-
-        if (SwitchRow(i++, "##storeroom-auto", "Place from the storeroom for me", "Off: you put them down", config.StoreroomAutomatic,
-                "Picks each in the furnishing list's Storeroom tab and chooses Place. Off: you put them down. Gardens: always you."))
-        {
-            config.StoreroomAutomatic = !config.StoreroomAutomatic;
-            config.Save();
-        }
-        if (SwitchRow(i++, "##bags-auto", "Place from your bags for me", "Off: you put them down", config.BagsAutomatic,
-                "Opens the item's menu and chooses Place. Off: you put them down."))
-        {
-            config.BagsAutomatic = !config.BagsAutomatic;
             config.Save();
         }
 
@@ -361,6 +345,40 @@ public sealed partial class MainWindow
             }
         }, floorsBelow, "Start places, and Pieces lists, only the floors picked here.");
 
+        if (SwitchRow(i++, "##storeroom-auto", "Place from the storeroom for me", "Off: you put them down", config.StoreroomAutomatic,
+                "Picks each in the furnishing list's Storeroom tab and chooses Place. Off: you put them down. Gardens: always you."))
+        {
+            config.StoreroomAutomatic = !config.StoreroomAutomatic;
+            config.Save();
+        }
+        if (SwitchRow(i++, "##bags-auto", "Place from your bags for me", "Off: you put them down", config.BagsAutomatic,
+                "Opens the item's menu and chooses Place. Off: you put them down."))
+        {
+            config.BagsAutomatic = !config.BagsAutomatic;
+            config.Save();
+        }
+
+        var jitter = (int)MathF.Round(config.Jitter * 100);
+        var d = StepperRow(i++, "##jitter", "Pace variation", "How much the pause between pieces varies", $"±{jitter}%", jitter > 0, jitter < 50,
+            "So it never keeps an exact beat.");
+        if (d != 0)
+        {
+            config.Jitter = Math.Clamp(jitter + d * 5, 0, 50) / 100f;
+            config.Save();
+        }
+
+        var failures = config.MaxFailuresInARow;
+        d = StepperRow(i++, "##failures", "When to stop", "After this many pieces in a row don't work", failures.ToString(), failures > 1, failures < 10);
+        if (d != 0)
+        {
+            config.MaxFailuresInARow = Math.Clamp(failures + d, 1, 10);
+            config.Save();
+        }
+        Kit.EndPanel();
+
+        // Markers.
+        SettingsGroup("Markers", "##more-markers");
+        i = 0;
         if (SwitchRow(i++, "##labels", "Name a marker", "When the mouse is over it", config.ShowLabels))
         {
             config.ShowLabels = !config.ShowLabels;
@@ -379,6 +397,25 @@ public sealed partial class MainWindow
             config.Save();
         }
 
+        var reach = (int)MathF.Round(config.NearMeRadius);
+        d = StepperRow(i++, "##near-reach", "How far Near me reaches", "While Near me is on", $"{reach} yalms", reach > 2, reach < 40,
+            "Pieces lists, and Start places, only what's this close to you while Near me (in Pieces) is on.");
+        if (d != 0)
+        {
+            config.NearMeRadius = Math.Clamp(reach + d, 2, 40);
+            config.Save();
+        }
+        Kit.EndPanel();
+
+        // Other.
+        SettingsGroup("Other", "##more-other");
+        i = 0;
+        if (SwitchRow(i++, "##chat", "Say what's needed in chat", "When the run pauses, stops or waits for you", config.ChatMessages))
+        {
+            config.ChatMessages = !config.ChatMessages;
+            config.Save();
+        }
+
         var cant = session.Context.Side == null ? "Go to your home first"
             : !session.Context.HasPermission ? "You can save a home you're allowed to decorate" : null;
         if (ButtonRow(i++, "##save-build", "Save what's placed as a build", "As Start's Save as a build", "Save a build", Btn.Glass, cant != null, cant,
@@ -389,18 +426,23 @@ public sealed partial class MainWindow
         SetRow(i, "Good to know", "Placing binds pieces to you; plugins like this are against the game's terms", 0, 0, _ => { }, false,
             "Placing binds a piece to you, as placing it by hand does, and dyeing uses up the dye. Plugins that act in the game for you are against Square Enix's terms of service; " +
             "this one only works on your own furniture in a home you may decorate, through the game's own windows, at the pace you set. The choice to use it is yours.");
+        Kit.EndPanel();
     }
 
     private static readonly string[] FloorLabels = { "Basement", "Ground floor", "Upper floor" };
 
     // ---------------------------------------------------------------------------------------------
-    // Getting: market prices, the errands' limits, the Housing Studio account.
+    // Getting (0.9.0: in three labelled groups): the market board, the shops, travel and bags.
 
     private static readonly string[] HubLabels = { "Limsa Lominsa", "Ul'dah" };
 
+    /// <summary>Currencies' pills are shown (Choose opens them, pressing it again closes them).</summary>
+    private bool currenciesOpen;
+
     private void DrawGettingTab()
     {
-        Kit.BeginPanel("##set-getting", 0, 0, 0);
+        // The market board.
+        SettingsGroup("Market board", "##set-getting-market", true);
         var i = 0;
         if (SwitchRow(i++, "##market-prices", "Market prices", "Asks Universalis for your data centre", config.LookUpMarketPrices,
                 "For what no vendor sells, the shopping list asks universalis.app over the internet what your data centre's market board wants."))
@@ -428,7 +470,19 @@ public sealed partial class MainWindow
                 config.Save();
             }
         }, below: true);
-        DrawCurrenciesRow(i++);
+        Kit.EndPanel();
+
+        // The shops.
+        SettingsGroup("Shops", "##set-getting-shops");
+        DrawCurrenciesRow(0);
+        Kit.EndPanel();
+
+        // Travel and bags. Which home "go home" is: here too, as the errands can't open their screen while it's unknown.
+        SettingsGroup("Travel and bags", "##set-getting-travel");
+        i = 0;
+        var here = ErrandGame.HomeHere(session.Context);
+        DrawHomeIsRow(i++, here, "##settings-errand-home");
+        DrawDoorWayRow(i++);
         if (SwitchRow(i++, "##errand-ride", "Ride and sprint", "Mount up where the zone allows, else sprint", config.ErrandsRide,
                 "For walks of 35 yalms or more, the mount roulette where the zone lets you ride (not a city's streets or inside); Sprint otherwise, again whenever it's ready. Off: walks." + errands))
         {
@@ -436,26 +490,22 @@ public sealed partial class MainWindow
             config.Save();
         }
         var spare = config.ErrandsSpareSlots;
-        var d = StepperRow(i++, "##errand-spare", "Spare bag slots", "Each trip leaves these empty", spare.ToString(), spare > 0, spare < 20,
+        var d = StepperRow(i, "##errand-spare", "Spare bag slots", "Each trip leaves these empty", spare.ToString(), spare > 0, spare < 20,
             "Bag slots the errands leave free, for a stack that doesn't join one already there or a quest item." + errands);
         if (d != 0)
         {
             config.ErrandsSpareSlots = Math.Clamp(spare + d, 0, 20);
             config.Save();
         }
-        // Which home "go home" is: here too, as the errands can't open their screen while it's unknown.
-        var here = ErrandGame.HomeHere(session.Context);
-        DrawHomeIsRow(i++, here, "##settings-errand-home");
-        DrawDoorWayRow(i++);
-        DrawAccountRow(i++);
-        DrawGameLinkRows(i);
         Kit.EndPanel();
     }
 
     /// <summary>
     /// Currencies (0.7.14): which currencies the errands may spend at currency vendors (MGP, marks, seals,
     /// tomestones…), each a pill, picked ones lit; the game's list of the currencies that vendors take for
-    /// furnishings, dyes and fixtures (MGP first). Only what you have of one is ever planned.
+    /// furnishings, dyes and fixtures (MGP first). Only what you have of one is ever planned. Folded
+    /// (0.9.0) into one row, "20 of 20 allowed · only what you have is spent", whose Choose opens the
+    /// pills under it (pressing it again closes them).
     /// </summary>
     private void DrawCurrenciesRow(int index)
     {
@@ -466,7 +516,20 @@ public sealed partial class MainWindow
             SetRow(index, "Currencies", Plugin.Shop.Vendors.Ready ? "No currency vendor sells furnishings" : "Reading the game's vendors…", 0, 0, _ => { });
             return;
         }
-        // The pills, wrapped to the row's width.
+        var allowed = config.ErrandsCurrencies;
+        var on = list.Count(c => allowed.Contains(c.Item));
+        const string choose = "Choose";
+        var chevron = currenciesOpen ? Icon.ChevronDown : Icon.ChevronRight;
+        SetRow(index, "Currencies", SettingsWords.Currencies(on, list.Count), Kit.MoreButtonWidth(choose, chevron), S(30), p =>
+            {
+                if (Kit.MoreButton("##currencies-choose", p, choose, chevron, currenciesOpen ? "Close the list" : "Choose which currencies the errands may spend"))
+                    currenciesOpen = !currenciesOpen;
+            }, false,
+            "Currency vendors (the Gold Saucer's for MGP, and others for marks, seals, tomestones): the errands go to them for what no gil vendor sells, "
+            + "spending only what you have of a currency you pick here. The estimate shows what each costs before you set out.");
+        if (!currenciesOpen) return;
+
+        // The pills, under the row, wrapped to its width.
         var width = Kit.Width - S(28);
         var gap = S(8);
         var h = Kit.ButtonHeight(BtnSize.Tiny);
@@ -483,25 +546,21 @@ public sealed partial class MainWindow
             spots.Add(new Vector2(x, y));
             x += w + gap;
         }
-        var allowed = config.ErrandsCurrencies;
-        var on = list.Count(c => allowed.Contains(c.Item));
-        SetRow(index, "Currencies", on == 0 ? "None: gil vendors and the board only" : $"{on} the errands may spend, only what you have", width, y + h, p =>
+        var at = Kit.At;
+        var origin = new Vector2(at.X + S(14), at.Y);
+        for (var c = 0; c < list.Count; c++)
         {
-            for (var c = 0; c < list.Count; c++)
+            var (item, name) = list[c];
+            var picked = allowed.Contains(item);
+            if (Kit.Button($"##currency{item}", origin + spots[c], name, picked ? Btn.Picked : Btn.Glass, BtnSize.Tiny, null, 0, false,
+                    picked ? $"The errands may spend {name} at its vendors (after any gil vendor)." : $"Let the errands spend {name} at its vendors."))
             {
-                var (item, name) = list[c];
-                var picked = allowed.Contains(item);
-                if (Kit.Button($"##currency{item}", p + spots[c], name, picked ? Btn.Picked : Btn.Glass, BtnSize.Tiny, null, 0, false,
-                        picked ? $"The errands may spend {name} at its vendors (after any gil vendor)." : $"Let the errands spend {name} at its vendors."))
-                {
-                    if (picked) allowed.Remove(item);
-                    else allowed.Add(item);
-                    config.Save();
-                }
+                if (picked) allowed.Remove(item);
+                else allowed.Add(item);
+                config.Save();
             }
-        }, below: true,
-            tip: "Currency vendors (the Gold Saucer's for MGP, and others for marks, seals, tomestones): the errands go to them for what no gil vendor sells, "
-                 + "spending only what you have of a currency you pick here. The estimate shows what each costs before you set out.");
+        }
+        Kit.Reserve(at, Kit.Width, y + h + S(14));
     }
 
     /// <summary>
@@ -567,9 +626,22 @@ public sealed partial class MainWindow
     private System.Collections.Generic.List<UiCall>? calls;
     private int unverifiedCalls;
 
+    /// <summary>
+    /// Help (0.9.0: in three labelled groups): the Housing Studio account and the site's two switches
+    /// (from Getting), how a run behaves (step by step, trusting the new clicks, the "Place" words, the
+    /// old preview method), and making a report (the recorder, copying it with the log, the windows'
+    /// values while recording, the windows and clicks used).
+    /// </summary>
     private void DrawHelpTab()
     {
-        Kit.BeginPanel("##set-help", 0, 0, 0);
+        // The Housing Studio account, and what it brings from the site.
+        SettingsGroup("Housing Studio account", "##set-help-account", true);
+        DrawAccountRow(0);
+        DrawGameLinkRows(1);
+        Kit.EndPanel();
+
+        // How a run behaves.
+        SettingsGroup("How a run behaves", "##set-help-run");
         var i = 0;
         if (SwitchRow(i++, "##step", "Step by step", "Hold before every click", config.StepByStep,
                 "Holds before every click and shows what it's about to do, with the window and values, until you press Continue (or /hstudio continue). Use it for your first run."))
@@ -577,33 +649,12 @@ public sealed partial class MainWindow
             config.StepByStep = !config.StepByStep;
             config.Save();
         }
-        if (SwitchRow(i++, "##move-preview", "The old preview method", "Move the preview before Place", config.MovePreviewBeforePlace,
-                "Moves the game's preview of a storeroom piece to its spot before choosing Place. Off: the piece is placed where the game puts it, then moved to its spot."))
+        if (SwitchRow(i++, "##errand-trust", "Trust the new clicks", "Stop holding the ones not yet seen working", config.ErrandsTrustGuesses,
+                "Get everything for me: off, each click not yet seen working (buying, a retainer's menu) waits for Continue, so you can watch it. On once you have."))
         {
-            config.MovePreviewBeforePlace = !config.MovePreviewBeforePlace;
+            config.ErrandsTrustGuesses = !config.ErrandsTrustGuesses;
             config.Save();
         }
-
-        // The recorder.
-        var recording = recorder.Recording;
-        var recNote = recording ? $"Recording · {Words.Count(recorder.LineCount, "line")} so far" : recorder.SetupError ?? "For a bug report";
-        const string recTip = "While on, it writes down every game window that opens or closes, every click's values and the housing state. "
-                              + "Turn it on, place one piece from your bags and one from the storeroom, dye one piece, by hand; turn it off, copy, and send the text along.";
-        if (ButtonRow(i++, recording ? "##rec-stop" : "##rec-start", "Record what I do", recNote, recording ? "Stop" : "Start", recording ? Btn.Danger : Btn.Glass,
-                false, null, recTip))
-        {
-            if (recording) OnFramework(recorder.Stop);
-            else OnFramework(recorder.Start);
-        }
-        if (ButtonRow(i++, "##rec-copy", "Copy the recording and log", "To send along with what went wrong", "Copy", Btn.Glass,
-                recorder.LineCount == 0 && log.Lines.Count == 0))
-        {
-            ImGui.SetClipboardText(Diagnostics());
-            Notify("Recording and log copied");
-        }
-        if (recording && ButtonRow(i++, "##rec-dump", "Write down the windows' values", "Every value they hold now", "Write down", Btn.Glass, false, null,
-                "Adds every value the furnishing list, the dye window and the menus hold right now (open the Storeroom tab first)."))
-            OnFramework(recorder.DumpWindows);
 
         placeWords ??= config.PlaceMenuWords;
         var lang = Services.ClientState.ClientLanguage;
@@ -624,12 +675,36 @@ public sealed partial class MainWindow
             tip: $"The \"Place\" entry in an item's menu: {(Game.GameWords.PlaceFromGame(lang) ? "the game's own, in your client's language" : "built in for your client")}. "
                  + "If your menu says something else, type it here (several, comma-separated).");
 
-        if (SwitchRow(i++, "##errand-trust", "Trust the new clicks", "Stop holding the ones not yet seen working", config.ErrandsTrustGuesses,
-                "Get everything for me: off, each click not yet seen working (buying, a retainer's menu) waits for Continue, so you can watch it. On once you have."))
+        if (SwitchRow(i, "##move-preview", "The old preview method", "Move the preview before Place", config.MovePreviewBeforePlace,
+                "Moves the game's preview of a storeroom piece to its spot before choosing Place. Off: the piece is placed where the game puts it, then moved to its spot."))
         {
-            config.ErrandsTrustGuesses = !config.ErrandsTrustGuesses;
+            config.MovePreviewBeforePlace = !config.MovePreviewBeforePlace;
             config.Save();
         }
+        Kit.EndPanel();
+
+        // Making a report: the recorder.
+        SettingsGroup("Making a report", "##set-help-report");
+        i = 0;
+        var recording = recorder.Recording;
+        var recNote = recording ? $"Recording · {Words.Count(recorder.LineCount, "line")} so far" : recorder.SetupError ?? "For a bug report";
+        const string recTip = "While on, it writes down every game window that opens or closes, every click's values and the housing state. "
+                              + "Turn it on, place one piece from your bags and one from the storeroom, dye one piece, by hand; turn it off, copy, and send the text along.";
+        if (ButtonRow(i++, recording ? "##rec-stop" : "##rec-start", "Record what I do", recNote, recording ? "Stop" : "Start", recording ? Btn.Danger : Btn.Glass,
+                false, null, recTip))
+        {
+            if (recording) OnFramework(recorder.Stop);
+            else OnFramework(recorder.Start);
+        }
+        if (ButtonRow(i++, "##rec-copy", "Copy the recording and log", "To send along with what went wrong", "Copy", Btn.Glass,
+                recorder.LineCount == 0 && log.Lines.Count == 0))
+        {
+            ImGui.SetClipboardText(Diagnostics());
+            Notify("Recording and log copied");
+        }
+        if (recording && ButtonRow(i++, "##rec-dump", "Write down the windows' values", "Every value they hold now", "Write down", Btn.Glass, false, null,
+                "Adds every value the furnishing list, the dye window and the menus hold right now (open the Storeroom tab first)."))
+            OnFramework(recorder.DumpWindows);
 
         // The windows and clicks the run uses, each with where its values came from.
         if (calls == null)

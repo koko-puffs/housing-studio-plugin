@@ -30,6 +30,13 @@ public sealed partial class MainWindow
 
     private bool fixturesWereActive;
 
+    /// <summary>Which fixture of how many the run is on, for its panel's eyebrow row.</summary>
+    private readonly FixtureProgress fixtureProgress = new();
+
+    /// <summary>A fixture's slot in the run's words ("ground floor's walls", outside "roof"), as its steps name it.</summary>
+    private static string FixtureSlotWords(LayoutFixture f) =>
+        f.Level == "Exterior" ? f.Type.ToLowerInvariant() : $"{f.Level.ToLowerInvariant()}'s {f.Type.ToLowerInvariant()}";
+
     /// <summary>
     /// While the fixtures are being set: the brass panel with the step, Continue and Stop, with the
     /// gaps around it (Ready's Finish stage, and the top of Done). Returns false (and draws nothing)
@@ -49,6 +56,10 @@ public sealed partial class MainWindow
             }
             return false;
         }
+        // First seen running: the fixtures it sets, for the panel's "1 of 3" (the run's own list, as it makes it).
+        if (!fixturesWereActive)
+            fixtureProgress.Begin(FixturePlan().Where(t => t.State == FixtureState.ToSet && t.Slot != null)
+                .Select(t => (data.AnyItemName(t.Fixture.ItemId), FixtureSlotWords(t.Fixture))));
         fixturesWereActive = true;
         if (gapBefore > 0) Kit.Gap(gapBefore);
         DrawFixturesRunning(run);
@@ -195,7 +206,13 @@ public sealed partial class MainWindow
         var w = Kit.Width;
         var what = run.Rehearsal ? "REHEARSING FIXTURES" : "SETTING FIXTURES";
         var eyebrow = run.AwaitingContinue ? $"{what} · NEXT" : run.WaitingForYou ? $"{what} · WAITING FOR YOU" : what;
-        var eh = Kit.Eyebrow(at, eyebrow, Palette.Brass, w);
+        // "1 of 3" on the right: which fixture of how many.
+        fixtureProgress.See(run.StepLabel);
+        var count = fixtureProgress.Text;
+        var countW = count != null ? Txt.Measure(count, Face.Sans, 13).X : 0;
+        var eh = Kit.Eyebrow(at, eyebrow, Palette.Brass, count != null ? w - countW - S(12) : w);
+        if (count != null)
+            Txt.Draw(Kit.Dl, new Vector2(at.X + w - countW, at.Y + (eh - Txt.Natural(Face.Sans, 13)) / 2), count, Face.Sans, 13, Palette.Ash);
         Kit.Reserve(at, w, eh);
         Kit.Gap(6);
         Txt.Para(new[] { new Run(run.StepLabel ?? "Starting…", Face.Sans, 14, Palette.Ivory) });
