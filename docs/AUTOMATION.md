@@ -308,9 +308,17 @@ pieces keep theirs, bag pieces are undyed), counted when that differs from the d
 dye phase predicts, as the first line does (0.3.0 said "then 9 to dye" and then "0 pieces to dye"); a
 real run's counts only pieces that got placed, and says so when that's fewer.
 
-The dye window chooses which dye item it uses (both recordings used "Standard Spectrum Dye"), so a
-piece isn't skipped because the Stain's own dye items aren't in your bags; a piece the game won't dye
-is skipped as "dye missing".
+Dyes you don't have aren't tried (0.9.3): when the dye phase is planned, each dye is counted in your
+bags (its Stain's own dye items, as Ready's "dyes short" counts them), and the pieces beyond that are
+marked skipped ("Not dyed: no … left in your bags", under Needs you) and passed over by the run
+(`StartNextJob` skips a job that isn't pending). Before 0.9.3 every piece was tried, as the dye window
+might use another dye item (both recordings showed "Standard Spectrum Dye"), and one the game wouldn't
+dye was skipped as "dye missing" (the window is still checked: a dye not in its list is skipped).
+
+The dye confirmation's Yes waits for the whole click gap after Dye and for the question to have been
+open for four frames and 0.2 s (0.9.3): in 0.9.1 and 0.9.2 Yes went in the frame the question came up,
+and the game crashed twice answering it (the dye window's text filled from a bad pointer, in
+`AgentColorant`'s refresh).
 
 ## The menus' words in other languages
 

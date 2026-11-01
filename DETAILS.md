@@ -8,7 +8,13 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.9.2. Placing works in the game; the newer features haven't all been tried in it yet.**
+> **Status: 0.9.3. Placing works in the game; the newer features haven't all been tried in it yet.**
+> 0.9.3: **the dye crash, found**: both crash reports point at the dye confirmation's Yes, sent in the very
+> frame the question came up (0.9.1 had cut the wait before it to a third). Yes now waits for the whole
+> click gap after Dye and for the question to have been open for 0.2 s. **Dyes you don't have aren't
+> tried**: the dye phase counts each dye in your bags, and the pieces beyond that are marked "Not dyed"
+> under Needs you at once, and passed over; they used to be opened in the dye window, looked for and
+> skipped one by one.
 > 0.9.2: **a game crash while dyeing.** A dye you have none of isn't in the dye window's list; the run
 > then guessed its row from the game's dye sheet, which could be past the list's end, and the game read
 > past its own list (a crash in the window's text). Now a dye not in the list is skipped as out (and

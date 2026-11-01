@@ -755,6 +755,8 @@ public sealed unsafe partial class PlacementRunner : IDisposable
     private void StartNextJob()
     {
         index++;
+        // Pieces known not to work before they're tried (a dye you have none of, 0.9.3): passed over.
+        while (index < jobs.Count && jobs[index].Outcome != JobOutcome.Pending) index++;
         if (index >= jobs.Count)
         {
             if (AfterClearOut()) return;
@@ -2397,6 +2399,8 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         nint instance = 0;
         // The dye window's list, held steady for a few frames before anything goes into it (this piece's own).
         var windowFilled = new Settle(3, TimeSpan.FromMilliseconds(80));
+        // The dye confirmation, open and the same for a few frames before Yes (this piece's own).
+        var confirmSettled = new Settle(4, TimeSpan.FromMilliseconds(200));
         return new List<Step>
         {
             EnsureMode(EditorMode.Dye),
@@ -2579,13 +2583,21 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             new Step
             {
                 Label = $"Confirm: {UiTable.DyeConfirmYes.Describe()}",
+                // The whole click gap after Dye, and the question open and steady for a moment before Yes
+                // (0.9.3): Yes in the frame the question came up crashed the game twice in 0.9.1 and 0.9.2
+                // (the dye window's text filled from a bad pointer, in AgentColorant's answer to Yes).
                 IsAction = true,
-                Gap = DyeGap,
                 Run = () =>
                 {
-                    if (GameUi.IsOpen(UiTable.DyeConfirm))
+                    var values = GameUi.IsOpen(UiTable.DyeConfirm) ? GameUi.TextValues(UiTable.DyeConfirm) : null;
+                    var state = values != null ? $"open:{values.Count}" : null;
+                    if (!confirmSettled.Update(state, DateTime.UtcNow))
                     {
-                        log.Info($"  The game asks: {string.Join(" ", GameUi.TextValues(UiTable.DyeConfirm).Values.Where(v => v.Length > 0).Take(4))}");
+                        if (state != null) return StepOutcome.Waiting;
+                    }
+                    else
+                    {
+                        log.Info($"  The game asks: {string.Join(" ", values!.Values.Where(v => v.Length > 0).Take(4))}");
                         GameUi.Fire(UiTable.DyeConfirmYes);
                         asked[0] = true;
                         return StepOutcome.Done;
@@ -3179,9 +3191,33 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             var have = HousingActions.DyesOwned(data, stain);
             if (have >= need) continue;
             shortfall.Add((stain, data.DyeName(stain), need, have));
-            log.Info($"  {data.DyeName(stain)}: {need} to dye, {have} of its own dye items in your bags (the game may use another dye; pieces it refuses are skipped).");
         }
         DyeShortfall = shortfall;
+        // 0.9.3: the dyes you have none of (or too few of) aren't tried. Each was opened in the dye window,
+        // looked for and skipped (and the game crashed after them, twice): the pieces beyond what your bags
+        // hold are marked not dyed now, and the run passes over them.
+        if (!DryRun)
+        {
+            var left = shortfall.ToDictionary(x => x.Item1, x => x.Item4);
+            var now = DateTime.UtcNow;
+            foreach (var j in plan.Jobs)
+            {
+                if (!left.TryGetValue(j.Target.Stain, out var have)) continue;
+                if (have > 0)
+                {
+                    left[j.Target.Stain] = have - 1;
+                    continue;
+                }
+                var dye = data.DyeName(j.Target.Stain);
+                j.Outcome = JobOutcome.Skipped;
+                j.Problem = ProblemKind.DyeMissing;
+                j.Note = $"Not dyed: no {dye} left in your bags for it. Get more and Try again.";
+                j.StartedAt = now;
+                j.EndedAt = now;
+            }
+            foreach (var (stain, name, need, have) in shortfall)
+                log.Warn($"  {name}: {need} to dye and {have} in your bags, so {need - have} {(need - have == 1 ? "isn't" : "aren't")} tried (listed under Needs you).");
+        }
         foreach (var n in plan.Undye)
             log.Info($"{data.ItemName(n.Target.ItemId)} is dyed {data.DyeName(n.Has)} but the design has it undyed; removing a dye is left to you.");
     }
