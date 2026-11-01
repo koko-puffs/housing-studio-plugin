@@ -1,6 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <!-- Housing Studio's plugin icon: a brass house on the studio's warm ink (the site's studio.css
-       ink, walnut, brass and brass-soft). Rendered to HousingStudio/images/icon.png by tools/make-icon.mjs. -->
+  <!-- Housing Studio's plugin icon: the site's mark (kokos-tools StudioMark.vue and
+       public/favicon-housing.svg), two polaroids of the Sketcher's blueprint, the front one with a
+       house in its pencil yellow and its caption, on the studio's warm ink with a lamp's brass glow
+       (the site's studio.css ink, walnut and brass). Keep the polaroids in step with the site's.
+       Rendered to HousingStudio/images/icon.png by tools/make-icon.mjs. -->
   <defs>
     <linearGradient id="room" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#1c1814"/>
@@ -14,10 +17,17 @@
   <rect x="8" y="8" width="496" height="496" rx="112" fill="url(#room)"/>
   <rect x="8" y="8" width="496" height="496" rx="112" fill="url(#lamp)"/>
   <rect x="9.5" y="9.5" width="493" height="493" rx="110.5" fill="none" stroke="#efe6d6" stroke-opacity="0.16" stroke-width="3"/>
-  <!-- the house -->
-  <path d="M120 250 L256 128 L392 250" fill="none" stroke="#d6b06c" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M152 236 L152 380 Q152 392 164 392 L348 392 Q360 392 360 380 L360 236" fill="none" stroke="#d6b06c" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
-  <!-- the door, and a lit window -->
-  <path d="M226 392 L226 316 Q226 296 246 296 L266 296 Q286 296 286 316 L286 392" fill="none" stroke="#d6b06c" stroke-width="22" stroke-linejoin="round"/>
-  <rect x="300" y="248" width="34" height="34" rx="7" fill="#ecd3a2"/>
+  <!-- the mark -->
+  <svg x="40" y="40" width="432" height="432" viewBox="3 3 42 42">
+    <g transform="rotate(11 26 24)">
+      <rect x="13" y="6" width="26" height="33" rx="1.2" fill="#cfc5b3"/>
+      <rect x="15.8" y="8.8" width="20.4" height="19.5" fill="#0c2742"/>
+    </g>
+    <g transform="rotate(-7 22 25)">
+      <rect x="8" y="8" width="26" height="33" rx="1.2" fill="#f3eee4" stroke="#14100c" stroke-width="1.4" paint-order="stroke"/>
+      <rect x="10.8" y="10.8" width="20.4" height="19.5" fill="#0c2742"/>
+      <path d="M13.5 30.3v-6.5l7.5-6.5 7.5 6.5v6.5z" fill="#ffcf7a"/>
+      <path d="M13 36h10" stroke="#574634" stroke-width="1.8" stroke-linecap="round"/>
+    </g>
+  </svg>
 </svg>
