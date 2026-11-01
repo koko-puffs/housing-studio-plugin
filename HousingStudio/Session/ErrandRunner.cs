@@ -2809,10 +2809,12 @@ public sealed partial class ErrandRunner : IDisposable
                 if (!(session.ReadAt > readAfter && session.Plan != null && session.Context.HouseId == home!.HouseId)) return StepOutcome.Waiting;
                 // Inside, the storeroom too: read before it had come in, its pieces counted as missing and
                 // weren't placed (0.8.5's chamber: "0 from the storeroom"). Given up on after 15 s.
+                // 0.9.7: a few seconds, then the placing reads it itself (it opens the furnishing editor, which
+                // brings the storeroom, and matches the design again before planning).
                 if (session.PlanSide == Side.Interior && !session.StoreroomLoaded)
                 {
-                    if (DateTime.UtcNow - readAfter < TimeSpan.FromSeconds(15)) return StepOutcome.Waiting;
-                    log.Warn("  The storeroom hasn't come in after 15 s: its pieces are left for a later run (open Housing → Indoor Furnishings once, then start placing from Ready).");
+                    if (DateTime.UtcNow - readAfter < TimeSpan.FromSeconds(3)) return StepOutcome.Waiting;
+                    log.Info("  The storeroom hasn't come in yet: the placing opens the furnishing editor, which brings it.");
                 }
                 return StepOutcome.Done;
             },

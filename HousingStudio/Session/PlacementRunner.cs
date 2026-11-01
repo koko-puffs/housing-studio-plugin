@@ -336,7 +336,19 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         heldRefused = false;
         storeModeUsed = false;
         putAwayPlanned = toPutAway.Count == 0;
-        if (jobs.Count == 0 && dyesExpected == 0 && toPutAway.Count == 0)
+        // 0.9.7: inside, with the storeroom not sent by the game yet (you've just come in: the errands'
+        // return), its pieces read as missing and the run placed from your bags first ("0 from the
+        // storeroom, 97 from your bags"), into a full storeroom. The run opens the furnishing editor first
+        // (which brings the storeroom), then matches the design again and plans, as after a clear out.
+        storeroomFirst = !dryRun && !rehearse && !clearOutReplan && toPutAway.Count == 0
+                         && session.Context.Side == Side.Interior && !session.StoreroomLoaded;
+        if (storeroomFirst)
+        {
+            clearOutWanted = entries.Select(e => (e.Target.Key, e.Target.ItemId)).ToHashSet();
+            jobs.Clear();
+            clearOutReplan = true;
+        }
+        if (jobs.Count == 0 && dyesExpected == 0 && toPutAway.Count == 0 && !storeroomFirst)
         {
             StopReason = "Nothing to do: every piece shown is in place, in its dye (or missing).";
             log.Info(StopReason);
@@ -439,7 +451,25 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                  + $"{(dyes ? $", then {dyesExpected} to dye ({dyedInDesign} of the pieces are dyed in the design; the others already have their dye, or will once placed from the storeroom)" : string.Empty)}.{(queue.StepByStep ? " Step by step: press Continue before each click." : string.Empty)}");
         State = RunState.Running;
         StatusText = "Starting…";
+        if (storeroomFirst)
+        {
+            log.Info("The storeroom hasn't come in yet: opening the furnishing editor brings it; the design is matched again then.");
+            queue.Begin(new List<Step>
+            {
+                EnsureMode(EditorMode.Rotate),
+                new Step
+                {
+                    Label = "The storeroom comes in",
+                    Run = () => InventoryReader.StoreroomLoaded(side) ? StepOutcome.Done : StepOutcome.Waiting,
+                    Timeout = TimeSpan.FromSeconds(15),
+                    TimeoutMessage = "The storeroom didn't come in with the furnishing editor open, so what's in it isn't known: nothing was placed. Start again.",
+                },
+            });
+        }
     }
+
+    /// <summary>This run reads the storeroom first (it hadn't come in), then plans (<see cref="AfterClearOut"/>).</summary>
+    private bool storeroomFirst;
 
     /// <summary>The game refused a held piece's set-down in this run: later bag pieces go straight to you.</summary>
     private bool heldRefused;
@@ -688,6 +718,13 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             case QueueState.AwaitingContinue:
                 return;
             default:
+                // The run's own first steps (the storeroom read first, 0.9.7) stopped: the run stops, rather
+                // than planning without the storeroom.
+                if (Current == null && queue.State == QueueState.Stopped && storeroomFirst && clearOutReplan)
+                {
+                    Stop(queue.Message ?? "The storeroom couldn't be read.");
+                    return;
+                }
                 if (DateTime.UtcNow >= nextJobAt) StartNextJob();
                 return;
         }

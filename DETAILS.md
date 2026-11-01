@@ -12,6 +12,14 @@ its exact spot, then dyes everything to match.
 > 0.9.6: **the errands target what they use.** NPCs, summoning bells, market boards and doors were
 > talked to and used without ever being targeted, which a person can't do (and your target is sent to
 > the server). Now each is targeted first, and used a moment later (0.18 to 0.42 s, never the same).
+> **The storeroom read before placing**: back in the chamber after the errands, the storeroom still
+> hadn't come in after 15 s, and placing started without it ("0 from the storeroom, 97 from your bags"),
+> into a storeroom that was full: the first bag piece couldn't be stored, nor placed from the bag. The
+> game sends the storeroom once the furnishing editor opens, so now a run that starts inside without it
+> (the errands' or Ready's) opens the editor first, waits for it, and only then matches the design and
+> plans: the storeroom's pieces first, which makes room for the bags'. If it still doesn't come, the
+> run stops rather than placing blind. (A board listing is bought whole: one dye wanted from a listing of
+> two buys both, at the price the errands showed.)
 > 0.9.5: **what stacks onto your bags needs no free slot.** With 2 slots kept spare and 2 free, one Wide
 > Spectrum #1 Dye was "no room in your bags", though 2 were in them already and it would only have joined
 > their stack. The trips now count the room left on the stacks you have (normal quality) before taking a

@@ -301,6 +301,11 @@ public sealed unsafe partial class PlacementRunner
     {
         if (!clearOutReplan) return false;
         var now = DateTime.UtcNow;
+        if (clearOutDoneAt == null && storeroomFirst)
+        {
+            clearOutDoneAt = now;
+            log.Info("The storeroom is in: matching the design against your storeroom, bags and what's placed.");
+        }
         if (clearOutDoneAt == null)
         {
             clearOutDoneAt = now;
