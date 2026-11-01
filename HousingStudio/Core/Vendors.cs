@@ -163,6 +163,22 @@ public static class Residential
     }
 
     /// <summary>
+    /// The aetheryte of the city whose Residential District Aethernet goes to a district (its row in the
+    /// Aetheryte sheet, which is also Lifestream's ResidentialAetheryteKind): Limsa Lominsa's for Mist,
+    /// New Gridania's for the Lavender Beds, Ul'dah's for the Goblet, Kugane's for Shirogane, the
+    /// Foundation's for Empyreum. 0 for anything else.
+    /// </summary>
+    public static uint CityAetheryte(string? district) => district switch
+    {
+        "mist" => 8,
+        "lavender-beds" => 2,
+        "goblet" => 9,
+        "shirogane" => 111,
+        "empyreum" => 70,
+        _ => 0,
+    };
+
+    /// <summary>
     /// What the game keeps at an ENpcBase's ENpcData: rows of many sheets, told apart by their range
     /// (the row id's high 16 bits). These are the ones a gil shop is reached through.
     /// </summary>

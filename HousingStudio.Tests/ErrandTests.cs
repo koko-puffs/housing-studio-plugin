@@ -72,6 +72,27 @@ public class ErrandPlannerTests
     }
 
     [Fact]
+    public void YourOwnDistrictsVendorComesBeforeAnothers()
+    {
+        // The Goblet's merchant (only it sells one thing) after Mist's, your own, though "goblet" sorts first.
+        var shop = Shop(new[] { new Need(200, 1, NeedKind.Piece), new Need(201, 1, NeedKind.Piece) },
+            offers: new[] { Offer(200, 1000, npc: 1, district: "mist"), Offer(201, 1000, npc: 2, district: "goblet", territory: 341) });
+        var plan = ErrandPlanner.Build(shop, Options() with { PreferDistrict = "mist" });
+        Assert.Equal(new[] { "mist", "goblet" }, Assert.Single(plan.Trips).Stops.Select(s => s.Vendor!.District));
+    }
+
+    [Fact]
+    public void ADistrictsCityIsItsAethernetsAetheryte()
+    {
+        Assert.Equal(8u, Residential.CityAetheryte("mist"));
+        Assert.Equal(2u, Residential.CityAetheryte("lavender-beds"));
+        Assert.Equal(9u, Residential.CityAetheryte("goblet"));
+        Assert.Equal(111u, Residential.CityAetheryte("shirogane"));
+        Assert.Equal(70u, Residential.CityAetheryte("empyreum"));
+        Assert.Equal(0u, Residential.CityAetheryte(null));
+    }
+
+    [Fact]
     public void ABellAtHomeComesFirst()
     {
         var shop = Shop(new[] { new Need(200, 2, NeedKind.Piece), new Need(100, 1, NeedKind.Piece) },

@@ -446,6 +446,16 @@ it. `ShoppingLine.Exchangeable` (Craft/Unknown lines: the best currency vendor, 
 again (as by hand: HousingGoods [i:-1], HousingLayout [i:-2]), then `HousingLayout` closed outright;
 closed with no menu after 0.8 s: `HousingActions.OpenHousingMenu()`. 8 s in all.
 
+**0.8.3**: other districts' vendors. `Reachable`: a district vendor not of your home's district (or
+from an apartment) is reachable when `ErrandGame.Attuned(Residential.CityAetheryte(district))`
+(8 Mist, 2 Lavender Beds, 9 Goblet, 111 Shirogane, 70 Empyreum: the Aetheryte rows, which are
+Lifestream's `ResidentialAetheryteKind`). `VendorTravelSteps` → `DistrictSteps(district)`:
+`Lifestream.GoToHousingAddress` with its `AddressBookEntryTuple` (name "", world = current, city =
+the aetheryte, ward 1, House, plot 1, …) via `Lifestream.GoToWard`; arrived when
+`ErrandGame.WardDistrict()` is the district and settled for 1.5 s, then `Lifestream.Abort` (it walks on
+to the plot) and the nearest NPC of the vendor's name is walked to. Asked again after 20 s (twice).
+`ErrandPlanner.PlaceOrder`: vendors of `PreferDistrict` first, then other districts', then by zone.
+
 **0.7.13**: `ErrandPlanner.Pack` cuts each stop's units (by `Key`) into pieces that fit a trip, then
 packs the pieces biggest first into the first trip with room (first-fit decreasing); a trip keeps the
 plan's order. `NeedKind.Fixture`: `Shopping.FixturesToGet` (the plugin sets it to `FixtureRun.Plan()`'s

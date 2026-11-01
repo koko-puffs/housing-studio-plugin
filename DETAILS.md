@@ -8,7 +8,14 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.8.2. Placing works in the game; the newer features haven't all been tried in it yet.**
+> **Status: 0.8.3. Placing works in the game; the newer features haven't all been tried in it yet.**
+> 0.8.3: **other districts' vendors.** What only another residential district's vendors sell is got
+> there: Lifestream's housing address takes you through that district's city aetheryte and its
+> Residential District Aethernet (Limsa Lominsa → Mist, New Gridania → the Lavender Beds, Ul'dah → the
+> Goblet, Kugane → Shirogane, the Foundation → Empyreum) to ward 1, and the nearest merchant there is
+> walked to. Only cities whose aetheryte you're attuned to; your own district's vendors still come
+> first (in the plan, and in a trip), and the vendor chosen for an item is still your district's when
+> it sells it. An apartment's own district is reached the same way.
 > 0.8.2, from the Mist house's rehearsal. **Vendors**: a remodelled interior's zone ("h2i2") names no
 > district, so the house's district was read as none and its Housing Merchant as out of reach: nothing
 > was planned from vendors, and what only they sell was left out. The district now comes from the
@@ -711,7 +718,7 @@ place") opens the same screen, **Get, before setting out**:
   it comes home: matched again by item and spot, never more than were chosen), and for a swap what's
   here is kept under that name, as Ready's own start does. Later trips' placing doesn't clear out.
 - **Not got this way**, one row per reason: to craft (with **Teamcraft**), not known, vendors it doesn't
-  go to (another residential district's, or a zone whose aetheryte you haven't), past the market
+  go to (a city or zone whose aetheryte you haven't, or a shop that wants a quest), past the market
   ceiling, not listed on the worlds it buys on, no room, or sold for a currency not allowed or not
   enough of ("2 for Wolf Marks": allow it in Settings → Getting → Currencies).
 - **Limits**, one line ("Market up to 100,000 · home world only · 2 slots spare") and **Change**,
@@ -746,7 +753,8 @@ world), packed into trips by bag slots. The run
    the retainer chosen in the list, their greeting (you click it through), **Entrust or withdraw
    items**, then each stack's menu (`AgentInventoryContext`) and **Retrieve** (the whole stack).
 2. **Vendors**: your own district's housing vendors are walked to from your home's teleport (it lands
-   you outside your door); others by teleporting to their zone's aetheryte. Walk up to 2 yalms, talk to
+   you outside your door); another district's through its city's Residential District Aethernet
+   (Lifestream's housing address, ward 1); others by teleporting to their zone's aetheryte. Walk up to 2 yalms, talk to
    them, choose the shop in their menu by its name (each of their shops in turn, the last one closed
    and their menu used again, or they're talked to again), buy in lots of up to 99 (the row found by the item's name in the
    window), answering the yes/no if one comes.

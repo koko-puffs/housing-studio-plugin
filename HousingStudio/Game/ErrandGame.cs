@@ -130,6 +130,12 @@ public static unsafe class ErrandGame
 
     public static string CurrentWorld() => Services.PlayerState.IsLoaded ? Services.PlayerState.CurrentWorld.ValueNullable?.Name.ExtractText() ?? string.Empty : string.Empty;
 
+    /// <summary>The world you're on now (its World row), or 0.</summary>
+    public static uint CurrentWorldId() => Services.PlayerState.IsLoaded ? Services.PlayerState.CurrentWorld.RowId : 0;
+
+    /// <summary>The residential district whose ward you're in ("mist"…), or null.</summary>
+    public static string? WardDistrict() => Residential.DistrictOf(GameData.TerritoryName(Territory));
+
     public static string HomeWorld() => Services.PlayerState.IsLoaded ? Services.PlayerState.HomeWorld.ValueNullable?.Name.ExtractText() ?? string.Empty : string.Empty;
 
     private static Dictionary<uint, uint>? aetherytes;

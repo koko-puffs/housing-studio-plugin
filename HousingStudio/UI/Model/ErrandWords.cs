@@ -23,7 +23,7 @@ public static class ErrandWords
     public static string Reason(LeftReason reason) => reason switch
     {
         LeftReason.Craft => "crafted: no vendor sells it, none listed",
-        LeftReason.NoVendorReachable => "its vendors are where the errands don't go (another district, an aetheryte you haven't, or a shop that wants a quest you haven't done)",
+        LeftReason.NoVendorReachable => "its vendors are where the errands don't go (a city or zone whose aetheryte you haven't attuned to, or a shop that wants a quest you haven't done)",
         LeftReason.OverCeiling => "past your market ceiling",
         LeftReason.NotListedHere => "not listed on the worlds the errands buy on",
         LeftReason.NoRoom => "no room in your bags",

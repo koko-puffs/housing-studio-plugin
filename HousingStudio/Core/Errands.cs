@@ -98,7 +98,7 @@ public enum LeftReason
     /// <summary>No way to get it is known.</summary>
     Unknown,
 
-    /// <summary>Sold only by vendors the errands can't get to (another residential district, a spot not known).</summary>
+    /// <summary>Sold only by vendors the errands can't get to (an aetheryte you haven't attuned to, a spot not known, a quest not done).</summary>
     NoVendorReachable,
 
     /// <summary>The market would cost more than the ceiling you set.</summary>
@@ -316,7 +316,7 @@ public static class ErrandPlanner
         // plan's order within.
         var ordered = units.Select((u, i) => (u, i))
             .OrderBy(x => KindOrder(x.u.Kind, o.BellAtHome))
-            .ThenBy(x => PlaceOrder(x.u, o.HomeWorld), StringComparer.Ordinal)
+            .ThenBy(x => PlaceOrder(x.u, o.HomeWorld, o.PreferDistrict), StringComparer.Ordinal)
             .ThenBy(x => x.i)
             .Select(x => x.u)
             .ToList();
@@ -397,10 +397,12 @@ public static class ErrandPlanner
         _ => 3,
     };
 
-    private static string PlaceOrder(Unit u, string? homeWorld) => u.Kind switch
+    private static string PlaceOrder(Unit u, string? homeWorld, string? homeDistrict) => u.Kind switch
     {
         StopKind.Retainer => (u.Retainer?.Name ?? string.Empty) + "\u0001" + u.Key,
-        StopKind.Vendor or StopKind.Exchange => $"{u.Vendor?.District ?? "~"}\u0001{u.Vendor?.TerritoryId:D6}\u0001{u.Vendor?.NpcId:D10}\u0001{u.Key}",
+        // Your own district's first (a trip starts there), then other districts' (through their cities'
+        // aethernet, 0.8.3), then the rest by zone.
+        StopKind.Vendor or StopKind.Exchange => $"{(u.Vendor?.District is { } d ? (d == homeDistrict ? "\u0000" : "\u0001") + d : "~")}\u0001{u.Vendor?.TerritoryId:D6}\u0001{u.Vendor?.NpcId:D10}\u0001{u.Key}",
         // Your own world's board first (the bell's city is on it), then the others by name.
         _ => (homeWorld != null && u.World == homeWorld ? "\u0000" : "\u0001") + (u.World ?? string.Empty),
     };

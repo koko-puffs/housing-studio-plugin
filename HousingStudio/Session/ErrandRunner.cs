@@ -245,15 +245,21 @@ public sealed partial class ErrandRunner : IDisposable
 
     /// <summary>
     /// A vendor the errands can get to: in your home's own district (its teleport lands you in your
-    /// ward; not from an apartment, whose building stands apart), or in a zone with an aetheryte
-    /// you're attuned to. Another district's housing vendors aren't (getting to another ward isn't done).
+    /// ward; not from an apartment, whose building stands apart), in another district (0.8.3: through its
+    /// city's Residential District Aethernet, when you're attuned to that city's aetheryte), or in a zone
+    /// with an aetheryte you're attuned to.
     /// </summary>
     private static bool Reachable(VendorOffer v, HomeRef at, HomeKind kind)
     {
         if (!v.Located) return false;
         // A shop that offers the item only after a quest you haven't done (0.7.13): another vendor, or the board.
         if (v.UnlockQuests.Count > 0 && !ErrandGame.QuestsDone(v.UnlockQuests)) return false;
-        if (v.District != null) return v.District == at.District && kind != HomeKind.Apartment;
+        if (v.District != null)
+        {
+            if (v.District == at.District && kind != HomeKind.Apartment) return true;
+            var city = Residential.CityAetheryte(v.District);
+            return city != 0 && ErrandGame.Attuned(city);
+        }
         var aetheryte = ErrandGame.AetheryteOf(v.TerritoryId);
         return aetheryte != 0 && ErrandGame.Attuned(aetheryte);
     }
@@ -807,6 +813,75 @@ public sealed partial class ErrandRunner : IDisposable
         };
     }
 
+    /// <summary>
+    /// To a ward of a residential district (Lifestream's housing address: the city's aetheryte, then its
+    /// Residential District Aethernet, to ward 1). Nothing when you're in one of its wards already.
+    /// </summary>
+    private List<Step> DistrictSteps(string district)
+    {
+        var city = Residential.CityAetheryte(district);
+        var name = Districts.Display(district);
+        var firstTry = DateTime.MinValue;
+        var lastTry = DateTime.MinValue;
+        var asks = 0;
+        var arrivedAt = DateTime.MinValue;
+        bool There() => ErrandGame.WardDistrict() == district;
+        bool Ask() => Travel.GoToWard(ErrandGame.CurrentWorldId(), city);
+        return new List<Step>
+        {
+            new Step
+            {
+                Label = $"To {name} (Lifestream: the city's Residential District Aethernet, ward 1)",
+                IsAction = true,
+                Run = () =>
+                {
+                    if (There()) return StepOutcome.Done;
+                    if (city == 0) return StepOutcome.Halt($"No way to {name} is known.");
+                    var now = DateTime.UtcNow;
+                    if (firstTry == DateTime.MinValue) firstTry = now;
+                    if (ErrandGame.Settled && !Travel.Busy && now - lastTry > TimeSpan.FromSeconds(2))
+                    {
+                        lastTry = now;
+                        travelling = true;
+                        if (Ask())
+                        {
+                            if (Rehearsal) Rehearsals.Report.Teleported();
+                            return StepOutcome.Done;
+                        }
+                        travelling = false;
+                    }
+                    return now - firstTry > TimeSpan.FromSeconds(20)
+                        ? StepOutcome.Halt($"Lifestream wouldn't go to {name} (asked for 20 s; is it installed and up to date?).")
+                        : StepOutcome.Waiting;
+                },
+                Timeout = TimeSpan.FromSeconds(25),
+            },
+            new Step
+            {
+                Label = $"Arrive in {name}",
+                Run = () =>
+                {
+                    if (!There() && Again(ref lastTry, ref asks, Ask, 20) is { } stop) return stop;
+                    if (!There() || !ErrandGame.Settled)
+                    {
+                        arrivedAt = DateTime.MinValue;
+                        return StepOutcome.Waiting;
+                    }
+                    // Lifestream walks on to the address's plot after the aethernet: stopped a moment after
+                    // arriving (it has queued its walk by then), so the merchant is walked to instead.
+                    if (arrivedAt == DateTime.MinValue) arrivedAt = DateTime.UtcNow;
+                    if (DateTime.UtcNow - arrivedAt < TimeSpan.FromMilliseconds(1500)) return StepOutcome.Waiting;
+                    if (Travel.Busy) Travel.Abort();
+                    travelling = false;
+                    lastTerritory = ErrandGame.Territory;
+                    return StepOutcome.Done;
+                },
+                Timeout = TravelWait,
+                TimeoutMessage = $"Didn't arrive in {name} within {TravelWait.TotalMinutes:0} minutes.",
+            },
+        };
+    }
+
     private List<Step> WorldSteps(string world)
     {
         var lastTry = DateTime.MinValue;
@@ -1299,10 +1374,16 @@ public sealed partial class ErrandRunner : IDisposable
     private List<Step> VendorTravelSteps(VendorOffer v)
     {
         var steps = new List<Step>();
-        if (v.District != null)
+        if (v.District != null && home is { } h && v.District == h.District && h.Kind != HomeKind.Apartment)
         {
             // Your own district's: your home's teleport lands you in your ward, where they stand.
             if (!ErrandGame.InHomeWard(home!)) steps.AddRange(GoHomeSteps(leave: true));
+        }
+        else if (v.District != null)
+        {
+            // Another district's (0.8.3): its city's Residential District Aethernet, to a ward there; the
+            // merchant walked to is that ward's nearest (each ward and division has its own).
+            steps.AddRange(DistrictSteps(v.District));
         }
         else
         {

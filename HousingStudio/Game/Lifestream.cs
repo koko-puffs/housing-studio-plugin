@@ -35,6 +35,11 @@ public enum HomeKind
 /// <item><c>Lifestream.ExecuteCommand</c> (string): as if "/li" and the text were typed. [sure]</item>
 /// <item><c>Lifestream.AethernetTeleport</c> (string destination) → bool: a city's aethernet from its
 /// aetheryte ("Sapphire Avenue Exchange"). [fairly sure; else "/li" and the name]</item>
+/// <item><c>Lifestream.GoToHousingAddress</c> (its AddressBookEntryTuple: name, world, city, ward,
+/// property type, plot, apartment, subdivision, alias enabled, alias): an address book entry's "go",
+/// through the city's aetheryte and its Residential District Aethernet (city: its
+/// ResidentialAetheryteKind, the city aetheryte's row: Limsa 8 → Mist, Gridania 2 → the Lavender Beds,
+/// Ul'dah 9 → the Goblet, Kugane 111 → Shirogane, Foundation 70 → Empyreum). [from its IPCProvider, 0.8.3]</item>
 /// </list>
 /// When a typed call fails, the matching "/li" text is tried through ExecuteCommand ("home", "fc",
 /// "apartment", a world's name).
@@ -53,6 +58,7 @@ public sealed class Lifestream
     private readonly ICallGateSubscriber<string, bool> canVisitSameDc;
     private readonly ICallGateSubscriber<string, object> executeCommand;
     private readonly ICallGateSubscriber<string, bool> aethernet;
+    private readonly ICallGateSubscriber<(string Name, int World, int City, int Ward, int PropertyType, int Plot, int Apartment, bool ApartmentSubdivision, bool AliasEnabled, string Alias), object> goToAddress;
     private readonly HashSet<string> failed = new();
 
     public Lifestream()
@@ -68,7 +74,20 @@ public sealed class Lifestream
         canVisitSameDc = pi.GetIpcSubscriber<string, bool>("Lifestream.CanVisitSameDC");
         executeCommand = pi.GetIpcSubscriber<string, object>("Lifestream.ExecuteCommand");
         aethernet = pi.GetIpcSubscriber<string, bool>("Lifestream.AethernetTeleport");
+        goToAddress = pi.GetIpcSubscriber<(string Name, int World, int City, int Ward, int PropertyType, int Plot, int Apartment, bool ApartmentSubdivision, bool AliasEnabled, string Alias), object>(
+            "Lifestream.GoToHousingAddress");
     }
+
+    /// <summary>
+    /// To a ward of a residential district (a house plot's address in it): the city's aetheryte, then its
+    /// Residential District Aethernet. <paramref name="cityAetheryte"/> is the district's city's aetheryte
+    /// row (<see cref="Core.Residential.CityAetheryte"/>). False when Lifestream couldn't be asked.
+    /// </summary>
+    public bool GoToWard(uint world, uint cityAetheryte, int ward = 1, int plot = 1) => Call("GoToHousingAddress", () =>
+    {
+        goToAddress.InvokeAction((string.Empty, (int)world, (int)cityAetheryte, ward, 0, plot, 1, false, false, string.Empty));
+        return true;
+    }, false);
 
     public bool Installed => Plugins.Loaded(InternalName);
 
