@@ -459,6 +459,16 @@ public sealed unsafe partial class FixtureRunner
                         queue.InsertNext(new[] { YouPut(task) });
                         return StepOutcome.Done;
                     }
+                    // 1.0.0: a slot from an earlier run (kept for another home) past this window's end, or
+                    // holding another part now, isn't moved to: you put this one in, and its slot is learnt.
+                    var size = ContainerSize();
+                    if (size is not { } n || slot < 0 || slot >= n
+                        || (ContainerItems() is { } held && held.TryGetValue(slot, out var there) && there != task.Fixture.ItemId))
+                    {
+                        log.Info($"  The {where} slot ({slot}) isn't free in this window ({(size is { } m ? $"{m} slots" : "not read")}): you put {name} in.");
+                        queue.InsertNext(new[] { YouPut(task) });
+                        return StepOutcome.Done;
+                    }
                     var from = FindInBags(task.Fixture.ItemId);
                     if (from == null)
                     {
@@ -553,8 +563,9 @@ public sealed unsafe partial class FixtureRunner
             {
                 // Applying may close the window: from here, that's expected.
                 watchWindow = false;
-                // The proceed question, if it came late: yes (the apply was the run's own click).
-                if (apply != null && DateTime.UtcNow - saidYesAt > TimeSpan.FromSeconds(1) && GameUi.YesNoText() is { } late
+                // The proceed question, if it came late: yes (the apply was the run's own click), once only
+                // (1.0.0: again every second while it lingered); a question still up after that is yours.
+                if (apply != null && saidYesAt == DateTime.MinValue && GameUi.YesNoText() is { } late
                     && FixtureTable.ApplyWords.Any(w => late.Contains(w, StringComparison.OrdinalIgnoreCase)))
                 {
                     saidYesAt = DateTime.UtcNow;
@@ -642,6 +653,15 @@ public sealed unsafe partial class FixtureRunner
     {
         return now != null && now.Any(c => FixtureJobs.Norm(c.Level) == FixtureJobs.Norm(task.Fixture.Level)
                                            && FixtureJobs.Norm(c.Type) == FixtureJobs.Norm(task.Fixture.Type) && c.ItemId == task.Fixture.ItemId);
+    }
+
+    /// <summary>How many slots the window's container has, or null while it isn't loaded.</summary>
+    private int? ContainerSize()
+    {
+        var mgr = InventoryManager.Instance();
+        if (mgr == null) return null;
+        var c = mgr->GetInventoryContainer((InventoryType)EditContainer);
+        return c == null || !c->IsLoaded ? null : (int)c->Size;
     }
 
     /// <summary>The window's container by slot (empty slots left out), or null while it isn't loaded.</summary>
