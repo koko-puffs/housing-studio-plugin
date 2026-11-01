@@ -15,6 +15,9 @@ namespace HousingStudio.Core;
 /// <param name="Fov">The vertical field of view, in degrees.</param>
 public readonly record struct ShotPose(Vector3 Pos, Vector3 Target, float Fov, Side Side)
 {
+    /// <summary>The house's lighting level when the shot was taken (0–5, <see cref="Lighting"/>), inside; else null.</summary>
+    public int? Light { get; init; }
+
     /// <summary>The site's limits (<c>hs_pose_tidy</c>): every number within 5,000 yalms, the field of view 5° to 120°.</summary>
     public const float Reach = 5000;
 
@@ -31,13 +34,18 @@ public readonly record struct ShotPose(Vector3 Pos, Vector3 Target, float Fov, S
     private static bool Within(Vector3 v) => MathF.Abs(v.X) <= Reach && MathF.Abs(v.Y) <= Reach && MathF.Abs(v.Z) <= Reach;
 
     /// <summary>The pose as the edge function's <c>pose</c> field: positions to 4 places, the field of view to 3.</summary>
-    public string ToJson() => new JsonObject
+    public string ToJson()
     {
-        ["pos"] = Array(Pos),
-        ["target"] = Array(Target),
-        ["fov"] = Math.Round((double)Fov, 3),
-        ["side"] = Side == Side.Garden ? "garden" : "inside",
-    }.ToJsonString();
+        var o = new JsonObject
+        {
+            ["pos"] = Array(Pos),
+            ["target"] = Array(Target),
+            ["fov"] = Math.Round((double)Fov, 3),
+            ["side"] = Side == Side.Garden ? "garden" : "inside",
+        };
+        if (Side != Side.Garden && Lighting.Valid(Light) is { } light) o["light"] = light;
+        return o.ToJsonString();
+    }
 
     private static JsonArray Array(Vector3 v) => new(Round(v.X), Round(v.Y), Round(v.Z));
 
@@ -48,7 +56,7 @@ public readonly record struct ShotPose(Vector3 Pos, Vector3 Target, float Fov, S
     }
 
     public override string ToString() => string.Create(CultureInfo.InvariantCulture,
-        $"pos ({Pos.X:0.00}, {Pos.Y:0.00}, {Pos.Z:0.00}) target ({Target.X:0.00}, {Target.Y:0.00}, {Target.Z:0.00}) fov {Fov:0.0}° {Side}");
+        $"pos ({Pos.X:0.00}, {Pos.Y:0.00}, {Pos.Z:0.00}) target ({Target.X:0.00}, {Target.Y:0.00}, {Target.Z:0.00}) fov {Fov:0.0}° {Side}{(Light is { } l ? $" light {l}" : "")}");
 }
 
 /// <summary>

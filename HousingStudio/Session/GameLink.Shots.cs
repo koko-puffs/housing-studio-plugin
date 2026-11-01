@@ -168,6 +168,8 @@ public sealed partial class GameLink
             Services.Log.Warning($"Housing Studio: couldn't read the camera for a shot ({why}): {detail}");
             return false;
         }
+        // (Inside: the house's lighting level, so the site's comparison is lit as the picture is.)
+        if (h.Side != Side.Garden) p = p with { Light = FixtureReader.LightOfInterior() };
         try
         {
             grab = Services.Textures.CreateFromImGuiViewportAsync(

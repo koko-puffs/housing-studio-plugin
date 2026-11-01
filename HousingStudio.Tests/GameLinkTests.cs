@@ -281,6 +281,19 @@ public class ShotPoseTests
     }
 
     [Fact]
+    public void WritesTheHousesLightInsideOnly()
+    {
+        var pose = new ShotPose(Vector3.Zero, Vector3.UnitX, 45, Side.Interior) { Light = 3 };
+        Assert.Equal(3, JsonNode.Parse(pose.ToJson())!["light"]!.GetValue<int>());
+        // (None read, out of range, or in the garden: left out.)
+        Assert.Null(JsonNode.Parse((pose with { Light = null }).ToJson())!["light"]);
+        Assert.Null(JsonNode.Parse((pose with { Light = 9 }).ToJson())!["light"]);
+        Assert.Null(JsonNode.Parse((pose with { Side = Side.Garden }).ToJson())!["light"]);
+        // (Two reads of the camera a frame apart are the same shot whatever the light.)
+        Assert.True(CameraMath.Same(pose, pose with { Light = null }));
+    }
+
+    [Fact]
     public void ThePoseKeepsTheSitesLimits()
     {
         Assert.True(new ShotPose(Vector3.Zero, Vector3.UnitX, 45, Side.Interior).Valid);
