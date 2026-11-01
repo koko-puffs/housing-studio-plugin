@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using HousingStudio.Core;
+using HousingStudio.UI.Model;
 using HousingStudio.Game;
 
 namespace HousingStudio.Session;
@@ -169,13 +170,14 @@ public sealed class Care
         runTitle = session.Title;
         runPieces = runner.Entries.Select(e => (e.Target.Key, e.Target.ItemId)).Distinct().ToList();
         runBase = 0;
+        runToDoAtStart = runner.Entries.Count(e => e.State is PieceState.Move or PieceState.FromStoreroom or PieceState.FromInventory);
         // Carrying on a run cut off: its numbers go on from where it was ("piece 38 of 120"), and its pieces stay its own.
         if (carryFrom is { } carry && DateTime.UtcNow < carry.Until && carry.Progress is var from && from.Fits(runDesign, runHome, runSide))
         {
             runPieces = from.Pieces.ToList();
             // While a clear out goes first, the run's jobs are only its put-aways: the numbers wait for the design's.
             if (runner.ClearingOutFirst) baseFrom = from;
-            else runBase = Math.Max(0, from.Total - (runner.Total + runner.DyesStillExpected));
+            else runBase = Math.Max(0, from.Total - Work().Total);
         }
         carryFrom = null;
         written = (-1, -1, RunPhase.Move);
@@ -187,6 +189,21 @@ public sealed class Care
         KeepProgress(force: true);
     }
 
+    /// <summary>The run's pieces to move or place when it started (Ready's "to do").</summary>
+    private int runToDoAtStart;
+
+    /// <summary>
+    /// The run's work as the placing screen counts it (0.9.0, <see cref="RunFigure"/>): its moves and
+    /// placements and its dyes, done of all (the put-aways only when that's all it does). 0.8.6 counted
+    /// every job, failed and skipped ones as done, so "piece N of M" didn't match the placing screen.
+    /// </summary>
+    private (int Done, int Total) Work()
+    {
+        var f = RunFigure.From(runner.Jobs, runner.ClearingOutFirst, runToDoAtStart, runner.DyesStillExpected);
+        var all = f.ToDo + f.Dyes;
+        return all > 0 ? (f.Done + f.Dyed, all) : (f.PutAwayDone, f.PutAway);
+    }
+
     private void KeepProgress(bool force)
     {
         if (runHome == null || runDesign == null || runPieces.Count == 0) return;
@@ -194,14 +211,15 @@ public sealed class Care
         {
             // (Until then the run cut off's progress stays as it was, to carry on from again.)
             if (runner.ClearingOutFirst) return;
-            runBase = Math.Max(0, baseFrom.Total - (runner.Total + runner.DyesStillExpected));
+            runBase = Math.Max(0, baseFrom.Total - Work().Total);
             baseFrom = null;
             force = true;
         }
         // Looked at a few times a second (the counts go through the run's pieces), and written when they change.
         if (!force && DateTime.UtcNow - writtenAt < ProgressEvery) return;
-        var ended = runner.Done + runner.Failed + runner.Skipped;
-        var total = runBase + runner.Total + runner.DyesStillExpected;
+        var work = Work();
+        var ended = work.Done;
+        var total = runBase + work.Total;
         var now = (runBase + ended, Math.Max(total, runBase + ended), runner.Phase ?? RunPhase.Move);
         writtenAt = DateTime.UtcNow;
         if (now == written) return;
