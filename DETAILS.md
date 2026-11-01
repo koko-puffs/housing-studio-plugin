@@ -9,7 +9,10 @@ press **Start placing**: the plugin moves what's placed, places what's in your b
 its exact spot, then dyes everything to match.
 
 > **Status: 0.9.10. Placing works in the game; the newer features haven't all been tried in it yet.**
-> 0.9.10: **quicker dyeing, and Daring safe for it.** The dye window's own timing is kept as it is
+> 0.9.10: **Take a shot without the HUD.** Hiding the HUD (Scroll Lock) hid the plugin's windows and the
+> chat too, so there was nothing to press or type in. Take a shot now hides the HUD itself for the moment
+> the picture is taken, and brings it back after.
+> **Quicker dyeing, and Daring safe for it.** The dye window's own timing is kept as it is
 > (0.9.8's, which ended the crashes), at every pace: its clicks never closer than Quick's 0.2 s, and
 > its waits never shorter than Quick's, so Daring speeds up placing without bringing the crash back.
 > Time is cut around it instead: looking for the dye in the window's list isn't a click (only switching
@@ -1177,9 +1180,11 @@ home. Off: nothing is asked. When the site can't be asked, nothing shows (the re
 ## Shots from the game
 
 In your own home verified as one of your designs (inside, or its garden, while you may decorate),
-This house has **Take a shot**, and `/hstudio shot` takes one too (handy with the HUD hidden: Scroll
-Lock hides the game's HUD and with it the plugin's windows; Group Pose hides them as well). The
-picture goes to the design's page, beside its 3D view from the same spot.
+This house has **Take a shot**, and `/hstudio shot` takes one too. With the HUD showing, the shot hides
+it (as Scroll Lock does, `Game/Hud.cs`), waits a few frames for it to go, takes the picture and shows it
+again (0.9.10: hiding it yourself hid the plugin's button and the chat with it). In Group Pose, which
+hides them as well, type `/hstudio shot`. The picture goes to the design's page, beside its 3D view from
+the same spot.
 
 - **The camera**: the scene's current camera (Graphics.Scene.CameraManager's, the one drawing the
   game, Group Pose's own while it's on). Its place and the way it looks come from its view matrix

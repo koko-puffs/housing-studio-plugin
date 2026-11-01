@@ -104,7 +104,9 @@ public sealed partial class GameLink
 
     /// <summary>
     /// Takes a shot (framework thread): the camera's pose now, and the game's frame grabbed before
-    /// ImGui draws. False, with why, when it can't.
+    /// ImGui draws. With the HUD showing, it's hidden first (as Scroll Lock does) and shown again once
+    /// the picture is in (0.9.10: hiding it yourself hid the plugin's button and the chat too). False,
+    /// with why, when it can't.
     /// </summary>
     public bool TakeShot(HousingContext ctx, out string why)
     {
@@ -122,6 +124,43 @@ public sealed partial class GameLink
             }
             spot = s;
         }
+        if (!Hud.Hidden && !Services.ClientState.IsGPosing)
+        {
+            // A shot sent and still shown goes for the new one.
+            if (Taken is { Sent: true }) Discard();
+            if (Hud.Set(false))
+            {
+                hidHud = true;
+                hudWait = (h, design, spot, DateTime.UtcNow);
+                hudWaitFrames = 0;
+                Capturing = true;
+                ShotNote = null;
+                return true;
+            }
+            // (Couldn't hide it: the picture is taken with it.)
+        }
+        return Grab(h, design, spot, out why);
+    }
+
+    /// <summary>The home and design a shot is for, waiting for the HUD to go (the frames it takes to hide).</summary>
+    private (HomeLook Home, MyDesign Design, PlotSpot? Plot, DateTime At)? hudWait;
+    private int hudWaitFrames;
+
+    /// <summary>This plugin hid the HUD for a shot, and shows it again when the picture is in.</summary>
+    private bool hidHud;
+
+    /// <summary>Shows the HUD again if a shot hid it (and it's still hidden).</summary>
+    private void ShowHudAgain()
+    {
+        hudWait = null;
+        if (!hidHud) return;
+        hidHud = false;
+        if (Hud.Hidden) Hud.Set(true);
+    }
+
+    /// <summary>The camera read and the game's next frame grabbed for a shot.</summary>
+    private bool Grab(HomeLook h, MyDesign design, PlotSpot? spot, out string why)
+    {
         var pose = HomeReader.Camera(h.Side, spot, out why, out var detail);
         if (pose is not { } p)
         {
@@ -154,9 +193,26 @@ public sealed partial class GameLink
 
     private void TickShot(HousingContext ctx)
     {
+        // The HUD hidden for the shot: a few frames and 0.15 s for it to go (1 s at most), then the picture.
+        if (hudWait is { } w)
+        {
+            hudWaitFrames++;
+            var waited = DateTime.UtcNow - w.At;
+            if ((hudWaitFrames < 3 || waited < TimeSpan.FromMilliseconds(150) || !Hud.Hidden) && waited < TimeSpan.FromSeconds(1)) return;
+            hudWait = null;
+            if (!Grab(w.Home, w.Design, w.Plot, out var why))
+            {
+                Capturing = false;
+                ShowHudAgain();
+                ShotFailed(why);
+            }
+            return;
+        }
         if (grab is not { IsCompleted: true } t || grabFor is not { } f) return;
         grab = null;
         grabFor = null;
+        // The picture is in: the HUD comes back (if this hid it).
+        ShowHudAgain();
         if (f.Generation != shotGeneration)
         {
             if (t.IsCompletedSuccessfully) Release(t.Result);
@@ -318,6 +374,7 @@ public sealed partial class GameLink
     {
         shotGeneration++;
         Capturing = false;
+        if (hudWait != null) ShowHudAgain();
         ShotNote = null;
         if (Taken is not { } s) return;
         Release(s.Thumb);

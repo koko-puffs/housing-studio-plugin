@@ -256,6 +256,8 @@ public sealed partial class GameLink : IDisposable
         disposed = true;
         // Workers see this and stop; nothing they finish comes back.
         stop.Cancel();
+        // A HUD this hid for a shot comes back.
+        ShowHudAgain();
         if (grab is { IsCompletedSuccessfully: true } g) Release(g.Result);
         grab = null;
         List<IDalamudTextureWrap> left;

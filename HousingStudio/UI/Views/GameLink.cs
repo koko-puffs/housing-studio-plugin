@@ -257,7 +257,7 @@ public sealed partial class MainWindow
         if (gameLink?.ShotDesign(session.Context) == null) return;
         Kit.Gap(8);
         if (gameLink.ShotNote is { } why) AlertNote(why, Palette.Danger);
-        else AlertNote("For a clean picture, hide the HUD (Scroll Lock) or use Group Pose, then type /hstudio shot.", Palette.Dim, Icon.Info, Palette.Dim);
+        else AlertNote("The HUD is hidden for the moment the picture is taken, and comes back after. In Group Pose, type /hstudio shot.", Palette.Dim, Icon.Info, Palette.Dim);
     }
 
     // ---------------------------------------------------------------------------------------------
