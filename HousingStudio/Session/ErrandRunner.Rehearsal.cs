@@ -103,7 +103,10 @@ public sealed partial class ErrandRunner
     private void CheckAndCancel(string where, string? question, uint unit, int quantity, long cost, bool board = false, uint itemId = 0)
     {
         // A vendor's price the game's data has wrong: learnt, so the next estimate has it right.
+        // (Only from a question about this item, as a real run learns it, 1.0.0: a miscounted row's question
+        // taught another item's price, kept and used in every estimate after.)
         var learnt = !board && itemId != 0 && !MarketRule.QuestionMatches(question, unit, quantity, cost)
+                     && MarketRule.NamesItem(question, Name(itemId))
                      && MarketRule.AskedCost(question, quantity) is { } askedSum && askedSum > 0 && askedSum % quantity == 0
                      && LearnPrice(itemId, (uint)(askedSum / quantity), unit);
         // A vendor asking another price: a real run says yes while the run stays within the gil agreed.

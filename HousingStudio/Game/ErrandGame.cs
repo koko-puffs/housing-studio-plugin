@@ -595,6 +595,19 @@ public static unsafe class ErrandGame
 
     public static bool RetainerBagsOpen => ErrandTable.RetainerInventory.Any(GameUi.IsOpen);
 
+    /// <summary>Has the game sent the open retainer's bags (any of their pages)?</summary>
+    public static bool RetainerPagesLoaded()
+    {
+        var mgr = InventoryManager.Instance();
+        if (mgr == null) return false;
+        foreach (var t in RetainerPages)
+        {
+            var c = mgr->GetInventoryContainer(t);
+            if (c != null && c->IsLoaded) return true;
+        }
+        return false;
+    }
+
     // ---------------------------------------------------------------------------------------------
     // The market board.
 
