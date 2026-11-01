@@ -162,7 +162,9 @@ public sealed partial class MainWindow
         }
 
         var words = clashCache.Words;
-        if (words.Others > 0)
+        // 0.9.10: only with Place anywhere off. With it on (the default) the game takes floating, sunk and
+        // overlapping pieces, so "N may be refused" was wrong, and said again under Pieces.
+        if (words.Others > 0 && !config.PlaceAnywhere)
         {
             var lead = CareWords.ClashLead(words.Others, config.PlaceAnywhere, false);
             list.Add(new ReadyCheck(new CheckChipSpec("##check-refuse", $"{words.Others} may be refused", config.PlaceAnywhere ? ChipTone.Normal : ChipTone.Warn,
