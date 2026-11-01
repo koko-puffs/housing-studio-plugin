@@ -345,7 +345,7 @@ public sealed unsafe partial class PlacementRunner
         jobs.AddRange(rest);
         jobsVersion++;
         knownKeys = session.Live.Keys.ToHashSet();
-        if (!dyesPlanned) dyesExpected = DyeCounts.ToApply(entries);
+        if (!dyesPlanned) dyesExpected = DyeCounts.ToApply(entries, data.CanUndye);
         timeLeftUntil = DateTime.MinValue;
         if (PutAwayDone > 0)
         {

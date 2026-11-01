@@ -54,6 +54,43 @@ public sealed class GameData
             if (stain.IsHousingApplicable && !string.IsNullOrEmpty(dye.Name)) dyes.Add(dye);
         }
         HousingDyes = dyes;
+        Terebinth = FindTerebinth(sheet);
+        if (Terebinth == 0) Services.Log.Warning("Housing Studio: couldn't find Terebinth in the game's items, so dyes aren't taken off.");
+    }
+
+    /// <summary>
+    /// Terebinth, the item that takes a dye off (the dye window's first palette, its first place: "No
+    /// Color", 0.9.12), or 0 when it isn't found. Item 5728, the one before the dyes' own items, checked
+    /// by its name in the client's language or by sharing the dyes' item category; else looked for by name.
+    /// </summary>
+    public uint Terebinth { get; }
+
+    /// <summary>Can a dye be taken off (Terebinth is known)?</summary>
+    public bool CanUndye => Terebinth != 0;
+
+    private static readonly string[] TerebinthNames = { "Terebinth", "Térébenthine", "Terpentin", "テレビン油" };
+
+    private uint FindTerebinth(Lumina.Excel.ExcelSheet<Item> sheet)
+    {
+        const uint Known = 5728;
+        uint dyeCategory = 0;
+        foreach (var (_, ui) in dyeUi)
+            if (ui.Items.Length > 0 && sheet.TryGetRow(ui.Items[0], out var dyeItem))
+            {
+                dyeCategory = dyeItem.ItemUICategory.RowId;
+                break;
+            }
+        if (sheet.TryGetRow(Known, out var known))
+        {
+            var name = known.Name.ExtractText();
+            if (TerebinthNames.Contains(name, System.StringComparer.OrdinalIgnoreCase)
+                || (dyeCategory != 0 && known.ItemUICategory.RowId == dyeCategory && !dyeUi.Values.Any(d => d.Items.Contains(Known))))
+                return Known;
+        }
+        foreach (var item in sheet)
+            if (TerebinthNames.Contains(item.Name.ExtractText(), System.StringComparer.OrdinalIgnoreCase))
+                return item.RowId;
+        return 0;
     }
 
     public string ItemName(uint itemId) =>
@@ -112,7 +149,12 @@ public sealed class GameData
         stainId == 0 ? "Undyed" : dyesById.TryGetValue(stainId, out var d) && d.Name.Length > 0 ? d.Name : $"Dye {stainId}";
 
     /// <summary>The items that apply a dye (from the Stain sheet).</summary>
-    public IReadOnlyList<uint> DyeItems(byte stainId) => dyeUi.TryGetValue(stainId, out var d) ? d.Items : System.Array.Empty<uint>();
+    public IReadOnlyList<uint> DyeItems(byte stainId) =>
+        stainId == 0 ? (Terebinth != 0 ? new[] { Terebinth } : System.Array.Empty<uint>())
+        : dyeUi.TryGetValue(stainId, out var d) ? d.Items : System.Array.Empty<uint>();
+
+    /// <summary>A dye's name for what's used and bought: Terebinth for taking a dye off (stain 0).</summary>
+    public string DyeToUse(byte stainId) => stainId == 0 ? (Terebinth != 0 ? AnyItemName(Terebinth) : "Terebinth") : DyeName(stainId);
 
     /// <summary>Where a dye sits in the dye window: its shade (the row of circles) and its place in it.</summary>
     public (byte Shade, byte SubOrder)? DyeSlot(byte stainId) => dyeUi.TryGetValue(stainId, out var d) ? (d.Shade, d.SubOrder) : null;

@@ -180,7 +180,7 @@ public sealed partial class MainWindow
             var names = Words.Some(dyes.Select(d => $"{d.Name} ×{d.Count}").ToList(), 3);
             var one = dyes.Count == 1 && count == 1;
             list.Add(new ReadyCheck(new CheckChipSpec("##check-dyes", ReadyWords.DyesShort(count), ChipTone.Normal, Icon.Flask),
-                Lead(names, $" {(one ? "isn't" : "aren't")} in your bags. {(one ? "It's" : "They're")} on the list to get; until then, those pieces stay undyed."),
+                Lead(names, $" {(one ? "isn't" : "aren't")} in your bags. {(one ? "It's" : "They're")} on the list to get; until then, those pieces stay as they are."),
                 CheckActions.SeeDyes | CheckActions.CopyDyes));
         }
 
@@ -292,7 +292,7 @@ public sealed partial class MainWindow
     private void CarryOn(RunProgress progress, Plan plan)
     {
         var again = progress.EntriesOf(plan.Entries);
-        var summary = StartSummary.Of(again, config.DyeAfterPlacing);
+        var summary = StartSummary.Of(again, config.DyeAfterPlacing, data.CanUndye);
         if (again.Count == 0 || summary.Moves.Count + summary.Places + summary.Dyes == 0)
         {
             Notify(again.Count == 0 ? "None of that run's pieces are in this design now" : "Every piece of that run is done");

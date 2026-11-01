@@ -148,6 +148,8 @@ public sealed class VendorData
         foreach (var dye in data.HousingDyes)
             foreach (var id in data.DyeItems(dye.StainId))
                 wanted.Add(id);
+        // Terebinth, which takes a dye off (0.9.12).
+        if (data.Terebinth != 0) wanted.Add(data.Terebinth);
 
         // Gil shops' items (GilShopItem's subrows, one row per shop).
         var shopItems = new Dictionary<uint, List<(uint Item, bool Unlock, uint[] Quests)>>();

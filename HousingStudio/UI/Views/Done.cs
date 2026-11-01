@@ -174,8 +174,9 @@ public sealed partial class MainWindow
         var undyed = problems.Where(p => p.Kind == ProblemKind.DyeMissing).ToList();
         if (undyed.Count > 0)
         {
-            var dyes = undyed.GroupBy(p => p.Job.Target.Stain).Select(g => (Name: data.DyeName(g.Key), Count: g.Count())).ToList();
-            issues.Add(new Issue(Icon.Flask, undyed.Count == 1 ? "1 left undyed" : $"{undyed.Count} left undyed",
+            // Stain 0 is a dye to take off: Terebinth is what's needed (0.9.12).
+            var dyes = undyed.GroupBy(p => p.Job.Target.Stain).Select(g => (Name: data.DyeToUse(g.Key), Count: g.Count())).ToList();
+            issues.Add(new Issue(Icon.Flask, undyed.Count == 1 ? "1 not dyed" : $"{undyed.Count} not dyed",
                 $"You need {Words.List(dyes.Select(d => $"{d.Name} ×{d.Count}"))}", "Copy", () =>
                 {
                     ImGui.SetClipboardText(DyeList(dyes));

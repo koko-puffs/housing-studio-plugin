@@ -329,7 +329,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         PlanClearOut(dryRun || rehearse);
         var dyes = config.DyeAfterPlacing || forceDyes;
         // The same calculation as the dye phase's (PlanDyes), predicting what placing will leave.
-        dyesExpected = dyes ? DyeCounts.ToApply(entries) : 0;
+        dyesExpected = dyes ? DyeCounts.ToApply(entries, data.CanUndye) : 0;
         var dyedInDesign = DyeCounts.Dyed(entries);
         toPutAway = putAway?.ToList() ?? new List<PlacedPiece>();
         WasPuttingBack = toPutAway.Count > 0;
@@ -895,7 +895,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         var job = jobs[index];
         job.Outcome = JobOutcome.Working;
         job.StartedAt = DateTime.UtcNow;
-        log.Info($"{(job.Kind == JobKind.Store ? "Putting away" : PhaseWord(job.Phase))}: {Name(job)}{(job.Target.Stain != 0 ? $" ({data.DyeName(job.Target.Stain)})" : string.Empty)}");
+        log.Info($"{(job.Kind == JobKind.Store ? "Putting away" : PhaseWord(job.Phase))}: {Name(job)}{(job.Target.Stain != 0 ? $" ({data.DyeName(job.Target.Stain)})" : job.Kind == JobKind.Dye ? $" (its dye taken off with {data.DyeToUse(0)})" : string.Empty)}");
         if (DryRun)
         {
             queue.Begin(new[] { Step.Act($"Would {DryWords(job)}", () => StepOutcome.Done) });
@@ -2472,7 +2472,10 @@ public sealed unsafe partial class PlacementRunner : IDisposable
     {
         var name = Name(job);
         var key = job.Key!.Value;
-        var dye = data.DyeName(job.Target.Stain);
+        // 0.9.12: stain 0 takes the dye off: the first palette's first place, "No Color", which uses
+        // Terebinth (as recorded by hand: [4, 0], then [5, 0, 0, 0], Dye, Yes).
+        var undye = job.Target.Stain == 0;
+        var dye = undye ? $"No Color ({data.DyeToUse(0)})" : data.DyeName(job.Target.Stain);
         var slot = data.DyeSlot(job.Target.Stain);
         var row = new[] { -1 };
         // Its dye before the window opens: while the window is open the game writes its preview (the
@@ -2605,6 +2608,42 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 Label = $"Find {dye} in the dye window's list",
                 Run = () =>
                 {
+                    if (undye)
+                    {
+                        // The first palette, then its first place: "No Color" (Terebinth). Always switched to:
+                        // the window opens on the piece's own dye's palette.
+                        var first = UiCallValues.Of(("shade", 0));
+                        log.Info($"  Taking the dye off: {UiTable.DyeShade.Describe(first)}");
+                        queue.InsertNext(new[]
+                        {
+                            new Step
+                            {
+                                Label = $"Switch to the first palette: {UiTable.DyeShade.Describe(first)}",
+                                IsAction = true,
+                                MinGap = DyeWindowGap,
+                                Run = () => FireOrSkip(UiTable.DyeShade, first),
+                            },
+                            new Step
+                            {
+                                Label = "The first palette's list is in",
+                                Timeout = TimeSpan.FromSeconds(2),
+                                OnTimeout = StepStatus.SkipJob,
+                                TimeoutProblem = ProblemKind.DyeFailed,
+                                TimeoutMessage = "The dye window's first palette didn't come up.",
+                                Run = () =>
+                                {
+                                    // 0.3 s after the switch, as for any shade; its first place may have no name
+                                    // to read, so after 0.6 s more it's taken as in (it's where the recording clicked).
+                                    if (queue.Elapsed < DyeWait(300)) return StepOutcome.Waiting;
+                                    if (Menus.DyeListCount(GameUi.TextValues(UiTable.DyeWindow), UiTable.DyeListFirstValue) < 1
+                                        && queue.Elapsed < DyeWait(900)) return StepOutcome.Waiting;
+                                    row[0] = 0;
+                                    return StepOutcome.Done;
+                                },
+                            },
+                        });
+                        return StepOutcome.Done;
+                    }
                     var r = Menus.DyeRow(GameUi.TextValues(UiTable.DyeWindow), dye, UiTable.DyeListFirstValue);
                     if (r == null && slot is { } sl && UiTable.ShadeIndex(sl.Shade) is { } shade)
                     {
@@ -2664,7 +2703,8 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     // Never a row past the list's end (a row guessed from the dye sheet when the name
                     // wasn't read): the game reads past its own list then.
                     var rows = Menus.DyeListCount(GameUi.TextValues(UiTable.DyeWindow), UiTable.DyeListFirstValue);
-                    if (row[0] < 0 || row[0] >= rows)
+                    // No Color is the first palette's first place, always there (row 0, as recorded by hand).
+                    if (undye ? row[0] != 0 : row[0] < 0 || row[0] >= rows)
                     {
                         // Not in the list: none to use, it seems (twice in the run, and the other pieces needing
                         // it are skipped: one misread list isn't enough, 0.9.9).
@@ -3364,8 +3404,9 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         var needs = DyeCounts.Needs(entries.Where(e => KeyOf(e) is not { } k || !live.TryGetValue(k, out var p) || p.ItemId == e.Target.ItemId), KeyOf, LiveStain, predict: DryRun || Rehearsal);
         // Count every needed dye as available here: the dye window may use another dye item (it used
         // "Standard Spectrum Dye" in the recordings), so the game decides, and a refused dye is skipped then.
-        var owned = needs.Select(n => n.Want).Where(s => s != 0).Distinct().ToDictionary(s => s, s => int.MaxValue);
-        var plan = DyePlanner.Plan(needs, owned);
+        // 0.9.12: stain 0 too, a dye taken off with Terebinth, once Terebinth is known.
+        var owned = needs.Select(n => n.Want).Where(s => s != 0 || data.CanUndye).Distinct().ToDictionary(s => s, s => int.MaxValue);
+        var plan = DyePlanner.Plan(needs, owned, data.CanUndye);
         foreach (var j in plan.Jobs.Where(j => j.Key == DyeCounts.NotPlacedYet)) j.Key = null;
         jobs.AddRange(plan.Jobs);
         log.Info($"Dyes: {plan.Jobs.Count} piece{(plan.Jobs.Count == 1 ? "" : "s")} to dye{(DryRun || Rehearsal ? " (once placed)" : string.Empty)}{(dyesExpected != plan.Jobs.Count ? $"; {dyesExpected} were expected at the start{(DryRun || Rehearsal ? string.Empty : " (pieces that didn't get placed can't be dyed)")}" : string.Empty)}.");
@@ -3375,7 +3416,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             var need = plan.Jobs.Count(j => j.Target.Stain == stain);
             var have = HousingActions.DyesOwned(data, stain);
             if (have >= need) continue;
-            shortfall.Add((stain, data.DyeName(stain), need, have));
+            shortfall.Add((stain, data.DyeToUse(stain), need, have));
         }
         DyeShortfall = shortfall;
         // 0.9.3: the dyes you have none of (or too few of) aren't tried. Each was opened in the dye window,
@@ -3393,7 +3434,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     left[j.Target.Stain] = have - 1;
                     continue;
                 }
-                var dye = data.DyeName(j.Target.Stain);
+                var dye = data.DyeToUse(j.Target.Stain);
                 j.Outcome = JobOutcome.Skipped;
                 j.Problem = ProblemKind.DyeMissing;
                 j.Note = $"Not dyed: no {dye} left in your bags for it. Get more and Try again.";
@@ -3404,7 +3445,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 log.Warn($"  {name}: {need} to dye and {have} in your bags, so {need - have} {(need - have == 1 ? "isn't" : "aren't")} tried (listed under Needs you).");
         }
         foreach (var n in plan.Undye)
-            log.Info($"{data.ItemName(n.Target.ItemId)} is dyed {data.DyeName(n.Has)} but the design has it undyed; removing a dye is left to you.");
+            log.Info($"{data.ItemName(n.Target.ItemId)} is dyed {data.DyeName(n.Has)} but the design has it undyed; Terebinth (which takes a dye off) isn't known in this game's data, so that's left to you.");
     }
 
     /// <summary>
@@ -3800,8 +3841,10 @@ public sealed unsafe partial class PlacementRunner : IDisposable
     /// <summary>Why a set-down didn't count: where the game put the piece, against its spot.</summary>
     private string NotLandedWords(int key, Target target)
     {
-        if (FurnitureReader.Stored(side == Side.Garden, key) is not { } s)
+        if (FurnitureReader.Stored(side == Side.Garden, key) is not { } stored)
             return "It didn't end up at its spot (the game hasn't said where it is).";
+        // Where it shows, when the game's record has it at its spot but the piece is elsewhere (0.9.12).
+        var s = Near(stored.Position, stored.Yaw, target, false) && LiveObject(key) is { } o ? (o.Position, o.Yaw) : (stored.Position, stored.Yaw);
         var d = s.Position - target.Position;
         var parts = new List<string>();
         // The game's axes: Y is up (the files' third number).
@@ -3819,9 +3862,20 @@ public sealed unsafe partial class PlacementRunner : IDisposable
     private bool Landed(int key, Target target, bool strict = false)
     {
         var stored = FurnitureReader.Stored(side == Side.Garden, key);
-        return stored is { } s && Vector3.Distance(s.Position, target.Position) <= (strict ? StrictDistance : LandedDistance)
-               && Transforms.AngleDiff(s.Yaw, target.Yaw) <= (strict ? StrictYaw : LandedYaw);
+        if (stored is not { } s || !Near(s.Position, s.Yaw, target, strict)) return false;
+        // 0.9.12: the piece you see too, when it's spawned. The game's record can hold the spot while the
+        // piece shows elsewhere (a counter 0.126 above its spot, every run "Already in place"): then it
+        // isn't in place, and it's set down again.
+        return LiveObject(key) is not { } o || Near(o.Position, o.Yaw, target, strict);
     }
+
+    private bool Near(Vector3 position, float yaw, Target target, bool strict) =>
+        Vector3.Distance(position, target.Position) <= (strict ? StrictDistance : LandedDistance)
+        && Transforms.AngleDiff(yaw, target.Yaw) <= (strict ? StrictYaw : LandedYaw);
+
+    /// <summary>The spawned piece in this furniture slot as the game shows it (null when it isn't spawned).</summary>
+    private LivePiece? LiveObject(int key) =>
+        ReadLive() is { } live && live.TryGetValue(key, out var p) && p.Instance != 0 ? p : null;
 
     /// <summary>The design match's own tolerance (MatchOptions): what the check pass holds pieces to.</summary>
     private const float StrictDistance = 0.01f;

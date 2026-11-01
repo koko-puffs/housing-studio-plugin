@@ -8,7 +8,17 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.9.11. Placing works in the game; the newer features haven't all been tried in it yet.**
+> **Status: 0.9.12. Placing works in the game; the newer features haven't all been tried in it yet.**
+> 0.9.12: **Dyes taken off.** A piece that's dyed where the design has it undyed (a copy dyed for an
+> earlier design) has its dye taken off with Terebinth in the dye phase: the dye window's first palette,
+> its first place, "No Color", as recorded by hand ([4, 0], then [5, 0, 0, 0], Dye, Yes). Terebinth is
+> counted like any dye: Ready's dyes, the shopping list and the errands get it (60 gil at the housing
+> districts' vendors), one for each dyed piece you have (placed or in the storeroom) that the design
+> has undyed. So that count is right, **the errands wait for the storeroom**: they don't set out until
+> it's read (open Indoor Furnishings once; an empty one counts after 5 s), as its pieces would otherwise
+> be bought again. **A piece shown off its spot is set down again**: the game's record can hold a piece
+> at its spot while the piece itself shows elsewhere (a counter 0.126 above its spot said "Already in
+> place" on every run); now both have to be at the spot.
 > 0.9.11: Ready's **"N may be refused"** only shows with Place anywhere off (with it on, the default, the
 > game takes those pieces, so it was wrong, and Pieces lists them anyway). A piece the game sets down
 > off its spot now says where it went ("0.126 higher", with both positions as the design file has

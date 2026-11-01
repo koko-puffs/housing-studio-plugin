@@ -318,8 +318,9 @@ public sealed class LayoutSession
     public List<(byte Stain, string Name, int Count)> MissingDyes()
     {
         if (Plan == null) return new List<(byte, string, int)>();
-        var owned = Plan.Entries.Select(e => e.Target.Stain).Where(s => s != 0).Distinct().ToDictionary(s => s, s => HousingActions.DyesOwned(data, s));
-        return DyePlanner.ToBuy(Plan, owned).Select(b => (b.Stain, data.DyeName(b.Stain), b.Count)).ToList();
+        // Stain 0 is Terebinth, for the dyes taken off (0.9.12).
+        var owned = Plan.Entries.Select(e => e.Target.Stain).Where(s => s != 0 || data.CanUndye).Distinct().ToDictionary(s => s, s => HousingActions.DyesOwned(data, s));
+        return DyePlanner.ToBuy(Plan, owned, data.CanUndye).Select(b => (b.Stain, data.DyeToUse(b.Stain), b.Count)).ToList();
     }
 
     /// <summary>"a medium house", "an apartment".</summary>

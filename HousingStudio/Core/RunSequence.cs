@@ -171,7 +171,7 @@ public sealed class DyePlan
     /// <summary>Dyes you're short of: (dye, pieces that need it, how many you have).</summary>
     public List<(byte Stain, int Needed, int Owned)> Short { get; } = new();
 
-    /// <summary>Pieces that are dyed but the design has them undyed (removing a dye isn't done automatically).</summary>
+    /// <summary>Pieces that are dyed but the design has them undyed, when dyes aren't taken off (<c>undye</c> false).</summary>
     public List<DyeNeed> Undye { get; } = new();
 
     /// <summary>Pieces skipped for want of their dye.</summary>
@@ -182,9 +182,11 @@ public static class DyePlanner
 {
     /// <summary>
     /// Which placed pieces to dye with the dyes you have (each dyeing uses one dye from your bags);
-    /// the rest are listed as short. Order: floor by floor, low to high, as placing.
+    /// the rest are listed as short. Order: floor by floor, low to high, as placing. With
+    /// <paramref name="undye"/> (0.9.12), a dyed piece the design has undyed is a job too, for stain 0:
+    /// the dye taken off with Terebinth (<paramref name="owned"/>[0] is how many you have).
     /// </summary>
-    public static DyePlan Plan(IEnumerable<DyeNeed> needs, IReadOnlyDictionary<byte, int> owned)
+    public static DyePlan Plan(IEnumerable<DyeNeed> needs, IReadOnlyDictionary<byte, int> owned, bool undye = false)
     {
         var plan = new DyePlan();
         var left = owned.ToDictionary(kv => kv.Key, kv => kv.Value);
@@ -192,7 +194,7 @@ public static class DyePlanner
         foreach (var n in needs.OrderBy(n => n.Target.Floor).ThenBy(n => MathF.Round(n.Target.Position.Y, 2)).ThenBy(n => n.Target.Key))
         {
             if (n.Want == n.Has) continue;
-            if (n.Want == 0)
+            if (n.Want == 0 && !undye)
             {
                 plan.Undye.Add(n);
                 continue;
@@ -220,10 +222,13 @@ public static class DyePlanner
     /// Dyes to buy for the whole design: every piece that will need dyeing (missing ones, ones from
     /// your bags, wrongly dyed ones) less the dyes you have.
     /// </summary>
-    public static List<(byte Stain, int Count)> ToBuy(Plan plan, IReadOnlyDictionary<byte, int> owned)
+    public static List<(byte Stain, int Count)> ToBuy(Plan plan, IReadOnlyDictionary<byte, int> owned, bool undye = false)
     {
         var needed = plan.Entries
-            .Where(e => e.Target.Stain != 0 && (e.State is PieceState.Missing or PieceState.FromInventory || e.CurrentStain != e.Target.Stain))
+            .Where(e => e.Target.Stain != 0
+                ? e.State is PieceState.Missing or PieceState.FromInventory || e.CurrentStain != e.Target.Stain
+                // Terebinth (stain 0, 0.9.12): a piece you have, dyed, that the design has undyed.
+                : undye && e.State is not (PieceState.Missing or PieceState.FromInventory) && e.CurrentStain != 0)
             .GroupBy(e => e.Target.Stain)
             .Select(g => (Stain: g.Key, Count: g.Count() - owned.GetValueOrDefault(g.Key)))
             .Where(x => x.Count > 0)

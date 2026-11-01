@@ -309,6 +309,10 @@ public sealed partial class ErrandRunner : IDisposable
         if (!Travel.Installed) return "Lifestream isn't installed (or is turned off).";
         // What's fetched is placed by the usual run: it has to be able to start here.
         if (runner.CanStart(false) is { } placing) return placing;
+        // 0.9.12: what's in the storeroom, and in which dye, decides what's bought (its pieces, the dyes,
+        // the Terebinth for dyes to take off): not read yet, they'd all count as missing.
+        if (session.PlanSide == Side.Interior && !session.StoreroomLoaded)
+            return "The storeroom isn't read yet, so its pieces would be bought again: open Housing → Indoor Furnishings once (wait a few seconds if it's empty), then set out.";
         if (plan.IsEmpty) return "Nothing the errands can get.";
         var gil = ErrandGame.Gil();
         if (gil < plan.TotalGil && !rehearse) return $"You have {gil:N0} gil; the errands need about {plan.TotalGil:N0}.";

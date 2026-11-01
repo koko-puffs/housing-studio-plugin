@@ -110,10 +110,13 @@ public static class DyeCounts
     /// from your bags are never dyed; storeroom pieces keep their dye, and the storeroom piece in the
     /// right dye is chosen first, so those already have it). The same as <see cref="Needs"/> predicting.
     /// </summary>
-    public static int ToApply(IEnumerable<PlanEntry> entries) => ToDye(Needs(entries, _ => null, _ => null, predict: true));
+    public static int ToApply(IEnumerable<PlanEntry> entries, bool undye = false) => ToDye(Needs(entries, _ => null, _ => null, predict: true), undye);
 
-    /// <summary>How many of these the dye phase dyes (a dye the design wants, not the one it has).</summary>
-    public static int ToDye(IEnumerable<DyeNeed> needs) => needs.Count(n => n.Want != 0 && n.Want != n.Has);
+    /// <summary>
+    /// How many of these the dye phase dyes (a dye the design wants, not the one it has; with
+    /// <paramref name="undye"/>, a dye taken off a piece the design has undyed too, 0.9.12).
+    /// </summary>
+    public static int ToDye(IEnumerable<DyeNeed> needs, bool undye = false) => needs.Count(n => (n.Want != 0 || undye) && n.Want != n.Has);
 }
 
 /// <summary>The ways a piece from your bags is tried, in order (<see cref="BagRoute"/>).</summary>

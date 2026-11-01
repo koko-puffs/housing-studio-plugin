@@ -66,7 +66,7 @@ public sealed partial class MainWindow
         var side = ReadySide;
         var entries = Filtered().ToList();
         var plan = session.Plan;
-        var summary = StartSummary.Of(entries, config.DyeAfterPlacing);
+        var summary = StartSummary.Of(entries, config.DyeAfterPlacing, data.CanUndye);
 
         // Header (0.9.0, the shared one): back at the top left (closes the design, which stays in Recent),
         // the eyebrow and the name on up to two lines, the pin ☆ and Settings on the right; the pill under it.

@@ -333,6 +333,12 @@ and it only rechecks pieces this run placed or moved. A piece
 the game wouldn't set at its spot, or refused when picked, is tried once more at the end
 (`TryAgainLater`), not counted as a failure in a row.
 
+**Taking a dye off** (0.9.12): a dye job for stain 0. The window opens on the piece's own dye's palette,
+so the first palette is switched to (`DyeShade` with shade 0, `[4, 0]`), its list given 0.3 s (up to 0.9 s
+for a name to read; "No Color" may have none), then row 0 with stain 0 (`DyePick`, `[5, 0, 0, 0]`), Dye
+and Yes as for any dye; the confirmation names Terebinth (`GameData.Terebinth`, item 5728 checked by its
+name or the dyes' item category). Recorded by hand in 0.9.11.
+
 **The dye window's least gap** (0.9.10, `Step.MinGap`): its clicks (open, switch the shade, choose,
 Dye, Yes, close) never come closer than Quick's click gap (0.2 s), and its waits (the preview check, the
 shade's list) never shorter than Quick's, whatever the pace: Daring's 0.12 s would come close to 0.9.1's

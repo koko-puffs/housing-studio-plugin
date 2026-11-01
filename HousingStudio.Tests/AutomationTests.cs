@@ -303,6 +303,38 @@ public class DyePlannerTests
         // Two pieces from the bags want dye 5 (one owned); the missing piece wants dye 6.
         Assert.Equal(new[] { ((byte)5, 1), ((byte)6, 1) }, buy);
     }
+
+    [Fact]
+    public void TakesADyeOffWithTerebinth()
+    {
+        // 0.9.12: a dyed piece the design has undyed is a job for stain 0 (No Color, Terebinth).
+        var plan = DyePlanner.Plan(new[] { N(0, 0, 4), N(1, 0, 4), N(2, 0, 0) }, new Dictionary<byte, int> { [0] = 1 }, undye: true);
+        Assert.Equal(new[] { 0 }, plan.Jobs.Select(j => j.Key!.Value));
+        Assert.Equal(0, plan.Jobs[0].Target.Stain);
+        Assert.Equal(4, plan.Jobs[0].FromStain);
+        Assert.Equal(new[] { 1 }, plan.Skipped.Select(s => s.Key));
+        Assert.Contains(((byte)0, 2, 1), plan.Short);
+        Assert.Empty(plan.Undye);
+        Assert.Equal(1, DyeCounts.ToDye(new[] { N(0, 0, 4), N(1, 0, 4), N(2, 0, 0), N(3, 5, 0) }));
+        Assert.Equal(3, DyeCounts.ToDye(new[] { N(0, 0, 4), N(1, 0, 4), N(2, 0, 0), N(3, 5, 0) }, undye: true));
+    }
+
+    [Fact]
+    public void CountsTerebinthToBuy()
+    {
+        var targets = new[]
+        {
+            new Target(0, 10, Vector3.Zero, 0, 0, Floor.Ground, false),
+            new Target(1, 10, Vector3.One, 0, 0, Floor.Ground, false),
+            new Target(2, 11, Vector3.One * 2, 0, 0, Floor.Ground, false),
+        };
+        // Two copies placed, dyed 4, where the design has them undyed; the third comes undyed from the bags.
+        var placed = new[] { new PlacedPiece(50, 10, Vector3.Zero, 0, 4), new PlacedPiece(51, 10, Vector3.One, 0, 4) };
+        var stock = new[] { new StockSlot(StockSource.Inventory, 0, 0, 11, 0, 1) };
+        var plan = Matcher.Build(targets, placed, stock);
+        Assert.Empty(DyePlanner.ToBuy(plan, new Dictionary<byte, int>()));
+        Assert.Equal(new[] { ((byte)0, 1) }, DyePlanner.ToBuy(plan, new Dictionary<byte, int> { [0] = 1 }, undye: true));
+    }
 }
 
 public class UiCallTests

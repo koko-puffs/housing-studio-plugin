@@ -205,10 +205,32 @@ public static unsafe class InventoryReader
             pagesSeen[i] = pages;
             pagesSeenSince[i] = now;
         }
-        if (pages > 0) seenEmpty[i] = null;
-        else if (seenEmpty[i] != null && seenEmpty[i] == SizeKey(side)) return true;
+        if (pages > 0)
+        {
+            seenEmpty[i] = null;
+            listOpenSince = null;
+        }
+        else
+        {
+            if (seenEmpty[i] != null && seenEmpty[i] == SizeKey(side)) return true;
+            // 0.9.12: the furnishing window open 5 s with nothing from the storeroom, opened by you too
+            // (the errands wait for the storeroom before setting out): it's empty.
+            if (side == Side.Interior && HousingStudio.Automation.GameUi.IsOpen(HousingStudio.Automation.UiTable.FurnishingList))
+            {
+                listOpenSince ??= now;
+                if (now - listOpenSince.Value >= TimeSpan.FromSeconds(5))
+                {
+                    MarkStoreroomEmpty(side);
+                    return true;
+                }
+            }
+            else listOpenSince = null;
+        }
         return pages > 0 && now - pagesSeenSince[i] >= PagesSteady;
     }
+
+    /// <summary>Since when the furnishing window has been open with no storeroom page in.</summary>
+    private static DateTime? listOpenSince;
 
     /// <summary>The home (<see cref="SizeKey"/>) whose storeroom was seen to be empty, per side.</summary>
     private static readonly string?[] seenEmpty = new string?[2];

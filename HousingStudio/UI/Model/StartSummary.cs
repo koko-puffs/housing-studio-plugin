@@ -15,10 +15,11 @@ public sealed record StartSummary(IReadOnlyList<PlanEntry> Moves, int Storeroom,
     public int Places => Storeroom + Bags;
 
     /// <param name="dyeing">Settings → "Dye pieces after placing".</param>
-    public static StartSummary Of(IReadOnlyCollection<PlanEntry> entries, bool dyeing)
+    /// <param name="undye">Dyes are taken off pieces the design has undyed (Terebinth is known, 0.9.12).</param>
+    public static StartSummary Of(IReadOnlyCollection<PlanEntry> entries, bool dyeing, bool undye = false)
     {
         var moves = Matcher.WorkOrder(entries.Where(e => e.State == PieceState.Move)).ToList();
-        var dyes = dyeing ? DyeCounts.ToApply(entries) : 0;
+        var dyes = dyeing ? DyeCounts.ToApply(entries, undye) : 0;
         return new StartSummary(
             moves,
             entries.Count(e => e.State == PieceState.FromStoreroom),
