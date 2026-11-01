@@ -396,6 +396,12 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         storeAheadTried.Clear();
         storeDeferrals.Clear();
         storeRefusals = default;
+        triedAgainLater.Clear();
+        checkPasses = 0;
+        checkAt = null;
+        remakePlaceLoaded = Services.PluginInterface.InstalledPlugins.Any(p => p.IsLoaded && string.Equals(p.InternalName, "ReMakePlacePlugin", StringComparison.OrdinalIgnoreCase));
+        if (remakePlaceLoaded && !dryRun)
+            log.Info("ReMakePlace is loaded: it may answer the dye confirmation and pick a dye itself (its \"auto-confirm dye\" and \"select previous dye\"), so the dye steps wait for it.");
         deferring = false;
         dyesOut.Clear();
         dyeMisses.Clear();
@@ -470,6 +476,12 @@ public sealed unsafe partial class PlacementRunner : IDisposable
 
     /// <summary>This run reads the storeroom first (it hadn't come in), then plans (<see cref="AfterClearOut"/>).</summary>
     private bool storeroomFirst;
+
+    /// <summary>
+    /// ReMakePlace is loaded: it answers the dye confirmation and picks a dye in the dye window by itself
+    /// (when its options say so), so the dye steps leave it room (0.9.7).
+    /// </summary>
+    private bool remakePlaceLoaded;
 
     /// <summary>The game refused a held piece's set-down in this run: later bag pieces go straight to you.</summary>
     private bool heldRefused;
@@ -750,6 +762,16 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 MoveLater(job);
                 NextAfter(quick: true);
                 break;
+            // 0.9.7: a piece the game wouldn't set at its spot (what it stands on isn't placed yet), or
+            // refused when picked (no room in front of you: a piece left there), gets one more go once the
+            // rest are placed, and isn't counted as a failure in a row (two such stopped a run whose
+            // Carry on then placed them all).
+            case QueueState.Skipped when !DryRun && !Rehearsal && queue.Problem == ProblemKind.DidNotLand
+                                         && job.Kind is JobKind.Move or JobKind.PlaceFromStoreroom or JobKind.PlaceFromBags
+                                         && triedAgainLater.Add(job):
+                TryAgainLater(job, queue.Message);
+                NextAfter(quick: false);
+                break;
             case QueueState.Skipped:
                 job.Outcome = JobOutcome.Failed;
                 job.EndedAt = DateTime.UtcNow;
@@ -842,6 +864,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     return;
                 }
             }
+            if (CheckPass()) return;
             Finish();
             return;
         }
@@ -2438,6 +2461,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         var windowFilled = new Settle(3, TimeSpan.FromMilliseconds(80));
         // The dye confirmation, open and the same for a few frames before Yes (this piece's own).
         var confirmSettled = new Settle(4, TimeSpan.FromMilliseconds(200));
+        DateTime? confirmSeen = null;
         return new List<Step>
         {
             EnsureMode(EditorMode.Dye),
@@ -2538,6 +2562,9 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 TimeoutMessage = "The dye window's list didn't fill in.",
                 Run = () =>
                 {
+                    // ReMakePlace, when loaded, picks its last dye in a dye window 0.1 s after it opens
+                    // (its "select previous dye"): this one's pick comes after that.
+                    if (remakePlaceLoaded && queue.Elapsed < TimeSpan.FromMilliseconds(350)) return StepOutcome.Waiting;
                     var values = GameUi.TextValues(UiTable.DyeWindow);
                     var count = Menus.DyeListCount(values, UiTable.DyeListFirstValue);
                     return windowFilled.Update(count > 1 ? $"{values.Count}:{count}" : null, DateTime.UtcNow) ? StepOutcome.Done : StepOutcome.Waiting;
@@ -2628,14 +2655,32 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 {
                     var values = GameUi.IsOpen(UiTable.DyeConfirm) ? GameUi.TextValues(UiTable.DyeConfirm) : null;
                     var state = values != null ? $"open:{values.Count}" : null;
-                    if (!confirmSettled.Update(state, DateTime.UtcNow))
+                    var now = DateTime.UtcNow;
+                    if (values != null) confirmSeen ??= now;
+                    if (!confirmSettled.Update(state, now))
                     {
                         if (state != null) return StepOutcome.Waiting;
+                    }
+                    // 0.9.7: ReMakePlace (loaded with this plugin) answers this question itself when its
+                    // "auto-confirm dye" is on, the moment it opens; a second Yes from here then went to a
+                    // question already answered, and the game crashed (three times). With it loaded, the
+                    // question is given 0.8 s to close by itself first; only if it's still up is Yes sent.
+                    else if (remakePlaceLoaded && now - confirmSeen!.Value < TimeSpan.FromMilliseconds(800))
+                    {
+                        return StepOutcome.Waiting;
                     }
                     else
                     {
                         log.Info($"  The game asks: {string.Join(" ", values!.Values.Where(v => v.Length > 0).Take(4))}");
                         GameUi.Fire(UiTable.DyeConfirmYes);
+                        asked[0] = true;
+                        return StepOutcome.Done;
+                    }
+                    // Up, and gone without a click from here: answered (ReMakePlace's auto-confirm). The
+                    // dye is checked after the window closes, as for a Yes from here.
+                    if (confirmSeen != null && values == null)
+                    {
+                        log.Info("  The question closed without a click from here (answered by ReMakePlace's auto-confirm, it seems).");
                         asked[0] = true;
                         return StepOutcome.Done;
                     }
@@ -3487,6 +3532,95 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         storeDeferrals[job] = n + 1;
         deferring = true;
         return true;
+    }
+
+    /// <summary>How many check passes this run has made (<see cref="CheckPass"/>), and when the next reads the home.</summary>
+    private int checkPasses;
+    private DateTime? checkAt;
+
+    /// <summary>The most check passes a run makes.</summary>
+    private const int CheckPassesMost = 2;
+
+    /// <summary>
+    /// The check pass (0.9.7): once everything is done, what's placed is read again and matched against the
+    /// design as a fresh run would (within 0.01 yalm and 0.01 rad; a set-down counts as landed within
+    /// 0.05), and the run's pieces that are a little off their spot are moved again, up to twice. A
+    /// placement could land a hair off, and only a second run (or a third) put it right. True while it
+    /// waits or after adding moves (the run carries on with them).
+    /// </summary>
+    private bool CheckPass()
+    {
+        if (DryRun || Rehearsal || checkPasses >= CheckPassesMost || entries.Count == 0) return false;
+        var now = DateTime.UtcNow;
+        if (checkAt == null)
+        {
+            // A moment for the furniture list to catch up with the last piece.
+            checkAt = now + Speed.Wait(500);
+            WaitForPlan(now, 100);
+            return true;
+        }
+        if (now < checkAt.Value)
+        {
+            WaitForPlan(now, 100);
+            return true;
+        }
+        checkAt = null;
+        checkPasses++;
+        session.Refresh(HousingContext.Read(Plugin.Plots));
+        liveThisFrame = null;
+        if (session.Plan == null || session.PlanSide != side) return false;
+        var wanted = entries.Select(e => (e.Target.Key, e.Target.ItemId)).ToHashSet();
+        var off = session.Plan.Entries.Where(e => e.State == PieceState.Move && wanted.Contains((e.Target.Key, e.Target.ItemId))).ToList();
+        if (off.Count == 0)
+        {
+            log.Info("Checked: every piece of this run is at its spot (within 0.01 yalm).");
+            checkPasses = CheckPassesMost;
+            return false;
+        }
+        var moves = RunSequence.Build(off);
+        foreach (var m in moves) triedAgainLater.Add(m);
+        jobs.AddRange(moves);
+        jobsVersion++;
+        knownKeys = session.Live.Keys.ToHashSet();
+        log.Info($"Check {checkPasses} of {CheckPassesMost}: {moves.Count} piece{(moves.Count == 1 ? " is" : "s are")} a little off {(moves.Count == 1 ? "its" : "their")} spot: moved again.");
+        index--;
+        nextJobAt = now;
+        return true;
+    }
+
+    /// <summary>The pieces given one more go at the end of the run (<see cref="TryAgainLater"/>).</summary>
+    private readonly HashSet<RunJob> triedAgainLater = new();
+
+    /// <summary>
+    /// One more go for the current piece once the rest are placed: placed already (only its spot was
+    /// refused), it's moved there then; not placed, it's placed then.
+    /// </summary>
+    private void TryAgainLater(RunJob job, string? why)
+    {
+        var now = DateTime.UtcNow;
+        var placed = job.Kind != JobKind.Move && job.Key is { } k && ReadLive() is { } live && live.TryGetValue(k, out var p) && p.ItemId == job.Target.ItemId;
+        log.Info($"  {Name(job)}: {why} It's tried again once the rest are placed{(placed ? " (it's placed: it's moved to its spot then)" : string.Empty)}.");
+        if (placed)
+        {
+            job.Outcome = JobOutcome.Done;
+            job.EndedAt = now;
+            job.Note = "Placed; set at its spot later in the run.";
+            var move = new RunJob { Kind = JobKind.Move, Target = job.Target, Key = job.Key, Entry = job.Entry };
+            triedAgainLater.Add(move);
+            jobs.Add(move);
+        }
+        else
+        {
+            jobs.RemoveAt(index);
+            job.Outcome = JobOutcome.Pending;
+            job.StartedAt = null;
+            job.EndedAt = null;
+            job.Note = null;
+            job.Problem = ProblemKind.None;
+            jobs.Add(job);
+            index--;
+        }
+        jobsVersion++;
     }
 
     /// <summary>Moves the current job after the other pieces to put away that follow it, ready to run again.</summary>

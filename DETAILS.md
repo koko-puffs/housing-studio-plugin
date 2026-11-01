@@ -8,7 +8,19 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.9.6. Placing works in the game; the newer features haven't all been tried in it yet.**
+> **Status: 0.9.7. Placing works in the game; the newer features haven't all been tried in it yet.**
+> 0.9.7: **the dye crash, with ReMakePlace loaded.** ReMakePlace answers the dye confirmation itself
+> the moment it opens (its "auto-confirm dye") and picks its last dye in a dye window as it opens (its
+> "select previous dye"), even when it isn't dyeing; this plugin's Yes then went to a question already
+> answered, and the game crashed (three times). With ReMakePlace loaded, the question is now given 0.8 s
+> to close by itself before Yes is sent, a question that closes without a click from here counts as
+> answered, and the first pick in a dye window waits until ReMakePlace's has come. **One more go at the
+> end**: a piece the game wouldn't set at its spot (what it stands on wasn't placed yet), or refused
+> when picked (a piece left in front of you), is tried again once the rest are placed, and doesn't count
+> as a failure in a row (two of those stopped a run that Carry on then finished). **A check pass**: once
+> a run is done, what's placed is read again and matched against the design as a new run would (within
+> 0.01 yalm; a set-down counts as landed within 0.05), and its pieces a little off their spot are moved
+> again, twice at most, as ReMakePlace users run a placement two or three times.
 > 0.9.6: **the errands target what they use.** NPCs, summoning bells, market boards and doors were
 > talked to and used without ever being targeted, which a person can't do (and your target is sent to
 > the server). Now each is targeted first, and used a moment later (0.18 to 0.42 s, never the same).

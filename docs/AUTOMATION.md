@@ -315,6 +315,18 @@ marked skipped ("Not dyed: no … left in your bags", under Needs you) and passe
 might use another dye item (both recordings showed "Standard Spectrum Dye"), and one the game wouldn't
 dye was skipped as "dye missing" (the window is still checked: a dye not in its list is skipped).
 
+With ReMakePlace loaded (0.9.7), the dye window's first pick waits 0.35 s after it opens (ReMakePlace
+picks its last dye 0.1 s after the window opens, its "select previous dye"), and the confirmation is
+given 0.8 s to be answered by ReMakePlace's "auto-confirm dye" before Yes is sent from here; a
+question that closes with no click from here counts as answered, and the dye is checked after as
+usual. A second Yes to an answered question is what crashed the game.
+
+**After a run** (0.9.7, `PlacementRunner.CheckPass`): what's placed is read again and matched against
+the design (the matcher's 0.01 yalm and 0.01 rad; a set-down counts as landed within 0.05 yalm and
+0.03 rad), and the run's pieces a little off their spot are moved again, two passes at most. A piece
+the game wouldn't set at its spot, or refused when picked, is tried once more at the end
+(`TryAgainLater`), not counted as a failure in a row.
+
 The dye confirmation's Yes waits for the whole click gap after Dye and for the question to have been
 open for four frames and 0.2 s (0.9.3): in 0.9.1 and 0.9.2 Yes went in the frame the question came up,
 and the game crashed twice answering it (the dye window's text filled from a bad pointer, in
