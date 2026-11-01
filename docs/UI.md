@@ -1,4 +1,4 @@
-# The window (0.3.0)
+# The window (0.3.0; redesigned in 0.9.0)
 
 The window is drawn from six mockups (Start, Ready, Running, Done, Pieces, Settings) and the
 Housing Studio design system's tokens. This maps each part of them to the code that draws it.
@@ -22,6 +22,112 @@ Paths are under `HousingStudio/UI/`.
 | Start, Done and Settings' controls | `Kit/Rows.cs` (`Kit` is partial) | `Section` (the mono label, "NEEDS YOU" with its count on the right), `Tabs` / `TabSpec` (small pills, the picked one in glass), `IconThumb` (the 34px thumb), `ActionCard` (a card with a thumb, a title, a line and a small button; Done's undo and fixtures), `BetaButton` (a small button with the Beta tag). |
 | Markers in the world | `Overlay.cs` | Markers, plus `Highlight` for Show where: a pulsing ring and label, or an arrow at the screen's edge when the spot is out of view. |
 
+## 0.9.0: one header, one footer, and words that say what they count
+
+Drawn from the approved mockups (every screen, with notes). Five rules run through every screen:
+
+1. **One header** (`Views/Shared.cs` → `ScreenHeader`): the round back arrow at the top left, the
+   eyebrow (which design, which screen) and a serif title on up to two lines (`TitleWrap`), and at most
+   two round buttons on the right. Home keeps its own header (the where-you-are pill and the title).
+2. **One footer**: the screen's main next step in brass at the bottom left, one second button to its
+   right, and one line under them saying what the brass button does. A running screen has Pause and
+   Stop there instead.
+3. **Design names read as names** (`Core/DesignNames`): underscores are spaces
+   (`LayoutSession.Title`; `RawTitle` keeps the file's own for keys), `ShortTitle` for eyebrows.
+4. **One way to say gil**: "about" is a market estimate, "up to" a cap the run won't pass, a plain
+   number a fixed shop price.
+5. **Counts say what they count**: "1 on a retainer · 30 from shops · 71 on the board"; Ready's
+   "102 to get" with "99 pieces and 3 fixtures" under it (`ReadyWords.GetLine`, from
+   `ShoppingScreen.Counts`, so it matches the Pieces screen and the shopping list).
+
+A question (`MainWindow.Confirmation`, `Ask`, `AskChoice`) is its own window the size of the plugin's,
+darkening only the plugin's window, with everything under it blocked (`Kit.Blocked`).
+
+**Home** (`Views/Start.cs`): **Pinned**, "N of 3", three tiles (`DrawPins`: a picture well, the name
+on up to two lines, "145 pieces · Apartment"; its ★ or right-click → Remove from pinned unpins; an
+empty slot is a dashed "Pin a design from Recent"; narrow windows stack them). Pins are
+`Configuration.PinnedDesigns` (`ViewModel.Pinned`, `IsPinned`); `TogglePin` pins, unpins, or with three
+asks which one a fourth replaces (`AskChoice`). Then the one-row Load (`DrawDropZone`; the big one only
+on a first start, nothing pinned or recent), This house with **Backups · N · newest …** as a row in its
+card (`DrawBackups`, opening the list; its own small panel when you're not in a home), From the site,
+and **Recent** last: designs only (backups and pins left out), the newest three, "Show all N" /
+"Show fewer" (`SectionLink`), a ☆ on the hovered row (`StarButton`) and right-click → Pin to the top
+of Home.
+
+**Ready** (`Views/Ready.cs`): `ScreenHeader` with back (closes the design, which stays in Recent; not
+while the fixtures go) and, on the right, the pin (`PinRound`, brass when pinned) and Settings; the
+pill under it at full width. The checks say what they measure: "46 of 150 item limit"
+(`ReadyWords.LimitChip`), and **All 145 pieces** (`ReadyWords.PiecesChip`) is a chip there that opens
+Pieces (no longer a header button). Get says "102 to get" (`ShoppingScreen.Title`), what that is under
+it, and source chips that count things (`ReadyWords.SourceLabel`).
+
+**Shopping**: the header reads "‹design› · SHOPPING", "N to get", with the gil in all under the title
+("about 2,098,460 gil in all"; "about" whenever part of it is a market-board estimate, plus any
+currencies). Sections, in order: On your retainers (each row "free"), From shops, For MGP and other
+currencies, On the market board, Craft (with Open in Teamcraft), Not known. Each label carries its
+count and, when priced, its total in brass. Shop and currency items are grouped by the place you buy
+at: one panel per NPC with where they stand (your ward when it's your own district, else map
+coordinates), "N things" and a single map flag; rows show the item, ×count and the price, with
+"Fixture", "Dye" or "After a quest" underneath when it applies. Market rows say "about X each ·
+‹data centre›" and "≈ total". The footer has the brass Get everything for me (when the errands are on
+and something's missing) and Copy list, with "Shows the trips and the gil first. Nothing is bought
+until you set out." under them (`Model/ShoppingScreen`, tested).
+
+**Pieces**: the header reads "‹design› · PIECES", "N pieces". The footer has Shopping list (glass) and
+Copy checklist (quiet) on the left, with the count under them, taken from the shopping list so it
+matches Ready: "99 pieces and 3 fixtures to get · no dyes to buy" (or "N dyes to buy"). Before you're
+home it says "Go to your home to see what's missing."
+
+**Errands**: the plan screen uses `ScreenHeader` (back at the top left, "‹ShortTitle› · ERRANDS").
+"Already here" is four `Kit.StatCells` figures (`ErrandWords.HaveFigures`). Trip labels read "fills N
+bag slots, M spare" (`TripSlots`). The footer is the brass Set out bottom left, Place what I have
+beside it, and under them the expected gil and why "up to" is higher (`ErrandWords.Expected`,
+`SetOutHint`). While running, the eyebrow is "‹ShortTitle› · TRIP N OF M", and a rehearsal is marked
+only by the brass Rehearsal pill. The journey is `ErrandWords.JourneySteps(CurrentTrip)` in the trip's
+own stop order, with "Board · N" for several boards; the step in hand is `JourneyIndex(steps, Leg,
+ErrandRunner.StopIndex)`. The current card shows the item, or the place without map coordinates
+(`ErrandWords.Place`, `NoMapPosition`), over "Now: ‹step›" (`ErrandWords.Now`). The log starts at the
+run (`DrawLog(…, since: Errands.StartedAt)`). The summary shows Got and Spent as cards ("of up to X",
+`SpentOf`), then Not got open with one row and reason per thing (`ErrandWords.NotGot`, Teamcraft on
+crafted rows), then Got folded behind "Got · N things" with Copy. Its footer is "See what was placed" /
+Done bottom left, Shopping list beside it, and `NotGotHint` under them.
+
+**Running**: the eyebrow is short ("Placing · Solution9Loft", "Previewing · …", "Rehearsal · …",
+`vm.RunShortTitle`). The 56px figure counts Ready's to-do (`ViewModel.RunCounts`, `Model/RunFigure`):
+the run's moves and placements done out of those planned, with the dyes beside it ("18 of 46 to do ·
+then 20 dyes", then "· 3 of 20 dyed"). A piece that only needs its dye is one of the dyes, not done
+from the start. While a clear out goes first, the total is the to-do the run started with. The bar
+covers moves, placements, dyes and put-aways. The piece card has a quiet **Skip** (`runner.SkipCurrent`;
+none in a preview), with "N skipped so far · listed at the end" under it. `DrawLog(bottomId, since)`
+starts at the run's start (`vm.RunStartedAt`, 2 s grace); **Earlier lines** beside Copy shows the
+rest, and Copy copies the whole log. Carrying on a cut-off run counts the same work
+(`Session/Care.Work`: moves, placements and dyes).
+
+**Done**: the line under the title uses the same numbers (`DoneWords.Line(RunFigure, needYou)`: "44 of
+46 placed · 20 dyed · 2 need you"), and a stopped run's title is "Stopped at 18 of 46". The order is:
+tally, put-away line, Needs you, the fixtures card, then the undo card ("Not what you wanted?") last.
+After a rehearsal, `DrawRehearsalResult` says the outcome in one sentence (`RehearsalWords.Outcome`:
+who stopped it, where, nothing committed, or bought or taken). It lists What didn't work first when
+there's any. It shows what it would have done or, stopped before anything counted, **How far it got**
+(`RehearsalWords.Pieces` / `Stops`). The log is folded ("What it did · N lines", from the report's
+start). The footer has Done in brass on the left, Copy report to its right, and a line saying Done
+goes back to Ready.
+
+**Settings**: the back arrow at the top left, the title, and three tabs: Placing, Getting and Help.
+Placing's last row, More options (12), opens a screen of its own ("Settings · placing / More options",
+back goes to Placing) with three groups: Where and how it places, Markers, and Other. Getting is in
+three labelled groups: Market board, Shops (Currencies) and Travel and bags. Currencies is one row,
+"20 of 20 allowed · only what you have is spent"; Choose › opens the currency pills under it. Help
+starts with the Housing Studio account (the token or Linked with Unlink, Check for things sent from the
+site, Show homes on Housing Studio when I visit), then How a run behaves and Making a report. The
+version and What's new stay at the foot.
+
+**Looking after a home**: Check for changes opens the changes under This house, grouped by what
+happened: Moved · N, Taken away · N, Dyed again · N and Added · N, each with the pieces' names under it.
+Moved and Taken away each have Show where. Put them back where they were is the brass button under the
+groups; it asks first. While the fixtures are being set, the brass panel's eyebrow row shows which
+fixture it is on, "1 of 3", on the right (`Model/SettingsWords.FixtureProgress`).
+
 ## Start (`Views/Start.cs`, the 0.6 flow: `docs/mockups/flow.html`)
 
 | Mockup | Code |
@@ -42,11 +148,11 @@ Paths are under `HousingStudio/UI/`.
 | Mockup | Code |
 | --- | --- |
 | Eyebrow "BUILD · INSIDE", title, pill | `DrawReady` header; `ReadyPill` (fits / size mismatch / can't decorate / go home / garden) |
-| Pieces, Settings, × | header buttons in `DrawReady` |
+| Back (top left), pin ☆, Settings (0.9.0; Pieces is a chip, "All N pieces") | `ScreenHeader` in `DrawReady`, `PinRound`, `SettingsButton` |
 | The plot's warnings | `AlertNote`s from `session.Warnings`, above the rest |
 | Carry on banner: "A run was cut off at piece N of M." · Carry on · Forget | `DrawCarryOnBanner` (`Views/Care.cs`) → `Kit.Banner`, from `Care.Offer`; Carry on → `CarryOn` (the run's pieces as matched now; it never clears out or swaps: `StartRun`'s `clearOut` is null, and the tooltip says so while Clear out or Swap is picked) |
 | Check chips and their detail (one open at a time; press again to close) | `DrawReadyChecks` → `ReadyChecks` (`Views/Care.cs`, made again only when what they're made from changes, `ChecksKey`) → `Kit.CheckChips`, the detail in `Kit.BeginDetail` with `CheckActionsRow` (Show where, Pieces, See which, Copy list). Chips: the item limit as a meter (`ItemLimits.Check`, a chosen clear out's pieces not counted; words `CareWords.LimitDetail`), "N may be refused" and "N can't go here" (`ClashesNow`), "N dyes short" (`vm.MissingDyes`, opens `DyesPopover`), "Storeroom not read", "Near me · N pieces", floors left out, the other side's pieces. None when there's nothing to say. |
-| 1 · Get: "N missing", "about X gil", source chips, Get them for me first, See the list › | `DrawGetStage`: `ShopPlan()` (`Plugin.Shop`), words cached per plan in `GetWords`; `Kit.CountChip` per `SourceKind`; the switch only with `Errands.Enabled` (`Configuration.GetFirst`); See the list opens Shopping. Done ("You have everything") when nothing's missing; "Not known yet" away from home. |
+| 1 · Get: "N to get" and what that is (0.9.0), "about X gil", source chips that count things, Get them for me first, See the list › | `DrawGetStage`: `ShopPlan()` (`Plugin.Shop`), words cached per plan in `GetWords`; `Kit.CountChip` per `SourceKind`; the switch only with `Errands.Enabled` (`Configuration.GetFirst`); See the list opens Shopping. Done ("You have everything") when nothing's missing; "Not known yet" away from home. |
 | 2 · Place: "N to do", "N already in place", to move / to place / to dye | `DrawPlaceStage` (`Model/StartSummary`, words `ReadyWords.PlaceBig`), `Kit.StatCells`; a line when you put pieces down by hand (Settings) |
 | Keep what's here / Clear out N / Swap, and its line | `DrawPlaceChoice` (`Views/ClearOut.cs`) → `Kit.SegmentedPress` (Clear out greyed with nothing to clear; Swap too, or for a backup; any press sets `Mode`, Keep what's here too), words `ReadyWords.ModeNote`. The choice is `Mode` (per design, Keep for another), `ModeNow` what it comes to (Keep when it can't; drawn, a choice that can't apply is set back to Keep so it doesn't return by itself), `SwapKeepAs` the swap's name (`KeepAsName`, read once a second), `ChosenClearOut()` the pieces put away first (Clear out or Swap). |
 | 3 · Finish: "N fixtures", "x of y set", what they are, Set them for me after placing, Tick off | `DrawFinishStage`: `FinishLine` (`FixtureSummary` and, with the fixtures run on, `FixtureBagWords`; once a second), the switch with `Plugin.FixtureRun.Enabled` (`Configuration.FixturesAfterPlacing`); Tick off → `DrawFixtureTicks` (Set them for me, `DrawSetFixtures`, and the tick rows, `Configuration.FixturesDone` via `Model/FixtureTicks`). While it runs, `DrawFixtureRunPanel` (step, Continue, Stop) in its place. Hidden with no fixtures. |
