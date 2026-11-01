@@ -8,7 +8,10 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.9.12. Placing works in the game; the newer features haven't all been tried in it yet.**
+> **Status: 0.9.13. Placing works in the game; the newer features haven't all been tried in it yet.**
+> 0.9.13: **Shots carry the house's light.** A shot taken inside sends the house's lighting level with
+> its camera (`pose.light`, 0 to 5, from the game's Interior Settings), so the site's comparison in 3D
+> is lit as the picture was. Left out in a garden, or when it can't be read.
 > 0.9.12: **Dyes taken off.** A piece that's dyed where the design has it undyed (a copy dyed for an
 > earlier design) has its dye taken off with Terebinth in the dye phase: the dye window's first palette,
 > its first place, "No Color", as recorded by hand ([4, 0], then [5, 0, 0, 0], Dye, Yes). Terebinth is
@@ -1206,7 +1209,9 @@ the same spot.
   target 10 yalms ahead; the vertical field of view from the projection (2·atan(1 / M22), in
   degrees; the render camera's own FoV, radians, only if the projection can't say). In the game's
   axes; a garden's both points in the plot's frame (`Transforms.WardToPlot`, as its pieces are
-  saved). `Core/ShotPose.cs` (`CameraMath`), tested.
+  saved). Inside, the house's lighting level goes with it (`light`, 0 to 5, `FixtureReader.LightOfInterior`,
+  0.9.13; the site keeps it, `hs_pose_tidy`, and lights its comparison so); not part of "did the camera
+  move". `Core/ShotPose.cs` (`CameraMath`), tested.
 - **The picture**: the game's frame, grabbed before Dalamud draws its windows over it
   (`ITextureProvider.CreateFromImGuiViewportAsync`, `TakeBeforeImGuiRender`). The camera is read when
   it's asked for and again once the picture is in: if it moved, there's no shot ("Hold it still and
