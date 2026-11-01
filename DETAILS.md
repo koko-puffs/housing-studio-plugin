@@ -8,7 +8,16 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.8.3. Placing works in the game; the newer features haven't all been tried in it yet.**
+> **Status: 0.8.4. Placing works in the game; the newer features haven't all been tried in it yet.**
+> 0.8.4, from the Mist house's second rehearsal. **Dyeing**: while the dye window is open the game
+> shows its preview in the piece's own dye (the dye chosen, or a shade's first dye when the shade is
+> switched), and puts it back when the window closes. The rehearsal read the preview as the piece's
+> dye before, and its real dye after, and said the Icebox's dye had changed (Sunset Orange → Goobbue
+> Grey) when nothing had. The dye before is now read with the window closed, and the check waits for
+> the window to close and the dye to hold. A real run could have been fooled the same way (the
+> preview taken for the dye done, the window then closed without Yes): it now waits for the game's
+> question, and checks the dye once the window has closed. **The end of a rehearsal** no longer says
+> the editor holds a piece when it's only Furnishing Color's selected piece.
 > 0.8.3: **other districts' vendors.** What only another residential district's vendors sell is got
 > there: Lifestream's housing address takes you through that district's city aetheryte and its
 > Residential District Aethernet (Limsa Lominsa → Mist, New Gridania → the Lavender Beds, Ul'dah → the
@@ -830,7 +839,7 @@ run.
 | Place from your bags | the item's menu → Store, then from the storeroom (or Place, then set down) | the item's menu opened, "Store" (or "Place") found, the menu closed. |
 | Placed by hand | waits for you | doesn't wait: noted. |
 | Clear out | the storeroom button, the piece picked | the storeroom button ([i:3]) pressed; the piece isn't picked (in that mode the pick itself puts it away). |
-| Dye | the dye window, the dye chosen, Dye, yes | the dye window opened on the piece and the dye chosen, then closed without Dye (a "dye it?" question is answered no); it checks the dye didn't change. Pieces not placed yet are counted ("once placed"); the first time it comes to each dye, it's tried on a **stand-in** (a placed piece that takes a dye, one dyed already first), every step but Dye. With no stand-in, only counted. |
+| Dye | the dye window, the dye chosen, Dye, yes | the dye window opened on the piece and the dye chosen, then closed without Dye (a "dye it?" question is answered no); it checks the dye is the piece's own again once the window has closed (the window shows its preview on the piece while open, which the log names). Pieces not placed yet are counted ("once placed"); the first time it comes to each dye, it's tried on a **stand-in** (a placed piece that takes a dye, one dyed already first), every step but Dye. With no stand-in, only counted. |
 | A vendor's purchase | the purchase, its question checked, yes | the purchase sent, the game's question read and checked against the price (`MarketRule.QuestionMatches`: whether it matched is in the report), then Cancel; it checks nothing came to your bags and no gil went. |
 | The market board | search, listings, the listing, its question, yes | the same up to the question, checked, then Cancel. |
 | A retainer | the bell, the retainer, their bags, the item's menu, Retrieve | the same up to the menu, "Retrieve from Retainer" found, the menu closed. |

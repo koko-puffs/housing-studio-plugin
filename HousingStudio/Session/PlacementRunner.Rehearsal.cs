@@ -417,17 +417,20 @@ public sealed unsafe partial class PlacementRunner
     /// A dye's commit point: the dye window is open on the piece and the dye chosen (as a real run);
     /// here Dye isn't pressed, the window is closed (a "dye it?" question is answered no), and the
     /// piece is checked to have kept its dye. Ends the piece (the real run's Dye steps after it don't run).
+    /// <paramref name="before"/> is its dye read before the window opened: while the window is open the
+    /// game shows its preview in the piece's dye, and puts the dye back once the window closes.
     /// </summary>
-    private List<Step> RehearseDyeEnd(RunJob job, int key)
+    private List<Step> RehearseDyeEnd(RunJob job, int key, byte before)
     {
         var name = Name(job);
         var dye = data.DyeName(job.Target.Stain);
-        var before = StainOf(key);
         var saidNo = false;
         return new List<Step>
         {
             Step.Act($"Would press Dye: {UiTable.DyeApply.Describe()} (not pressed: a rehearsal)", () =>
             {
+                var shown = StainOf(key);
+                log.Info($"  With the window open, {name}'s dye reads {DyeWord(shown)} (it was {DyeWord(before)}){(shown == job.Target.Stain ? $": the window shows {dye} on it, as chosen" : shown == before ? string.Empty : $": not {dye}, so the pick may have chosen another dye")}.");
                 Would(job, $"dye {name} {dye}");
                 return StepOutcome.Done;
             }, Speed.Wait(300)),
@@ -452,20 +455,22 @@ public sealed unsafe partial class PlacementRunner
                     return !GameUi.IsOpen(UiTable.DyeWindow) && !GameUi.IsOpen(UiTable.DyeConfirm) ? StepOutcome.Done : StepOutcome.Waiting;
                 },
             },
-            new Step
+            DyeHeld(key, before, $"Check {name} kept its dye", TimeSpan.FromSeconds(3), () =>
             {
-                Label = $"Check {name} kept its dye",
-                Run = () =>
+                queue.FinishAfterThis();
+                return StepOutcome.Done;
+            }, () =>
+            {
+                if (GameUi.IsOpen(UiTable.DyeWindow))
+                    Rehearsals.Report.Issue(name, $"The dye window didn't close with {UiTable.DyeClose.Describe()}.", RehearsalTrouble.NoMatch);
+                else
                 {
-                    if (GameUi.IsOpen(UiTable.DyeWindow))
-                        Rehearsals.Report.Issue(name, $"The dye window didn't close with {UiTable.DyeClose.Describe()}.", RehearsalTrouble.NoMatch);
                     var now = StainOf(key);
-                    if (now != before)
-                        Rehearsals.Report.Issue(name, $"Its dye changed ({DyeWord(before)} → {DyeWord(now)}) though Dye wasn't pressed.", RehearsalTrouble.Failed);
-                    queue.FinishAfterThis();
-                    return StepOutcome.Done;
-                },
-            },
+                    Rehearsals.Report.Issue(name, $"Its dye changed ({DyeWord(before)} → {DyeWord(now)}) though Dye wasn't pressed.", RehearsalTrouble.Failed);
+                }
+                queue.FinishAfterThis();
+                return StepOutcome.Done;
+            }),
         };
     }
 
@@ -495,6 +500,14 @@ public sealed unsafe partial class PlacementRunner
 
     private void SayStillHeld()
     {
+        // In Furnishing Color the active item is the piece selected for dyeing (its row in the list):
+        // nothing is held, and Esc isn't needed (0.8.2's rehearsal ended on a dye and said otherwise).
+        if (HousingEditor.Mode == EditorMode.Dye)
+        {
+            log.Info("  Furnishing Color still has the last dyed piece selected (nothing is held).");
+            rehearsalHeld = null;
+            return;
+        }
         // The last storeroom row's preview: the game keeps it as its active item until another row is
         // picked. Nothing is placed; it isn't a piece held.
         if (HousingEditor.Mode != EditorMode.Place && FurnitureReader.Preview() != null && rehearsalHeld == null)

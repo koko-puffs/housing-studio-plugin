@@ -2011,13 +2011,19 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         var dye = data.DyeName(job.Target.Stain);
         var slot = data.DyeSlot(job.Target.Stain);
         var row = new[] { -1 };
+        // Its dye before the window opens: while the window is open the game writes its preview (the
+        // dye chosen, or a shade's first dye when the shade is switched) into the piece's stored dye,
+        // and closing the window without dyeing puts this back (0.8.2's rehearsal, Icebox).
+        var stainBefore = new byte[] { 0 };
+        var asked = new[] { false };
         nint instance = 0;
         return new List<Step>
         {
             EnsureMode(EditorMode.Dye),
             Step.Act($"Check {name} still needs {dye}", () =>
             {
-                if (StainOf(key) == job.Target.Stain)
+                stainBefore[0] = StainOf(key);
+                if (stainBefore[0] == job.Target.Stain)
                 {
                     job.Note = "Already in its dye.";
                     queue.FinishAfterThis();
@@ -2040,6 +2046,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     return StepOutcome.Skip("It's no longer where the plan saw it.", ProblemKind.NotFound);
                 if (piece.Instance == 0) return StepOutcome.Skip("The game hasn't loaded it (walk closer to it).", ProblemKind.NotLoaded);
                 instance = piece.Instance;
+                stainBefore[0] = StainOf(key); // the window is closed: its own dye, no preview
                 return editor.Select(instance) ? StepOutcome.Done : StepOutcome.Halt("Couldn't pick the piece.");
             }),
             new Step
@@ -2089,7 +2096,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             {
                 var values = UiCallValues.Of(("row", row[0]), ("stain", job.Target.Stain));
                 log.Info($"  → {UiTable.DyePick.Describe(values)}");
-                if (Rehearsal) queue.InsertNext(RehearseDyeEnd(job, key));
+                if (Rehearsal) queue.InsertNext(RehearseDyeEnd(job, key, stainBefore[0]));
                 return Fire(UiTable.DyePick, values);
             }),
             Step.Act($"Press Dye: {UiTable.DyeApply.Describe()}", () => Fire(UiTable.DyeApply)),
@@ -2103,32 +2110,65 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     {
                         log.Info($"  The game asks: {string.Join(" ", GameUi.TextValues(UiTable.DyeConfirm).Values.Where(v => v.Length > 0).Take(4))}");
                         GameUi.Fire(UiTable.DyeConfirmYes);
+                        asked[0] = true;
                         return StepOutcome.Done;
                     }
-                    return StainOf(key) == job.Target.Stain ? StepOutcome.Done : StepOutcome.Waiting;
+                    // The piece's dye alone proves nothing while the window is open (it shows the
+                    // preview): only the window closed on its own with the dye in place counts.
+                    return !GameUi.IsOpen(UiTable.DyeWindow) && StainOf(key) == job.Target.Stain ? StepOutcome.Done : StepOutcome.Waiting;
                 },
                 Timeout = WindowWait,
-                OnTimeout = StepStatus.SkipJob,
-                TimeoutProblem = ProblemKind.DyeMissing,
-                TimeoutMessage = $"Neither the dye confirmation appeared nor the dye changed. The Dye button may be greyed out (no {dye} to use, or this piece can't take it).",
+                OnTimeout = StepStatus.Done, // checked once the window is closed
             },
-            new Step
-            {
-                Label = $"{name} turns {dye}",
-                Run = () => StainOf(key) == job.Target.Stain ? StepOutcome.Done : StepOutcome.Waiting,
-                Timeout = TimeSpan.FromSeconds(4),
-                OnTimeout = StepStatus.SkipJob,
-                TimeoutProblem = ProblemKind.DyeFailed,
-                TimeoutMessage = $"Its dye didn't change to {dye}.",
-            },
+            Step.Wait("The confirmation closes", () => !GameUi.IsOpen(UiTable.DyeConfirm), TimeSpan.FromSeconds(3), StepStatus.Done),
             Step.Act("Close the dye window", () =>
             {
                 if (GameUi.IsOpen(UiTable.DyeWindow)) GameUi.Fire(UiTable.DyeClose);
-                job.Note ??= $"Dyed {dye}.";
                 return StepOutcome.Done;
             }),
+            Step.Wait("The dye window is closed", () => !GameUi.IsOpen(UiTable.DyeWindow), WindowWait, StepStatus.Done),
+            DyeHeld(key, job.Target.Stain, $"{name} turns {dye}", TimeSpan.FromSeconds(4), () =>
+            {
+                job.Note ??= $"Dyed {dye}.";
+                return StepOutcome.Done;
+            }, () => asked[0]
+                ? StepOutcome.Skip($"Its dye didn't change to {dye} (it reads {DyeWord(StainOf(key))}).", ProblemKind.DyeFailed)
+                : StepOutcome.Skip($"The dye confirmation didn't appear and the dye didn't change. The Dye button may be greyed out (no {dye} to use, or this piece can't take it).", ProblemKind.DyeMissing)),
         };
     }
+
+    /// <summary>
+    /// Waits until a piece's stored dye has read <paramref name="stain"/> for half a second with the dye
+    /// window closed (the game puts a preview back a moment after the window closes), then runs
+    /// <paramref name="done"/>; after <paramref name="wait"/>, <paramref name="late"/>.
+    /// </summary>
+    private Step DyeHeld(int key, byte stain, string label, TimeSpan wait, Func<StepOutcome> done, Func<StepOutcome> late)
+    {
+        DateTime? from = null;
+        DateTime? since = null;
+        return new Step
+        {
+            Label = label,
+            // Its own deadline (wait) comes first; the queue's is only a backstop.
+            Timeout = wait + TimeSpan.FromSeconds(2),
+            OnTimeout = StepStatus.SkipJob,
+            TimeoutMessage = $"Timed out: {label}",
+            Run = () =>
+            {
+                var now = DateTime.UtcNow;
+                from ??= now;
+                if (!GameUi.IsOpen(UiTable.DyeWindow) && StainOf(key) == stain)
+                {
+                    since ??= now;
+                    if (now - since.Value >= DyeSettle) return done();
+                }
+                else since = null;
+                return now - from.Value >= wait ? late() : StepOutcome.Waiting;
+            },
+        };
+    }
+
+    private static readonly TimeSpan DyeSettle = TimeSpan.FromMilliseconds(500);
 
     /// <summary>
     /// Opens the dye window through Furnishing Color's list: rows whose name is the piece's are picked

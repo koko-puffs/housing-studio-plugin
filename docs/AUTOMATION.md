@@ -263,6 +263,11 @@ me" off, the run waits for you to put each down and then sets it.
 4. `ColorantColoring ← [i:5, i:row, i:stain, i:0]` (recorded: Snow White [5, 1, 1, 0], Soot Black
    [5, 6, 6, 0]; the third value matches both row and Stain id there), Dye `[i:0]`, confirm
    `MiragePrismMiragePlateConfirm ← [i:0]`, close `ColorantColoring ← [i:-2]`; check the dye changed.
+   While the window is open the game writes its preview into the piece's stored dye
+   (`HousingFurniture.Stain`): the dye chosen, or a shade's first dye when the shade is switched (0.8.2's
+   rehearsal read Sunset Orange there just after switching to the browns), and puts the piece's own back when the
+   window closes without Dye. So the dye before is read with the window closed, and the dye after only
+   counts with the window closed and the reading steady for 0.5 s (`DyeHeld`).
 
 **How many to dye** is one calculation (`DyeCounts.Needs`) for the run's first line and the dye phase:
 each piece you have, placed (the dye it has now) or still to place (the dye it will have: storeroom
@@ -455,6 +460,15 @@ the aetheryte, ward 1, House, plot 1, …) via `Lifestream.GoToWard`; arrived wh
 `ErrandGame.WardDistrict()` is the district and settled for 1.5 s, then `Lifestream.Abort` (it walks on
 to the plot) and the nearest NPC of the vendor's name is walked to. Asked again after 20 s (twice).
 `ErrandPlanner.PlaceOrder`: vendors of `PreferDistrict` first, then other districts', then by zone.
+
+**0.8.4**: the dye window's preview. `DyeSteps` keeps the piece's dye from before the window opened
+(read again just before the pick that opens it); `RehearseDyeEnd(job, key, before)` logs what the dye
+reads with the window open (the preview) and checks with `DyeHeld` that it's `before` again once the
+window is closed (0.5 s steady, 3 s at most). A real run's confirm step no longer ends on the dye
+reading the target while the window is open (that's the preview): it waits for the question (Yes),
+or the window closed by the game with the dye in place; then the window is closed and `DyeHeld` waits
+for the dye (4 s), skipping as `DyeFailed` after a Yes, else `DyeMissing`. `SayStillHeld` ignores
+Furnishing Color's active item (the piece selected for dyeing, not held).
 
 **0.7.13**: `ErrandPlanner.Pack` cuts each stop's units (by `Key`) into pieces that fit a trip, then
 packs the pieces biggest first into the first trip with room (first-fit decreasing); a trip keeps the
