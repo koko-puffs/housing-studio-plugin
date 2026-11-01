@@ -3,8 +3,8 @@
     "Author": "koko",
     "Name": "Housing Studio",
     "InternalName": "HousingStudio",
-    "AssemblyVersion": "0.9.13.0",
-    "TestingAssemblyVersion": "0.9.13.0",
+    "AssemblyVersion": "1.0.0.0",
+    "TestingAssemblyVersion": "1.0.0.0",
     "Punchline": "Furnish your house from a Housing Studio build or a MakePlace layout.",
     "Description": "Place a Housing Studio build or a MakePlace layout in your home: every piece is matched to what you have, moved or placed at its exact spot, and dyed to match. It can also fetch what's missing, save your home as a build, and send shots of it to its page on the site.\n\nOpen it with /hstudio in a home you're allowed to decorate.",
     "ApplicableVersion": "any",
@@ -26,9 +26,9 @@
     "AcceptsFeedback": true,
     "IsHide": false,
     "IsTestingExclusive": false,
-    "LastUpdate": 1793522171,
-    "DownloadLinkInstall": "https://github.com/koko-puffs/housing-studio-plugin/releases/download/v0.9.13/HousingStudio.zip",
-    "DownloadLinkUpdate": "https://github.com/koko-puffs/housing-studio-plugin/releases/download/v0.9.13/HousingStudio.zip",
-    "DownloadLinkTesting": "https://github.com/koko-puffs/housing-studio-plugin/releases/download/v0.9.13/HousingStudio.zip"
+    "LastUpdate": 1793566189,
+    "DownloadLinkInstall": "https://github.com/koko-puffs/housing-studio-plugin/releases/download/v1.0.0/HousingStudio.zip",
+    "DownloadLinkUpdate": "https://github.com/koko-puffs/housing-studio-plugin/releases/download/v1.0.0/HousingStudio.zip",
+    "DownloadLinkTesting": "https://github.com/koko-puffs/housing-studio-plugin/releases/download/v1.0.0/HousingStudio.zip"
   }
 ]
