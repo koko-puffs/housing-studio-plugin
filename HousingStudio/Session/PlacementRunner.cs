@@ -2643,6 +2643,26 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 },
             },
             DyeShownCheck(job, key, () => instance, () => stainBefore[0]),
+            // 0.9.8, as RemakePlace/plugin checks before its Dye: a greyed-out Dye button, or the red cross on the
+            // dye chosen (not enough of it), means Dye isn't pressed at all (0.9.7 pressed it and waited 3 s
+            // for a confirmation that wouldn't come). A node that can't be read says nothing: Dye as before.
+            new Step
+            {
+                Label = $"The dye window can use {dye}",
+                Run = () =>
+                {
+                    switch (DyeWindowRefuses(slot))
+                    {
+                        case "button":
+                            return StepOutcome.Skip($"The dye window's Dye button is greyed out for {dye} (none of it to use, or this piece can't take it).", ProblemKind.DyeMissing);
+                        case "cross":
+                            if (dyesOut.Add(job.Target.Stain)) log.Warn($"Out of {dye} (the dye window marks it with a red cross): the other pieces needing it are skipped this run.");
+                            return StepOutcome.Skip($"Out of {dye}: the dye window marks it as not enough. Get more and Try again.", ProblemKind.DyeMissing);
+                        default:
+                            return StepOutcome.Done;
+                    }
+                },
+            },
             new Step { Label = $"Press Dye: {UiTable.DyeApply.Describe()}", IsAction = true, Gap = DyeGap, Run = () => FireOrSkip(UiTable.DyeApply) },
             new Step
             {
@@ -2810,6 +2830,26 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 return StepOutcome.Skip($"The dye window shows {DyeWord(shown)} on it, not {dye} (the pick chose another dye): Dye wasn't pressed.", ProblemKind.DyeFailed);
             },
         };
+    }
+
+    /// <summary>
+    /// What the dye window says it can't do, read as RemakePlace/plugin reads it: "button" when its Dye button
+    /// is greyed out (nine-grid node 1/64/68/3 tinted 0xFFFFFFB2), "cross" when the dye's own red cross shows
+    /// (image node 1/22/34/(dye's place)/2/4); null when it can (or a node isn't there to read).
+    /// </summary>
+    private static unsafe string? DyeWindowRefuses((byte Shade, byte SubOrder)? slot)
+    {
+        var addon = GameUi.Ready(UiTable.DyeWindow);
+        if (addon == null) return null;
+        var button = GameUi.NodeByIdChain(addon->RootNode, 1, 64, 68, 3);
+        if (button != null && button->Color.RGBA == 0xFFFFFFB2) return "button";
+        if (slot is { SubOrder: > 0 } s)
+        {
+            var place = s.SubOrder - 1;
+            var cross = GameUi.NodeByIdChain(addon->RootNode, 1, 22, 34, place == 0 ? 2u : 21000u + (uint)place, 2, 4);
+            if (GameUi.NodeShown(cross)) return "cross";
+        }
+        return null;
     }
 
     /// <summary>Closes the dye window (or answers No) again while waiting for it to close; never true.</summary>

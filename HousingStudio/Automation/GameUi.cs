@@ -80,6 +80,36 @@ public static unsafe class GameUi
     public static bool IsOpen(string name) => Ready(name) != null;
 
     /// <summary>
+    /// A node found by its ids, as ECommons' GetNodeByIDChain walks a window (0.9.8, for the dye window's
+    /// checks RemakePlace/plugin makes): from <paramref name="start"/>, the node with the first id among
+    /// it and its earlier siblings, then into its children (a component's own nodes when it has none) for
+    /// the next id, and so on. Null when any isn't there. Read only; bounded, so a strange tree can't loop.
+    /// </summary>
+    public static AtkResNode* NodeByIdChain(AtkResNode* start, params uint[] ids)
+    {
+        var node = start;
+        for (var level = 0; level < ids.Length; level++)
+        {
+            var guard = 0;
+            while (node != null && node->NodeId != ids[level] && guard++ < 1024) node = node->PrevSiblingNode;
+            if (node == null || node->NodeId != ids[level]) return null;
+            if (level == ids.Length - 1) return node;
+            var next = node->ChildNode;
+            if (next == null && (ushort)node->Type >= 1000)
+            {
+                var comp = ((AtkComponentNode*)node)->Component;
+                if (comp == null || comp->UldManager.NodeListCount == 0 || comp->UldManager.NodeList == null) return null;
+                next = comp->UldManager.NodeList[0];
+            }
+            node = next;
+        }
+        return null;
+    }
+
+    /// <summary>Whether a node is set to be shown.</summary>
+    public static bool NodeShown(AtkResNode* node) => node != null && (node->NodeFlags & NodeFlags.Visible) != 0;
+
+    /// <summary>
     /// Fires a window's callback, which is what clicking in it does (ECommons' <c>Callback.Fire</c>
     /// does the same). Returns false (and does nothing) when the window isn't open.
     /// </summary>
