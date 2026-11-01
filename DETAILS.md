@@ -8,7 +8,37 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.9.13. Placing works in the game; the newer features haven't all been tried in it yet.**
+> **Status: 1.0.0.** Placing, dyeing, taking dyes off, clearing out and the errands have all run in the
+> game; every click the plugin sends was recorded by hand, but for a garden fixture's apply and a vendor's
+> item exchange (both still wait for Continue).
+> 1.0.0: **a full review for stability, speed and polish.**
+> *The dye window.* Its clean-up keeps the dye window's 0.2 s between clicks, never says No to a question
+> Yes went to while it's up (nor, with ReMakePlace loaded, before it's had 2 s to answer it), and closes
+> what it left once its rules allow, after the run too; any job first closes a dye window left up. The
+> list's rows are read from the palette alone: a palette's first dye (Sunset Orange, the browns') was
+> never found and counted as out, and the items listed after the rows ("Terebinth") were taken for rows.
+> Pieces the game won't dye get no dye job; the check pass re-dyes only a piece still at its spot.
+> *Placing.* A piece set aside to try again later isn't picked straight back; a storeroom placement after
+> a clear out is in Rotate first; a placed piece isn't placed again when the furniture list can't be read
+> for a moment; Esc or a closed menu skips that piece instead of stopping the run; pieces 0.01–0.05 off
+> are moved in the run, not left for the check pass; Needs you lists each piece's latest try only; a
+> Start with nothing to do keeps the last run's results and Swap back.
+> *Errands.* A replan during a run has only what's left of the market ceiling and the gil agreed (it
+> planned against the whole ceiling, then stopped at "more than you agreed to"); a board refused for the
+> ceiling, gil or bag room isn't ruled out for the item; a vendor that wouldn't sell an item isn't planned
+> again; a vendor's question has to name the item as well as the price; a board purchase that goes through
+> after it was given up on is counted before the next; AutoRetainer is kept out at every bell; a retainer's
+> bags are read once they've come; the board keeps your spare slots. Recorded by hand: the currency
+> exchange's purchase ([0, row, count, empty], then Yes), so it no longer waits for Continue.
+> *Fixtures.* A slot kept from another home that's past the window's end or holds another part is put in
+> by you; the late "proceed?" gets one Yes.
+> *The window.* A view that throws leaves nothing open in ImGui; faded controls don't stay faded; Ready's
+> and Pieces' lists are worked out when they change, not every frame; buttons cut their words to fit;
+> the first window fits the screen; Settings' back names where it goes.
+> *Underneath.* The furnishing editor's state is read through only once its memory is seen readable (a
+> game patch that moves it can't crash the game in every home); /hstudio stop stops each part on its own;
+> the last design reopens on the framework thread; a repeating error is logged every 10–30 s, not once;
+> a shot's hidden HUD comes back first; layout files are bounded (ids, 5,000 pieces a side).
 > 0.9.13: **Shots carry the house's light.** A shot taken inside sends the house's lighting level with
 > its camera (`pose.light`, 0 to 5, from the game's Interior Settings), so the site's comparison in 3D
 > is lit as the picture was. Left out in a garden, or when it can't be read.

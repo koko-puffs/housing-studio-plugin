@@ -276,9 +276,12 @@ me" off, the run waits for you to put each down and then sets it.
    Recording 2: rows with the piece's name are picked (`HousingGoodsStain ← [i:0, u:row]`) until the
    editor's active item is this piece (a row that picks another piece is passed at once, not after
    1.5 s), then its menu `[i:1, u:row]` and "Paint".
-3. Find the dye's row in the window's list: its names start at value 203 "No Color" (row 0) and end
-   where "No Color" comes round again, so Snow White is row 1 and Soot Black row 6. If the dye isn't
-   in the list shown, the shade is picked first (`[i:4, i:shade]`, RemakePlace, **unconfirmed**), and
+3. Find the dye's row in the window's list: the palette's names are values 203 on, one a row, up to
+   the first empty one (36 at most; from 239 on the window lists the item each row uses: "Terebinth"
+   for No Color, "Standard Spectrum Dye"…). The first palette starts with "No Color" (row 0), so Snow
+   White is row 1 and Soot Black row 6; the others start with a dye (the browns' row 0 is Sunset
+   Orange, which 0.9.x never found: 1.0.0, `Menus.DyeRow`). If the dye isn't
+   in the list shown, the shade is picked first (`[i:4, i:shade]`, recorded in 1.0.0's Recording 3), and
    the row is read once the shade's list shows the dye and 0.15 s have passed (0.9.1). A dye not in the
    list after 0.4 s isn't guessed any more (0.9.2): a dye you have none of isn't listed, and the row
    0.9.0 guessed from the dye sheet could be past the list's end, where the game read past its own
