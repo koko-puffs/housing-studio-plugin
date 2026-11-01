@@ -8,8 +8,20 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 0.8.6. Placing works in the game; the newer features haven't all been tried in it yet.**
-> Coming in 0.9.0, from a full placing run and a clear out: **dyes in seconds, not 20.** Furnishing
+> **Status: 0.9.0. Placing works in the game; the newer features haven't all been tried in it yet.**
+> 0.9.0: **the window redesigned**, every screen from the approved mockups ([docs/UI.md](docs/UI.md),
+> "0.9.0"): one header (back at the top left, the design's name on up to two lines), one footer (the
+> next step in brass at the bottom left), design names with spaces for underscores, one way to say gil,
+> and counts that say what they count. **Home** has three pinned designs at the top (☆ on a Recent row,
+> or Ready's pin), a one-row Load, the backups as a row in This house, and a short Recent at the
+> bottom. **Ready**'s header matches the rest ("All 145 pieces" is a chip now), "102 to get" says what
+> that is, and the chips count things ("1 on a retainer · 30 from shops · 71 on the board"). The
+> **shopping list** is grouped by where you buy, with its total under the title; the **errands** show
+> the trip's real stops in order, Not got first with a reason per thing; **placing** counts Ready's to
+> do ("18 of 46 to do · then 20 dyes"), with Skip on the piece once it waits and a log that starts at
+> the run; **Done** and a rehearsal's result say how it went in one line; **Settings** has back at the
+> top left, Getting and Help in groups, More options as a screen of its own, and the account under Help.
+> A question darkens only the plugin's window. From a full placing run and a clear out: **dyes in seconds, not 20.** Furnishing
 > Color's pick doesn't open the dye window, so 0.8.6 waited a second and then picked the list's rows
 > one by one (1.7 s each) until one was the piece. Now, as RemakePlace/plugin does, the piece is
 > picked and the game's "interact" with it opens the window at once; the list is only the fallback, and
@@ -26,8 +38,13 @@ its exact spot, then dyes everything to match.
 > pieces to your bags until they were full. A piece to put away whose furniture slot changed is found
 > again by its item and spot. From a look through RemakePlace/plugin for more: a piece already placed
 > is now moved in one step (picked, set and let go at once, as it does), and **a dye that ran out** is
-> remembered for the run, so the other pieces needing it are skipped at once instead of each waiting
-> for a confirmation that won't come.
+> remembered for the run (after two misses), so the other pieces needing it are skipped at once instead
+> of each waiting for a confirmation that won't come, and without stopping the run. A sweep of
+> everything since 0.8.6 also fixed: a refusal while storing bag pieces ahead was taken for a full
+> storeroom; a bag piece that got into the storeroom unseen is now placed from there; a picked piece
+> held a frame late is waited for, not picked again; Put them back's pieces count in the bar from the
+> start; the errands' expected gil, "trip N of M" after a plan made again, and a board's own reason in
+> Not got.
 > 0.8.6: **a click done by hand while it waits for Continue.** Taking from a retainer (and exchanging
 > currencies) has a click not yet seen working, so the errands hold before it for Continue. Its callout
 > showed the click's own words ("Choose “Retrieve…”"), which read as something for you to do; done by
