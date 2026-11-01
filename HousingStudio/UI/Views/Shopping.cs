@@ -4,27 +4,25 @@ using System.Linq;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using HousingStudio.Core;
+using HousingStudio.Game;
 using HousingStudio.UI.Model;
 using static HousingStudio.UI.Theme;
 
 namespace HousingStudio.UI;
 
 /// <summary>
-/// Shopping (from Pieces' foot and Done): what's still to get, by where it comes from: your retainers,
-/// vendors (the NPC, where, the price, a flag on the map), the market board (an estimate), crafting
-/// (Open in Teamcraft) and what's not known; with the gil in all and Copy list.
+/// Shopping (from Pieces' foot, Ready's See the list and Done): what's still to get, by where it comes
+/// from: your retainers (free), the shops grouped by the place you buy at (the NPC, where, one flag on
+/// the map, each row its fixed price), the currency vendors the same way, the market board (an
+/// estimate), crafting (Open in Teamcraft) and what's not known. The gil in all sits under the title;
+/// the footer has Get everything for me (brass) and Copy list.
 /// </summary>
 public sealed partial class MainWindow
 {
-    private static readonly (SourceKind Source, string Title)[] ShopGroups =
-    {
-        (SourceKind.Retainer, "On your retainers"),
-        (SourceKind.Vendor, "Buy from vendors"),
-        (SourceKind.Exchange, "For MGP and other currencies"),
-        (SourceKind.Market, "Market board"),
-        (SourceKind.Craft, "Craft"),
-        (SourceKind.Unknown, "Not known"),
-    };
+    /// <summary>Shopping's brass button: opens the errands' estimate (the trips and the gil), as Ready's Get them for me first does.</summary>
+    private const string ShopGetAll = "Get everything for me";
+
+    private const string ShopGetAllHint = "Shows the trips and the gil first. Nothing is bought until you set out.";
 
     /// <summary>Where Shopping's back arrow goes (Pieces, or the main view).</summary>
     private Sub shoppingFrom;
@@ -43,21 +41,21 @@ public sealed partial class MainWindow
     {
         var shop = ShopPlan();
         var known = session.Plan != null;
+        var view = ShopViewOf(shop);
 
         Frame.BeginHeader(20);
-        var at = Kit.At;
-        var w = Kit.Width;
-        var eyebrowH = Txt.Natural(Face.Mono, 12);
-        var titleH = S(26 * 1.1f);
-        var headH = MathF.Max(S(40), eyebrowH + S(2) + titleH);
-        if (BackButton(new Vector2(at.X, at.Y + (headH - S(40)) / 2), shoppingFrom == Sub.Pieces ? "Back to Pieces" : $"Back to {session.Title}"))
+        if (ScreenHeader(shoppingFrom == Sub.Pieces ? "Back to Pieces" : $"Back to {session.Title}", $"{session.ShortTitle} · shopping", view.Title))
             sub = shoppingFrom;
-        var tx = at.X + S(40) + S(10);
-        var top = at.Y + (headH - (eyebrowH + S(2) + titleH)) / 2;
-        Kit.Eyebrow(new Vector2(tx, top), session.Title, null, at.X + w - tx);
-        var things = shop.Lines.Sum(l => l.Count);
-        Title(new Vector2(tx, top + eyebrowH + S(2)), things == 0 ? "Nothing to get" : Words.Count(things, "thing") + " to get", null, at.X + w - tx, 26);
-        Kit.Reserve(at, w, headH);
+        // The gil in all, under the title (it was cut off in the footer).
+        if (known && view.Total is { } total)
+        {
+            Kit.Gap(6);
+            var at = Kit.At;
+            var w = Kit.Width;
+            var tx = at.X + S(40) + S(12);
+            Txt.Line(Kit.Dl, new Vector2(tx, at.Y), Txt.Fit(total, Face.Sans, 13, at.X + w - tx), Face.Sans, 13, Palette.Ash, 19.5f);
+            Kit.Reserve(at, w, S(19.5f));
+        }
         Frame.EndHeader();
 
         Frame.BeginBody("##shopping", "shopping-foot", 16, 22);
@@ -77,16 +75,29 @@ public sealed partial class MainWindow
             Txt.Note("You have every piece, and the dyes for them.");
             Kit.EndPanel();
         }
-        var groups = ShopGroupsOf(shop);
-        for (var g = 0; g < groups.Count; g++)
+        for (var g = 0; g < view.Sections.Count; g++)
         {
-            var (source, head, lines) = groups[g];
+            var (section, places) = view.Sections[g];
             if (g > 0) Kit.Gap(18);
-            Kit.EyebrowRow(head);
+            ShopLabel(section.Title, section.Aside, section.Priced);
             Kit.Gap(10);
-            Kit.BeginPanel($"##shop-{source}", 0, 0, 0);
-            for (var i = 0; i < lines.Count; i++) ShopRow(i, lines[i]);
-            if (source == SourceKind.Craft) TeamcraftRow(lines);
+            if (places.Count > 0)
+            {
+                // The shops: a panel per place you buy at (its NPC and where, with one flag), then what's got there.
+                for (var p = 0; p < places.Count; p++)
+                {
+                    if (p > 0) Kit.Gap(10);
+                    var (place, placeLine) = places[p];
+                    Kit.BeginPanel($"##shop-{section.Source}-{p}", 0, 0, 0);
+                    ShopPlaceHeader($"{section.Source}-{p}", place, placeLine);
+                    for (var i = 0; i < place.Lines.Count; i++) ShopRow(i + 1, place.Lines[i], true);
+                    Kit.EndPanel();
+                }
+                continue;
+            }
+            Kit.BeginPanel($"##shop-{section.Source}", 0, 0, 0);
+            for (var i = 0; i < section.Lines.Count; i++) ShopRow(i, section.Lines[i], false);
+            if (section.Source == SourceKind.Craft) TeamcraftRow(section.Lines);
             Kit.EndPanel();
         }
         Frame.EndBody();
@@ -94,38 +105,123 @@ public sealed partial class MainWindow
         DrawShoppingFooter(shop, known);
     }
 
-    private (ShoppingPlan? For, List<(SourceKind Source, string Head, List<ShoppingLine> Lines)> Groups) shopGroups = (null, new());
+    /// <summary>What Shopping draws for a plan: the title, the gil in all, the sections and each place's line.</summary>
+    private sealed record ShopView(string Title, string? Total, List<(ShopSection Section, List<(ShopPlace Place, string Line)> Places)> Sections);
 
-    /// <summary>The groups to draw, sorted by name, with their headings: worked out again only when the plan changes.</summary>
-    private List<(SourceKind Source, string Head, List<ShoppingLine> Lines)> ShopGroupsOf(ShoppingPlan shop)
+    private (ShoppingPlan? For, string? District, int? Ward, ShopView? View) shopView;
+
+    /// <summary>The words and groups to draw: worked out again only when the plan (or the home you're in) changes.</summary>
+    private ShopView ShopViewOf(ShoppingPlan shop)
     {
-        if (ReferenceEquals(shopGroups.For, shop)) return shopGroups.Groups;
-        var groups = new List<(SourceKind, string, List<ShoppingLine>)>();
-        foreach (var (source, title) in ShopGroups)
+        var (district, ward) = HomeWard();
+        var c = shopView;
+        if (c.View != null && ReferenceEquals(c.For, shop) && c.District == district && c.Ward == ward) return c.View;
+        var sections = new List<(ShopSection Section, List<(ShopPlace Place, string Line)> Places)>();
+        foreach (var section in ShoppingScreen.Sections(shop, data.AnyItemName))
         {
-            var lines = shop.Of(source).OrderBy(l => data.AnyItemName(l.ItemId), StringComparer.OrdinalIgnoreCase).ToList();
-            if (lines.Count == 0) continue;
-            var gil = lines.Sum(l => l.Gil);
-            var head = source switch
-            {
-                SourceKind.Vendor => $"{title} · {ShoppingList.Gil(gil)}",
-                SourceKind.Exchange => $"{title} · {string.Join(" + ", lines.Where(l => l.Exchange != null).GroupBy(l => l.Exchange!.CurrencyName).Select(g => $"{g.Sum(l => l.CurrencyCost):N0} {g.Key}"))}",
-                SourceKind.Market when gil > 0 => $"{title} · about {ShoppingList.Gil(gil)}",
-                _ => title,
-            };
-            groups.Add((source, $"{head} · {lines.Sum(l => l.Count)}", lines));
+            var places = new List<(ShopPlace Place, string Line)>();
+            foreach (var p in section.Places)
+                places.Add((p, ShoppingScreen.PlaceLine(p.Vendor, p.Things, ShoppingScreen.WardFor(p.Vendor, district, ward))));
+            sections.Add((section, places));
         }
-        shopGroups = (shop, groups);
-        return groups;
+        var view = new ShopView(ShoppingScreen.Title(shop), ShoppingScreen.Total(shop), sections);
+        shopView = (shop, district, ward, view);
+        return view;
     }
 
-    /// <summary>A row: the item's icon (a dye's swatch), its name and count, where it comes from, the gil, and for a vendor a flag on the map.</summary>
-    private void ShopRow(int index, ShoppingLine line)
+    private (HousingContext? Ctx, string? District, int? Ward) homeWard;
+
+    /// <summary>
+    /// The district and ward (1 on) of the home you're in, to name the ward a housing vendor in that
+    /// district is walked to in (a house's or a company's, not an apartment's); nulls when not known.
+    /// Read again only when where you are changes.
+    /// </summary>
+    private (string? District, int? Ward) HomeWard()
+    {
+        var ctx = session.Context;
+        if (homeWard.Ctx is { } had && had.Equals(ctx)) return (homeWard.District, homeWard.Ward);
+        string? district = null;
+        int? ward = null;
+        try
+        {
+            if (ErrandGame.HomeHere(ctx) is { } here && here.Kind != HomeKind.Apartment && here.District != null && here.Ward >= 0)
+            {
+                district = here.District;
+                ward = here.Ward + 1;
+            }
+        }
+        catch (Exception ex)
+        {
+            Services.Log.Debug(ex, "Couldn't read the ward of the home you're in");
+        }
+        homeWard = (ctx, district, ward);
+        return (district, ward);
+    }
+
+    /// <summary>A section's label (mono, dim) with what's beside it on the right ("149,000 gil · 30", in brass when it's a price).</summary>
+    private static void ShopLabel(string title, string aside, bool priced)
+    {
+        var at = Kit.At;
+        var w = Kit.Width;
+        var dl = Kit.Dl;
+        var h = Txt.Natural(Face.Mono, 11);
+        var lw = Txt.Spaced(dl, at, title.ToUpperInvariant(), Face.Mono, 11, Palette.Dim, 0.14f);
+        if (aside.Length > 0)
+        {
+            var color = priced ? Palette.Brass : Palette.Dim;
+            var text = aside.ToUpperInvariant();
+            var room = w - lw - S(12);
+            var rw = Txt.SpacedWidth(text, Face.Mono, 11, 0.14f);
+            if (rw <= room) Txt.Spaced(dl, new Vector2(at.X + w - rw, at.Y), text, Face.Mono, 11, color, 0.14f);
+            else if (room > S(20))
+            {
+                var fit = Txt.Fit(text, Face.Mono, 11, room);
+                Txt.Line(dl, new Vector2(at.X + w - Txt.Measure(fit, Face.Mono, 11).X, at.Y), fit, Face.Mono, 11, color);
+            }
+        }
+        Kit.Reserve(at, w, h);
+    }
+
+    /// <summary>A place's header, at the top of its panel: the NPC, where (your ward when it's in your district) and how many things, and one flag on the map.</summary>
+    private void ShopPlaceHeader(string id, ShopPlace place, string placeLine)
+    {
+        var at = Kit.At;
+        var w = Kit.Width;
+        var v = place.Vendor;
+        var nameH = Txt.Natural(Face.SansMedium, 14);
+        var textH = nameH + S(2) + S(19.5f);
+        var h = S(11) * 2 + MathF.Max(S(34), textH);
+        var dl = Kit.Dl;
+        var mid = at.Y + h / 2;
+        var x = at.X + S(18);
+        var flagX = at.X + w - S(18) - S(34);
+        var textW = flagX - S(12) - x;
+        var top = mid - textH / 2;
+        var npc = v.NpcName.Length > 0 ? v.NpcName : "A vendor";
+        Txt.Line(dl, new Vector2(x, top), Txt.Fit(npc, Face.SansMedium, 14, textW), Face.SansMedium, 14, Palette.Ivory);
+        Txt.Line(dl, new Vector2(x, top + nameH + S(2)), Txt.Fit(placeLine, Face.Sans, 13, textW), Face.Sans, 13, Palette.Ash, 19.5f);
+        if (ImGui.IsWindowHovered() && ImGui.IsMouseHoveringRect(new Vector2(x, top), new Vector2(x + textW, top + textH))
+            && (Txt.Measure(placeLine, Face.Sans, 13).X > textW || Txt.Measure(npc, Face.SansMedium, 14).X > textW))
+            Kit.Tooltip($"{npc}\n{placeLine}");
+        var tip = v.Located ? $"Flag {npc} on the map" : "Where this vendor stands isn't known";
+        if (Kit.IconButton($"##flag-{id}", new Vector2(flagX, mid - S(17)), Icon.MapPin, tip, 34, Btn.Glass, !v.Located))
+            FlagOnMap(v);
+        Kit.Reserve(at, w, h);
+    }
+
+    /// <summary>
+    /// A row: the item's icon (a dye's swatch), its name and count, a second line when there's
+    /// something to say, and on the right what it costs ("free", a shop's fixed price, "≈" the board's
+    /// estimate, a currency). Under a place, the place says where, so the row doesn't.
+    /// </summary>
+    private void ShopRow(int index, ShoppingLine line, bool underPlace)
     {
         var at = Kit.At;
         var w = Kit.Width;
         var nameH = Txt.Natural(Face.Sans, 14);
-        var h = S(10) * 2 + MathF.Max(S(34), nameH + S(2) + S(19.5f));
+        var note = underPlace ? ShoppingScreen.PlaceRowNote(line) : ShopNote(line);
+        var textH = note != null ? nameH + S(2) + S(19.5f) : nameH;
+        var h = S(10) * 2 + MathF.Max(S(34), textH);
         var clipTop = ImGui.GetWindowPos().Y;
         var clipBottom = clipTop + ImGui.GetWindowHeight();
         if (at.Y > clipBottom || at.Y + h < clipTop)
@@ -148,40 +244,28 @@ public sealed partial class MainWindow
         }
         x += S(34) + S(12);
 
-        var vendor = line.Vendor ?? line.Exchange?.Vendor;
-        var pinW = vendor != null ? S(32) + S(12) : 0;
-        var gil = line.Source switch
-        {
-            SourceKind.Vendor => ShoppingList.Gil(line.Gil),
-            SourceKind.Market => "≈ " + ShoppingList.Gil(line.Gil),
-            SourceKind.Exchange when line.Exchange != null => $"{line.CurrencyCost:N0} {line.Exchange.CurrencyName}",
-            _ => string.Empty,
-        };
-        var gilW = gil.Length > 0 ? Txt.Measure(gil, Face.Mono, 12).X + S(12) : 0;
+        var price = ShoppingScreen.RowPrice(line);
+        var priceW = price.Length > 0 ? Txt.Measure(price, Face.Mono, 12).X + S(12) : 0;
         var right = at.X + w - S(18);
-        var textW = right - pinW - gilW - x;
+        var textW = right - priceW - x;
 
         var name = data.AnyItemName(line.ItemId) + (line.Count > 1 ? $" ×{line.Count}" : string.Empty);
-        var note = ShopNote(line);
-        var top = mid - (nameH + S(2) + S(19.5f)) / 2;
+        var top = mid - textH / 2;
         Txt.Line(dl, new Vector2(x, top), Txt.Fit(name, Face.Sans, 14, textW), Face.Sans, 14, Palette.Ivory);
-        Txt.Line(dl, new Vector2(x, top + nameH + S(2)), Txt.Fit(note, Face.Sans, 13, textW), Face.Sans, 13, Palette.Ash, 19.5f);
-        if (ImGui.IsWindowHovered() && ImGui.IsMouseHoveringRect(new Vector2(x, top), new Vector2(x + textW, top + nameH + S(21.5f)))
-            && Txt.Measure(note, Face.Sans, 13).X > textW)
-            Kit.Tooltip(note);
-
-        if (gil.Length > 0)
-            Txt.Line(dl, new Vector2(right - pinW - gilW + S(12), mid - Txt.Natural(Face.Mono, 12) / 2), gil, Face.Mono, 12, Palette.Text);
-        if (vendor != null)
+        if (note != null)
         {
-            var tip = vendor.Located ? $"Flag {vendor.NpcName} on the map" : "Where this vendor stands isn't known";
-            if (Kit.IconButton($"##flag{index}-{line.ItemId}", new Vector2(right - S(32), mid - S(16)), Icon.MapPin, tip, 32, Btn.Glass, !vendor.Located))
-                FlagOnMap(vendor);
+            Txt.Line(dl, new Vector2(x, top + nameH + S(2)), Txt.Fit(note, Face.Sans, 13, textW), Face.Sans, 13, Palette.Ash, 19.5f);
+            if (ImGui.IsWindowHovered() && ImGui.IsMouseHoveringRect(new Vector2(x, top), new Vector2(x + textW, top + textH))
+                && Txt.Measure(note, Face.Sans, 13).X > textW)
+                Kit.Tooltip(note);
         }
+
+        if (price.Length > 0)
+            Txt.Line(dl, new Vector2(right - priceW + S(12), mid - Txt.Natural(Face.Mono, 12) / 2), price, Face.Mono, 12, Palette.Text);
         Kit.Reserve(at, w, h);
     }
 
-    /// <summary>The row's second line: where it comes from, in words.</summary>
+    /// <summary>A row's second line outside a place: where it comes from, in words.</summary>
     private string ShopNote(ShoppingLine line)
     {
         var dye = line.Need.Kind switch { NeedKind.Dye => "Dye · ", NeedKind.Fixture => "Fixture · ", _ => string.Empty };
@@ -199,10 +283,7 @@ public sealed partial class MainWindow
                 var x = line.Exchange!;
                 return dye + $"{x.Vendor.Where()} · {x.Cost:N0} {x.CurrencyName}" + (x.Gives > 1 ? $" for {x.Gives}" : " each");
             case SourceKind.Market:
-                var cost = line.MarketCost;
-                var each = line.Count > 0 ? line.Gil / line.Count : 0;
-                var extra = cost != null && cost.Covered > line.Count ? $" · whole stacks: {cost.Covered} bought" : string.Empty;
-                return dye + $"About {ShoppingList.Gil(each)} each on {line.Market?.Scope}" + extra;
+                return ShoppingScreen.MarketNote(line);
             case SourceKind.Craft or SourceKind.Unknown when line.Exchangeable is { } ex:
                 return dye + $"{ex.Vendor.Where()} · {ex.Cost:N0} {ex.CurrencyName}" + (ex.Gives > 1 ? $" for {ex.Gives}" : " each")
                        + (config.ErrandsCurrencies.Contains(ex.Currency)
@@ -219,7 +300,7 @@ public sealed partial class MainWindow
     }
 
     /// <summary>The Craft group's last row: Open in Teamcraft, with the import text copied as well.</summary>
-    private void TeamcraftRow(List<ShoppingLine> lines)
+    private void TeamcraftRow(IReadOnlyList<ShoppingLine> lines)
     {
         var at = Kit.At;
         var w = Kit.Width;
@@ -255,24 +336,37 @@ public sealed partial class MainWindow
         });
     }
 
+    /// <summary>
+    /// The footer (shared rule 2): the brass Get everything for me at the bottom left (when the errands
+    /// are offered), Copy list beside it, and under them what the brass button does.
+    /// </summary>
     private void DrawShoppingFooter(ShoppingPlan shop, bool known)
     {
         Frame.BeginFooter("shopping-foot", 16, 20);
         var at = Kit.At;
         var w = Kit.Width;
         const string copy = "Copy list";
-        var cw = Kit.ButtonWidth(copy, BtnSize.Md, Icon.Clipboard);
-        if (Kit.Button("##shop-copy", at, copy, Btn.Glass, BtnSize.Md, Icon.Clipboard, 0, !known, known ? null : "Go to your home to see what you have"))
-            CopyShoppingList();
-        // Errands: fetch it all, on the right.
-        var ew = ErrandsOffered(shop) ? ErrandsButtonWidth + S(10) : 0;
-        if (ew > 0) ErrandsButton(new Vector2(at.X + w - ew + S(10), at.Y));
-        if (known && shop.TotalGil > 0)
+        var offered = ErrandsOffered(shop);
+        var cw = Kit.ButtonWidth(copy, BtnSize.Lg, Icon.Clipboard);
+        var gw = offered ? MathF.Min(w, Kit.ButtonWidth(ShopGetAll, BtnSize.Lg, Icon.Package, Btn.Primary)) : 0;
+        // Side by side when both fit; else Copy list goes under it.
+        var beside = !offered || gw + S(10) + cw <= w;
+        if (offered && Kit.Button("##shop-errands", at, ShopGetAll, Btn.Primary, BtnSize.Lg, Icon.Package, gw, false,
+                "Fetches what's missing from your retainers, vendors and the market board, and places it. You see the gil first."))
         {
-            var total = Words.Capital(ShoppingList.TotalWords(shop));
-            Txt.Line(Kit.Dl, new Vector2(at.X + cw + S(10), at.Y), Txt.Fit(total, Face.Sans, 13, w - cw - S(10) - ew), Face.Sans, 13, Palette.Ash, 40);
+            errandsRehearse = false;
+            errandsOpen = true;
         }
-        Kit.Reserve(at, w, S(40));
+        var copyAt = !offered ? at : beside ? new Vector2(at.X + gw + S(10), at.Y) : new Vector2(at.X, at.Y + S(46) + S(10));
+        if (Kit.Button("##shop-copy", copyAt, copy, Btn.Glass, BtnSize.Lg, Icon.Clipboard, 0, !known, known ? null : "Go to your home to see what you have"))
+            CopyShoppingList();
+        Kit.Reserve(at, w, beside ? S(46) : S(46) * 2 + S(10));
+        var hint = offered ? ShopGetAllHint : !known ? "Go to your home to see what you have." : null;
+        if (hint != null)
+        {
+            Kit.Gap(10);
+            Txt.Note(hint);
+        }
         Frame.EndFooter();
     }
 

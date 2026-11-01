@@ -54,17 +54,8 @@ public sealed partial class MainWindow
         var filter = known && counts.Of(pieceFilter) > 0 ? pieceFilter : PieceFilter.All;
 
         Frame.BeginHeader(20);
-        var at = Kit.At;
         var w = Kit.Width;
-        var eyebrowH = Txt.Natural(Face.Mono, 12);
-        var titleH = S(26 * 1.1f);
-        var headH = MathF.Max(S(40), eyebrowH + S(2) + titleH);
-        if (BackButton(new Vector2(at.X, at.Y + (headH - S(40)) / 2), $"Back to {session.Title}")) sub = Sub.None;
-        var tx = at.X + S(40) + S(10);
-        var top = at.Y + (headH - (eyebrowH + S(2) + titleH)) / 2;
-        Kit.Eyebrow(new Vector2(tx, top), session.Title, null, at.X + w - tx);
-        Title(new Vector2(tx, top + eyebrowH + S(2)), Words.Count(entries.Count, "piece"), null, at.X + w - tx, 26);
-        Kit.Reserve(at, w, headH);
+        if (ScreenHeader($"Back to {session.Title}", $"{session.ShortTitle} · pieces", Words.Count(entries.Count, "piece"))) sub = Sub.None;
         Kit.Gap(16);
 
         var row = Kit.At;
@@ -239,6 +230,14 @@ public sealed partial class MainWindow
         Kit.Reserve(at, w, h);
     }
 
+    /// <summary>The footer's count line for a shopping plan (made again only when the plan changes).</summary>
+    private (ShoppingPlan? For, string Line) piecesFoot = (null, string.Empty);
+
+    /// <summary>
+    /// The footer (shared rule 2, no brass: this screen is for looking things up): Shopping list and
+    /// Copy checklist on the left, and under them what's to get, counted as Ready counts it
+    /// ("99 pieces and 3 fixtures to get · no dyes to buy").
+    /// </summary>
     private void DrawPiecesFooter(bool known)
     {
         Frame.BeginFooter("pieces-foot", 16, 20);
@@ -246,24 +245,33 @@ public sealed partial class MainWindow
         var w = Kit.Width;
         const string shop = "Shopping list";
         const string check = "Copy checklist";
-        var sw = Kit.ButtonWidth(shop, BtnSize.Md, Icon.Package);
-        var cw = Kit.ButtonWidth(check, BtnSize.Md, null, Btn.Quiet);
+        var sw = Kit.ButtonWidth(shop, BtnSize.Lg, Icon.Package);
+        var cw = Kit.ButtonWidth(check, BtnSize.Lg, Icon.Clipboard, Btn.Quiet);
+        // Side by side when both fit; else Copy checklist goes under it.
+        var beside = sw + S(10) + cw <= w;
         var plan = session.Plan;
-        if (Kit.Button("##shop", at, shop, Btn.Glass, BtnSize.Md, Icon.Package, 0, plan == null,
+        if (Kit.Button("##shop", at, shop, Btn.Glass, BtnSize.Lg, Icon.Package, 0, plan == null,
                 plan == null ? "Go to your home to see what you have" : "Where to get what's missing: your retainers, vendors, the market board"))
             OpenShopping(Sub.Pieces);
-        if (known)
-        {
-            var summary = Words.ToBuy(plan!.Entries.Count(e => e.State == PieceState.Missing), vm.MissingDyes.Count);
-            var noteX = at.X + sw + S(10);
-            Txt.Line(Kit.Dl, new Vector2(noteX, at.Y), Txt.Fit(summary, Face.Sans, 13, w - sw - cw - S(20)), Face.Sans, 13, Palette.Ash, 40);
-        }
-        if (Kit.Button("##checklist", new Vector2(at.X + w - cw, at.Y), check, Btn.Quiet, BtnSize.Md, null, 0, plan == null))
+        var checkAt = beside ? new Vector2(at.X + sw + S(10), at.Y) : new Vector2(at.X, at.Y + S(46) + S(10));
+        if (Kit.Button("##checklist", checkAt, check, Btn.Quiet, BtnSize.Lg, Icon.Clipboard, 0, plan == null))
         {
             ImGui.SetClipboardText(Checklist(plan!));
             Notify("Checklist copied");
         }
-        Kit.Reserve(at, w, S(40));
+        Kit.Reserve(at, w, beside ? S(46) : S(46) * 2 + S(10));
+        Kit.Gap(10);
+        if (known)
+        {
+            // From the shopping plan, as Ready's "102 to get": the pieces and fixtures to get, the dyes apart.
+            if (!ReferenceEquals(piecesFoot.For, shopForRows))
+            {
+                var (pieces, fixtures, dyes) = ShoppingScreen.Counts(shopForRows);
+                piecesFoot = (shopForRows, ShoppingScreen.PiecesFoot(pieces, fixtures, dyes));
+            }
+            Txt.Note(piecesFoot.Line);
+        }
+        else Txt.Note("Go to your home to see what's missing.");
         Frame.EndFooter();
     }
 
