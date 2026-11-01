@@ -3,8 +3,8 @@
     "Author": "koko",
     "Name": "Housing Studio",
     "InternalName": "HousingStudio",
-    "AssemblyVersion": "0.9.0.0",
-    "TestingAssemblyVersion": "0.9.0.0",
+    "AssemblyVersion": "0.9.1.0",
+    "TestingAssemblyVersion": "0.9.1.0",
     "Punchline": "Furnish your house from a Housing Studio build or a MakePlace layout.",
     "Description": "Load a .build from Housing Studio (or a MakePlace .json) and see every piece matched to what you have: already placed, in your bags, in the storeroom, or still to buy. Start placing moves what is placed, places pieces from your bags and storeroom at their exact spots through the game's own windows, then dyes them to match. A window that follows what you're doing: what Start does, the run as it goes, and what needs you when it's done. In-world markers, Near me and floor choices, a preview, step-by-step mode, a copyable shopping list, and backups you can put back. Save any home you may decorate as a build, all of it: the fixtures on every floor, the outside and its dyes, the wallpaper on partitions. Linked to your Housing Studio account, it opens what you send to the game from the site, verifies your home as your design and sends shots of it to its page, and shows when a home you visit is a design on the site.\n\nUse /hstudio to open it. Only works in a house or apartment you're allowed to decorate, in the game's furnishing mode.",
     "ApplicableVersion": "any",
@@ -26,9 +26,9 @@
     "AcceptsFeedback": true,
     "IsHide": false,
     "IsTestingExclusive": false,
-    "LastUpdate": 1793507690,
-    "DownloadLinkInstall": "https://github.com/koko-puffs/housing-studio-plugin/releases/download/v0.9.0/HousingStudio.zip",
-    "DownloadLinkUpdate": "https://github.com/koko-puffs/housing-studio-plugin/releases/download/v0.9.0/HousingStudio.zip",
-    "DownloadLinkTesting": "https://github.com/koko-puffs/housing-studio-plugin/releases/download/v0.9.0/HousingStudio.zip"
+    "LastUpdate": 1793509762,
+    "DownloadLinkInstall": "https://github.com/koko-puffs/housing-studio-plugin/releases/download/v0.9.1/HousingStudio.zip",
+    "DownloadLinkUpdate": "https://github.com/koko-puffs/housing-studio-plugin/releases/download/v0.9.1/HousingStudio.zip",
+    "DownloadLinkTesting": "https://github.com/koko-puffs/housing-studio-plugin/releases/download/v0.9.1/HousingStudio.zip"
   }
 ]
