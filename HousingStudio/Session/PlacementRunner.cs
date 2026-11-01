@@ -257,13 +257,22 @@ public sealed unsafe partial class PlacementRunner : IDisposable
     {
         get
         {
+            // (Every job that's ended counts: one ending well can take an earlier one off the list.)
             var count = 0;
             foreach (var j in jobs)
-                if (j.Outcome is JobOutcome.Failed or JobOutcome.Skipped) count++;
+                if (j.Outcome is not (JobOutcome.Pending or JobOutcome.Working)) count++;
             var key = (jobsVersion, jobs.Count, count);
             if (problems == null || key != problemsKey)
             {
-                problems = jobs.Where(j => j.Outcome is JobOutcome.Failed or JobOutcome.Skipped)
+                // 1.0.0: a piece's latest job only (a placement that didn't land, then its move tried again
+                // later or by the check pass, showed under Needs you though it worked, or twice); its dye
+                // and its place are told apart (a move that worked doesn't make up for a dye that didn't).
+                var latest = new Dictionary<(int, uint, bool), RunJob>();
+                foreach (var j in jobs)
+                    if (j.Kind != JobKind.Store && j.Outcome is not (JobOutcome.Pending or JobOutcome.Working))
+                        latest[(j.Target.Key, j.Target.ItemId, j.Kind == JobKind.Dye)] = j;
+                problems = jobs.Where(j => j.Outcome is JobOutcome.Failed or JobOutcome.Skipped
+                                           && (j.Kind == JobKind.Store || ReferenceEquals(latest[(j.Target.Key, j.Target.ItemId, j.Kind == JobKind.Dye)], j)))
                     .Select(j => new RunProblem(j, Name(j), j.Problem == ProblemKind.None ? ProblemKind.Other : j.Problem, j.Note ?? "Didn't work."))
                     .ToList();
                 problemsKey = key;
@@ -318,6 +327,9 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             return;
         }
 
+        // The last run as it ended, put back if this one has nothing to do (1.0.0: its results, Needs you and
+        // Swap back were gone after a Start that didn't go).
+        var before = (Entries: entries, Jobs: jobs.ToList(), Version: jobsVersion, KeptAs, Swap: swapDesign, PutAwayTo: putAwayTo);
         putAwayTo = to;
         entries = shown.ToList();
         jobs.Clear();
@@ -352,6 +364,13 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         {
             StopReason = "Nothing to do: every piece shown is in place, in its dye (or missing).";
             log.Info(StopReason);
+            entries = before.Entries;
+            jobs.Clear();
+            jobs.AddRange(before.Jobs);
+            jobsVersion = before.Version + 1;
+            KeptAs = before.KeptAs;
+            swapDesign = before.Swap;
+            putAwayTo = before.PutAwayTo;
             return;
         }
 
@@ -830,7 +849,8 @@ public sealed unsafe partial class PlacementRunner : IDisposable
 
     private void NextAfter(bool quick)
     {
-        var delay = quick ? 150 : Pacing.NextDelayMs(Speed.PieceGapMs, config.Jitter, random.NextDouble());
+        // (Quick: never longer than the pace's own pause, 1.0.0: 150 ms at Quick's 50 and Daring's 20.)
+        var delay = quick ? Math.Min(150, Speed.PieceGapMs) : Pacing.NextDelayMs(Speed.PieceGapMs, config.Jitter, random.NextDouble());
         if (DryRun) delay /= 2;
         nextJobAt = DateTime.UtcNow + TimeSpan.FromMilliseconds(delay);
         queue.Begin(Array.Empty<Step>());
@@ -932,6 +952,9 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         for (var i = index; i < jobs.Count; i++)
         {
             var j = jobs[i];
+            // 1.0.0: not a piece set aside to try again once the rest are placed (it was picked straight
+            // back, its row still read first, and its second go used up at once).
+            if (i != index && triedAgainLater.Contains(j)) continue;
             if (j.Outcome == JobOutcome.Pending && j.Kind == JobKind.PlaceFromStoreroom && j.Target.Floor == job.Target.Floor && j.Target.Late == job.Target.Late)
                 candidates.Add(i);
         }
@@ -1165,7 +1188,10 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             return StepOutcome.Skip("It's no longer where the plan saw it (moved, stored, or the list changed).", ProblemKind.NotFound);
         if (piece.ItemId != job.Target.ItemId)
             return StepOutcome.Halt($"The furniture list changed under the plan (slot {key} is now {data.ItemName(piece.ItemId)}). Load the plan again and start over.");
-        if (Landed(key, job.Target, job.Strict))
+        // A move the plan made (more than 0.01 off) is held to the design's 0.01 here too (1.0.0: at 0.05,
+        // a piece 0.01–0.05 off was "already in place" and only moved by the check pass); a piece just placed
+        // keeps the set-down's 0.05.
+        if (Landed(key, job.Target, job.Strict || (job.Kind == JobKind.Move && !justPlaced)))
         {
             job.Note ??= "Already in place.";
             queue.FinishAfterThis();
@@ -1263,7 +1289,11 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     {
                         listMissesStored = false;
                         listRemadeFor.Add(job);
-                        queue.InsertNext(RemakeList("a piece was just stored, and the list shows it only once it's made again"));
+                        // 1.0.0: in Rotate first (a clear out leaves the editor in Store or To your bags, and a
+                        // row picked there would be put away, not placed).
+                        var remake = RemakeList("a piece was just stored, and the list shows it only once it's made again");
+                        if (HousingEditor.Mode != EditorMode.Rotate) remake.Insert(0, EnsureMode(EditorMode.Rotate));
+                        queue.InsertNext(remake);
                         return StepOutcome.Done;
                     }
                     if (HousingEditor.Mode == EditorMode.Rotate && GameUi.IsOpen(UiTable.FurnishingList)
@@ -2398,7 +2428,8 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 HousingActions.AimHeld(job.Target.Position, job.Target.Yaw);
                 // Only a piece the editor is placing right now: never one already in the room.
                 var held = HousingEditor.Mode == EditorMode.Place ? HousingEditor.ActiveItem : 0;
-                if (held == 0) return StepOutcome.Halt($"The editor isn't holding a piece to set down (mode {HousingEditor.Mode}).");
+                // 1.0.0: only this piece (Esc, or the game dropped it): the run goes on with the next.
+                if (held == 0) return StepOutcome.Skip($"The editor wasn't holding the piece to set it down (mode {HousingEditor.Mode}): it wasn't placed.", ProblemKind.DidNotLand);
                 if (!anywhere.Active)
                 {
                     if (anywhere.Enable())
@@ -3360,7 +3391,8 @@ public sealed unsafe partial class PlacementRunner : IDisposable
     private Step ChooseEntry(IReadOnlyList<string> labels, string where) => Step.Act($"Choose \"{labels.FirstOrDefault()}\" in {where}", () =>
     {
         var menu = GameUi.MenuEntries();
-        if (menu == null) return StepOutcome.Halt($"The menu closed before \"{labels.FirstOrDefault()}\" could be chosen.");
+        // 1.0.0: only this piece (the menu closed by a click elsewhere, or Esc): the run goes on.
+        if (menu == null) return StepOutcome.Skip($"The menu closed before \"{labels.FirstOrDefault()}\" could be chosen.", ProblemKind.Other);
         var entry = Menus.FindEntry(menu, labels);
         log.Info($"  menu entries: {string.Join(" | ", menu.Select((e, i) => $"{i}:{e}"))}");
         if (entry < 0)
@@ -3844,7 +3876,11 @@ public sealed unsafe partial class PlacementRunner : IDisposable
     private void TryAgainLater(RunJob job, string? why)
     {
         var now = DateTime.UtcNow;
-        var placed = job.Kind != JobKind.Move && job.Key is { } k && ReadLive() is { } live && live.TryGetValue(k, out var p) && p.ItemId == job.Target.ItemId;
+        // A piece already given its slot is placed; when the list can't be read this frame, it's taken as
+        // placed too (1.0.0: taken as not placed, it went from the storeroom again, a second copy).
+        var live = job.Key is { } ? ReadLive() : null;
+        var placed = job.Kind != JobKind.Move && job.Key is { } k
+                     && (live == null || live.TryGetValue(k, out var p) && p.ItemId == job.Target.ItemId);
         log.Info($"  {Name(job)}: {why} It's tried again once the rest are placed{(placed ? " (it's placed: it's moved to its spot then)" : string.Empty)}.");
         if (placed)
         {
