@@ -17,8 +17,26 @@ public sealed partial class Configuration
     /// <summary>Buy listings on the other worlds of your data centre too (Lifestream visits them); off: your home world only.</summary>
     public bool ErrandsOtherWorlds { get; set; } = true;
 
-    /// <summary>Which home "go home" means (0 your house, 1 your free company's, 2 your apartment), or -1 to tell from the home you're in.</summary>
+    /// <summary>
+    /// Which home "go home" means (0 your house, 1 your free company's, 2 your apartment), or -1 to tell from
+    /// the home you're in. Since 1.0.0 the fallback for a character that hasn't chosen (<see cref="ErrandsHomes"/>).
+    /// </summary>
     public int ErrandsHome { get; set; } = -1;
+
+    /// <summary>The same, per character (content id): each of yours can have its own home (1.0.0).</summary>
+    public Dictionary<ulong, int> ErrandsHomes { get; set; } = new();
+
+    /// <summary>Which home "go home" means for the character you're playing (<see cref="ErrandsHomes"/>, else <see cref="ErrandsHome"/>).</summary>
+    public int HomeChoice() => Character is var me and not 0 && ErrandsHomes.TryGetValue(me, out var home) ? home : ErrandsHome;
+
+    /// <summary>Sets <see cref="HomeChoice"/> for the character you're playing.</summary>
+    public void ChooseHome(int home)
+    {
+        if (Character is var me and not 0) ErrandsHomes[me] = home;
+        else ErrandsHome = home;
+    }
+
+    private static ulong Character => Services.PlayerState.IsLoaded ? Services.PlayerState.ContentId : 0;
 
     /// <summary>
     /// The errands' clicks not yet seen working (Automation/ErrandTable.cs) wait for Continue each time

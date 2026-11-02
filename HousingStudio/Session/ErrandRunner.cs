@@ -254,7 +254,7 @@ public sealed partial class ErrandRunner : IDisposable
     /// choice over it: from company chambers with "My house" chosen it went to your house's ward with the
     /// chambers' district's merchants planned); Settings' choice only for a home the game doesn't say is.
     /// </summary>
-    public HomeKind KindOf(HomeRef at) => !at.Owned && config.ErrandsHome is >= 0 and <= 2 ? (HomeKind)config.ErrandsHome : at.Kind;
+    public HomeKind KindOf(HomeRef at) => !at.Owned && config.HomeChoice() is >= 0 and <= 2 ? (HomeKind)config.HomeChoice() : at.Kind;
 
     /// <summary>
     /// The errands for a shopping plan, as things stand here: your free bag slots (less the spare ones),
@@ -341,7 +341,7 @@ public sealed partial class ErrandRunner : IDisposable
         var mine = ErrandGame.HomeHere(ctx);
         if (mine == null || session.Plan == null) return "Go inside your home: what's missing is worked out there.";
         if (!ctx.HasPermission) return "You can only place furniture in a home you may decorate.";
-        if (!mine.Owned && config.ErrandsHome < 0) return mine.Chamber
+        if (!mine.Owned && config.HomeChoice() < 0) return mine.Chamber
             ? "These chambers aren't in your company's house as the game has it: choose which home \"go home\" is under Limits → Change → Home is."
             : "The game doesn't say this home is yours: choose which home it is under Limits → Change → Home is.";
         var world = ErrandGame.CurrentWorld();

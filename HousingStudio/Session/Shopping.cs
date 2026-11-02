@@ -75,7 +75,7 @@ public sealed class Shopping : IDisposable
 
     private static (uint World, string? Name) dataCentreOf = (uint.MaxValue, null);
 
-    private (Plan? Plan, object? Dyes, bool Vendors, int Market, int Record, int Allagan, bool Prices, string? Scope, string? District, long Minute, int Learnt, string Fixtures, string Currencies) key;
+    private (Plan? Plan, object? Dyes, bool Vendors, int Market, int Record, int Allagan, bool Prices, string? Scope, string? District, long Minute, int Learnt, string Fixtures, string Currencies, ulong Who) key;
 
     /// <summary>
     /// The currencies you allow and what you have of each ("29=45000"): the plan is worked out again when
@@ -192,8 +192,10 @@ public sealed class Shopping : IDisposable
         var scope = config.LookUpMarketPrices ? DataCentre() : null;
         var (fixtures, fixturesKey) = Fixtures();
         var (have, currenciesKey) = Currencies();
+        // (The character too, 1.0.0: each has its own retainers, bags and currencies.)
+        var who = Services.PlayerState.IsLoaded ? Services.PlayerState.ContentId : 0;
         var k = (plan, (object?)dyesToBuy, Vendors.Ready, Market.Version, Record.Version, Allagan.Version, config.LookUpMarketPrices, scope, district,
-            DateTime.UtcNow.Ticks / TimeSpan.TicksPerMinute, learnt, fixturesKey, currenciesKey);
+            DateTime.UtcNow.Ticks / TimeSpan.TicksPerMinute, learnt, fixturesKey, currenciesKey, who);
         if (k == key) return last.Shop;
         var firstForPlan = !ReferenceEquals(key.Plan, plan);
         key = k;
@@ -212,8 +214,12 @@ public sealed class Shopping : IDisposable
         // Retainers' names: the game's list (once it's been sent this session), else AutoRetainer's.
         var names = RetainerRecord.Names();
         foreach (var (id, name) in AutoRetainer.Names) names.TryAdd(id, name);
-        // With the retainers known, only they count from Allagan Tools (not a company chest).
-        var allagan = names.Count > 0 ? Allagan.Stocks.Where(s => names.ContainsKey(s.RetainerId)) : Allagan.Stocks;
+        // With the retainers known, only they count from Allagan Tools (not a company chest). Only when the
+        // names are this character's (1.0.0: the game's list can still be another character's after a switch,
+        // until a bell is used, and then this one's retainers were all left out).
+        var allaganStocks = Allagan.Stocks;
+        var namesHere = names.Count > 0 && allaganStocks.Any(s => names.ContainsKey(s.RetainerId));
+        var allagan = namesHere ? allaganStocks.Where(s => names.ContainsKey(s.RetainerId)) : allaganStocks;
         var retainers = RetainerStocks.Merge(Record.Stocks(), allagan, names);
 
         var priced = new List<uint>();

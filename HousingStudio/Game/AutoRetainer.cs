@@ -94,8 +94,16 @@ public sealed class AutoRetainer
 
     private bool loggedSuppress;
 
-    /// <summary>The retainers' names by id, as AutoRetainer last said (empty when it isn't there).</summary>
-    public IReadOnlyDictionary<ulong, string> Names { get; private set; } = new Dictionary<ulong, string>();
+    /// <summary>
+    /// The retainers' names by id, as AutoRetainer last said, for the character you're playing (empty when
+    /// it isn't there, or when they were for another of your characters: 1.0.0).
+    /// </summary>
+    public IReadOnlyDictionary<ulong, string> Names =>
+        namesFor != 0 && namesFor == (Services.PlayerState.IsLoaded ? Services.PlayerState.ContentId : 0) ? names : NoNames;
+
+    private IReadOnlyDictionary<ulong, string> names = NoNames;
+    private ulong namesFor;
+    private static readonly IReadOnlyDictionary<ulong, string> NoNames = new Dictionary<ulong, string>();
 
     public bool Available { get; private set; }
 
@@ -103,22 +111,24 @@ public sealed class AutoRetainer
     public void Refresh()
     {
         var now = DateTime.UtcNow;
-        if (now < nextRefresh) return;
-        nextRefresh = now + RefreshEvery;
         var me = Services.PlayerState.IsLoaded ? Services.PlayerState.ContentId : 0;
+        // Another character than the one last asked for: asked again at once.
+        if (now < nextRefresh && me == namesFor) return;
+        nextRefresh = now + RefreshEvery;
         if (me == 0) return;
         try
         {
-            var names = new Dictionary<ulong, string>();
+            var fresh = new Dictionary<ulong, string>();
             if (Read(characterData.InvokeFunc(me), "RetainerData") is IEnumerable retainers)
                 foreach (var r in retainers)
                 {
                     if (r == null) continue;
                     var id = Read(r, "RetainerID") is ulong u ? u : 0;
                     var name = Read(r, "Name") as string;
-                    if (id != 0 && !string.IsNullOrEmpty(name)) names[id] = name;
+                    if (id != 0 && !string.IsNullOrEmpty(name)) fresh[id] = name;
                 }
-            Names = names;
+            names = fresh;
+            namesFor = me;
             Available = true;
         }
         catch (Exception ex)
@@ -126,7 +136,8 @@ public sealed class AutoRetainer
             // Not installed (IpcNotReadyError), another version's shape, or it threw: nothing from it.
             if (!loggedFailure) Services.Log.Debug(ex, "AutoRetainer didn't answer; retainers are named from the game and this plugin's record");
             loggedFailure = true;
-            Names = new Dictionary<ulong, string>();
+            names = NoNames;
+            namesFor = me;
             Available = false;
         }
     }

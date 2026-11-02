@@ -581,14 +581,14 @@ public sealed partial class MainWindow
                 "The errands go home to the home you start them in. Start them in another of your homes to decorate that one.");
             return;
         }
-        var homeNow = config.ErrandsHome is >= 0 and <= 2 ? config.ErrandsHome : here != null ? (int)here.Kind : 0;
+        var homeNow = config.HomeChoice() is >= 0 and <= 2 ? config.HomeChoice() : here != null ? (int)here.Kind : 0;
         SetRow(index, "Home is", here == null ? "Where \"go home\" takes you (read from the home you're in)" : "The game doesn't say this home is yours: which is it?",
             Kit.SegmentedWidth(HomeLabels), S(40), p =>
             {
                 var picked = Kit.Segmented(id, p, HomeLabels, homeNow, 0, Kit.Width - S(40));
                 if (picked != homeNow)
                 {
-                    config.ErrandsHome = picked;
+                    config.ChooseHome(picked);
                     config.Save();
                 }
             }, below: true);

@@ -198,8 +198,18 @@ public sealed class AllaganTools
         characterItems = Services.PluginInterface.GetIpcSubscriber<ulong, HashSet<ulong[]>>("AllaganTools.GetCharacterItems");
     }
 
-    /// <summary>What Allagan Tools last said (empty when it isn't there).</summary>
-    public IReadOnlyList<RetainerStock> Stocks { get; private set; } = Array.Empty<RetainerStock>();
+    /// <summary>
+    /// What Allagan Tools last said, for the character you're playing (empty when it isn't there, or when
+    /// what it said was for another character of yours: 1.0.0, it counted for up to a minute after a switch).
+    /// </summary>
+    public IReadOnlyList<RetainerStock> Stocks => stocksFor != 0 && stocksFor == Me ? stocks : Array.Empty<RetainerStock>();
+
+    private IReadOnlyList<RetainerStock> stocks = Array.Empty<RetainerStock>();
+
+    /// <summary>The character (content id) <see cref="Stocks"/> was asked for.</summary>
+    private ulong stocksFor;
+
+    private static ulong Me => Services.PlayerState.IsLoaded ? Services.PlayerState.ContentId : 0;
 
     /// <summary>Whether Allagan Tools answered last time.</summary>
     public bool Available { get; private set; }
@@ -210,15 +220,19 @@ public sealed class AllaganTools
     public void Refresh(bool soon = false)
     {
         var now = DateTime.UtcNow;
+        var me = Me;
+        // Another character than the one last asked for: asked again at once.
+        if (me != stocksFor && me != 0) nextRefresh = lastAsked = DateTime.MinValue;
         if (now < (soon ? lastAsked + TimeSpan.FromSeconds(5) : nextRefresh)) return;
         lastAsked = now;
         nextRefresh = now + RefreshEvery;
+        if (me == 0) return;
         List<RetainerStock> stocks;
         try
         {
             if (!isInitialized.InvokeFunc())
             {
-                Set(Array.Empty<RetainerStock>(), false);
+                Set(Array.Empty<RetainerStock>(), false, me);
                 return;
             }
             stocks = new List<RetainerStock>();
@@ -235,20 +249,21 @@ public sealed class AllaganTools
             // Not installed (IpcNotReadyError), another version's signatures, or it threw: nothing from it.
             if (!loggedFailure) Services.Log.Debug(ex, "Allagan Tools didn't answer; retainers come from this plugin's own record");
             loggedFailure = true;
-            Set(Array.Empty<RetainerStock>(), false);
+            Set(Array.Empty<RetainerStock>(), false, me);
             return;
         }
-        Set(stocks, true);
+        Set(stocks, true, me);
     }
 
-    private void Set(IReadOnlyList<RetainerStock> stocks, bool available)
+    private void Set(IReadOnlyList<RetainerStock> fresh, bool available, ulong forCharacter)
     {
-        var same = Available == available && Stocks.Count == stocks.Count
-                   && Stocks.Zip(stocks).All(p => p.First.RetainerId == p.Second.RetainerId && p.First.Items.Count == p.Second.Items.Count
-                                                  && p.First.Items.All(kv => p.Second.Count(kv.Key) == kv.Value));
+        var same = forCharacter == stocksFor && Available == available && stocks.Count == fresh.Count
+                   && stocks.Zip(fresh).All(p => p.First.RetainerId == p.Second.RetainerId && p.First.Items.Count == p.Second.Items.Count
+                                                 && p.First.Items.All(kv => p.Second.Count(kv.Key) == kv.Value));
         Available = available;
         if (same) return;
-        Stocks = stocks;
+        stocks = fresh;
+        stocksFor = forCharacter;
         Version++;
     }
 }

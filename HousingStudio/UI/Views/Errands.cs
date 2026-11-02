@@ -58,7 +58,7 @@ public sealed partial class MainWindow
         var ctx = session.Context;
         var e = errandEstimate;
         if (ReferenceEquals(e.Shop, shop) && Equals(e.Ctx, ctx) && e.Ceiling == config.ErrandsMarketCeiling && e.Worlds == config.ErrandsOtherWorlds
-            && e.Home == config.ErrandsHome && e.Spare == config.ErrandsSpareSlots && DateTime.UtcNow < e.Until)
+            && e.Home == config.HomeChoice() && e.Spare == config.ErrandsSpareSlots && DateTime.UtcNow < e.Until)
             return (e.Plan, e.Here);
         HomeRef? here = null;
         var plan = ErrandPlan.Empty;
@@ -77,7 +77,7 @@ public sealed partial class MainWindow
         }
         // The same plan as before keeps its object, so what's drawn from it isn't made again.
         if (ErrandPlanner.Same(plan, e.Plan)) plan = e.Plan;
-        errandEstimate = (shop, ctx, config.ErrandsMarketCeiling, config.ErrandsOtherWorlds, config.ErrandsHome, config.ErrandsSpareSlots,
+        errandEstimate = (shop, ctx, config.ErrandsMarketCeiling, config.ErrandsOtherWorlds, config.HomeChoice(), config.ErrandsSpareSlots,
             DateTime.UtcNow + TimeSpan.FromSeconds(2), plan, here);
         return (plan, here);
     }

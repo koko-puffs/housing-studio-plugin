@@ -8,9 +8,17 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 1.0.0.** Placing, dyeing, taking dyes off, clearing out and the errands have all run in the
+> **Status: 1.0.1.** Placing, dyeing, taking dyes off, clearing out and the errands have all run in the
 > game; every click the plugin sends was recorded by hand, but for a garden fixture's apply and a vendor's
 > item exchange (both still wait for Continue).
+> 1.0.1: **several characters on one account.** What Allagan Tools and AutoRetainer say about your
+> retainers is kept for the character it was asked for, and asked again the moment you switch (for up to
+> a minute after a switch, the last character's retainers were counted, and the errands could plan a
+> stop at a bell for things this one doesn't have); the game's retainer list, which can still be the last
+> character's until a bell is used, no longer filters this one's out. Settings' "Home is" is kept per
+> character (each of yours can have its own home); a character that hasn't chosen keeps the old choice.
+> (The plugin's own record of your retainers was always per character; bags, gil, currencies and the
+> storeroom are read from the game each time.)
 > 1.0.0: **a full review for stability, speed and polish.**
 > *The dye window.* Its clean-up keeps the dye window's 0.2 s between clicks, never says No to a question
 > Yes went to while it's up (nor, with ReMakePlace loaded, before it's had 2 s to answer it), and closes
