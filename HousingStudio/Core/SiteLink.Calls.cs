@@ -359,7 +359,7 @@ public static partial class SiteLink
         stem = stem.Trim().Trim('.').Trim();
         if (stem.Length == 0) stem = CleanName(name).Trim('.').Trim();
         if (stem.Length == 0) stem = "From Housing Studio";
-        if (stem.Length > 80) stem = stem[..80].TrimEnd(' ', '.');
+        if (stem.Length > 80) stem = Core.Text.Cut(stem, 80).TrimEnd(' ', '.');
         if (Reserved.IsMatch(stem)) stem = "_" + stem;
         return stem + ext;
     }

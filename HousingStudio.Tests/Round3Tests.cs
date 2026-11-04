@@ -136,3 +136,16 @@ public class DyeCountTests
         Assert.Equal(5, DyeCounts.Dyed(entries));
     }
 }
+
+public class TextCutTests
+{
+    [Fact]
+    public void ACutNeverSplitsAPair()
+    {
+        Assert.Equal("abc", HousingStudio.Core.Text.Cut("abc", 5));
+        Assert.Equal("ab", HousingStudio.Core.Text.Cut("abcd", 2));
+        // "a" then 🏠 (two chars): cut at 2 keeps only "a".
+        Assert.Equal("a", HousingStudio.Core.Text.Cut("a\U0001F3E0b", 2));
+        Assert.Equal("a\U0001F3E0", HousingStudio.Core.Text.Cut("a\U0001F3E0b", 3));
+    }
+}

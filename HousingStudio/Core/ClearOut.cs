@@ -111,7 +111,7 @@ public static class SwapNames
         var bad = new HashSet<char>(Path.GetInvalidFileNameChars()) { '/', '\\', ':', '*', '?', '"', '<', '>', '|' };
         var chars = name.Select(c => bad.Contains(c) || char.IsControl(c) ? ' ' : c).ToArray();
         var stem = string.Join(" ", new string(chars).Split(' ', StringSplitOptions.RemoveEmptyEntries)).Trim().TrimEnd('.');
-        if (stem.Length > 80) stem = stem[..80].TrimEnd(' ', '.');
+        if (stem.Length > 80) stem = Text.Cut(stem, 80).TrimEnd(' ', '.');
         return stem.Length == 0 ? "Home before a swap" : stem;
     }
 

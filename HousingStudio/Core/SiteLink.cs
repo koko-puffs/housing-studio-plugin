@@ -90,7 +90,7 @@ public static partial class SiteLink
     public static string Name(string? name)
     {
         var s = Regex.Replace(name ?? string.Empty, @"\s+", " ").Trim();
-        if (s.Length > 80) s = s[..80].TrimEnd();
+        if (s.Length > 80) s = Core.Text.Cut(s, 80).TrimEnd();
         return s.Length == 0 ? "Untitled build" : s;
     }
 

@@ -95,8 +95,11 @@ public sealed partial class GameLink
         if (!Usable) return "Link your Housing Studio account in Settings → Help first";
         if (runActive()) return "Not while a run is going";
         if (Home is not { } h || ctx.Side != h.Side) return "Go to your own home first";
+        // 1.0.2: why it couldn't be looked for, rather than "Still looking" for ever.
+        if (h.Verified == null && h.Designs == null && h.AddressWhy != null && h.AddressTries >= AddressTriesMost) return h.AddressWhy;
+        if (h.Verified == null && h.Designs == null && h.Why != null) return $"Couldn't ask the site about this home: {h.Why}";
         if (h.Verified == null) return h.Designs == null ? "Still looking for this home on Housing Studio" : "Verify this home as one of your designs first";
-        if (Capturing) return "Taking one…";
+        if (Capturing || grab != null) return "Taking one…";
         if (Taken is { Sent: false }) return "Send or discard the last shot first";
         if (ctx.Busy) return "Not now";
         return null;

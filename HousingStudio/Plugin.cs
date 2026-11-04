@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Dalamud.Game.Command;
 using Dalamud.Interface.Windowing;
@@ -250,7 +251,6 @@ public sealed class Plugin : IDalamudPlugin
         }, "reading the home's");
     }
 
-    private DateTime updateFailedAt = DateTime.MinValue;
 
     private void StopEverything(string reason)
     {
@@ -272,10 +272,14 @@ public sealed class Plugin : IDalamudPlugin
         }
     }
 
+    // Each message its own 10 s (1.0.2: one failing every frame hid every other's error).
+    private readonly Dictionary<string, DateTime> failedAt = new();
+
     private void Throttled(Exception ex, string message)
     {
-        if (DateTime.UtcNow - updateFailedAt < TimeSpan.FromSeconds(10)) return;
-        updateFailedAt = DateTime.UtcNow;
+        var now = DateTime.UtcNow;
+        if (failedAt.TryGetValue(message, out var at) && now - at < TimeSpan.FromSeconds(10)) return;
+        failedAt[message] = now;
         Services.Log.Error(ex, message);
     }
 
@@ -317,13 +321,13 @@ public sealed class Plugin : IDalamudPlugin
                 Safely(() => Errands.Pause("Paused by you (/hstudio pause)."));
                 break;
             case "resume":
-                runner.Resume();
-                Errands.Resume();
+                Safely(runner.Resume);
+                Safely(Errands.Resume);
                 break;
             case "continue":
             case "next":
-                if (Errands.Active) Errands.Continue();
-                else runner.Continue();
+                if (Errands.Active) Safely(Errands.Continue);
+                else Safely(runner.Continue);
                 FixtureRun.Continue();
                 break;
             case "settings":

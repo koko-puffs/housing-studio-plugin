@@ -125,15 +125,26 @@ public sealed partial class GameLink
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException)
         {
-            try
-            {
-                if (File.Exists(temp)) File.Delete(temp);
-            }
-            catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException)
-            {
-                // Left for the next one to replace.
-            }
+            DeleteQuietly(temp);
             return (new SiteReply<InboxEntry>(null, $"Couldn't write it to the plugin's folder: {ex.Message}", "disk"), null);
+        }
+        catch (OperationCanceledException)
+        {
+            // (Unloaded while writing, 1.0.2: the half-written file was left behind.)
+            DeleteQuietly(temp);
+            throw;
+        }
+    }
+
+    private static void DeleteQuietly(string file)
+    {
+        try
+        {
+            if (File.Exists(file)) File.Delete(file);
+        }
+        catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException)
+        {
+            // Left for the next one to replace.
         }
     }
 

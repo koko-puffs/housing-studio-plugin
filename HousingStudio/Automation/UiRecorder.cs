@@ -139,6 +139,9 @@ public sealed unsafe class UiRecorder : IDisposable
             Stop();
             return;
         }
+        // Read ten times a second, not every frame (1.0.2; a click still notes it at once).
+        if (DateTime.UtcNow < nextState) return;
+        nextState = DateTime.UtcNow + TimeSpan.FromMilliseconds(100);
         var state = DescribeState();
         if (state != lastState)
         {
@@ -146,6 +149,8 @@ public sealed unsafe class UiRecorder : IDisposable
             Add("STATE " + state);
         }
     }
+
+    private DateTime nextState;
 
     public static string DescribeState()
     {

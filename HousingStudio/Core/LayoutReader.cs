@@ -150,6 +150,9 @@ public static class LayoutReader
                     wall = (uint)w;
             }
             var name = raw.TryGetProperty("name", out var n) && n.ValueKind == JsonValueKind.String ? (n.GetString() ?? string.Empty).Trim() : string.Empty;
+            // (Stopped as soon as it's past, 1.0.2: a huge file was read whole first.)
+            if (into.Count >= MaxPiecesASide)
+                throw new LayoutFormatException($"That file has more than {MaxPiecesASide:N0} pieces on one side, far more than a home holds.");
             self = into.Count;
             into.Add(new LayoutPiece(self.Value, (uint)id, name, side, pos, yaw, dye, wall, parent));
         }

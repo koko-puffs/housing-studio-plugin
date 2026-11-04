@@ -74,7 +74,10 @@ public sealed partial class MainWindow
 
                 if (Kit.Button($"##inbox-open{i}", openAt, open, Btn.Glass, BtnSize.Tiny, null, 0, cant != null || busy,
                         cant ?? $"Load “{item.Name}” as a design (it's kept in the plugin's folder and Recent)"))
+                {
+                    openedOver = session.FilePath;
                     l.Open(item, OpenFromSite);
+                }
                 if (Kit.IconButton($"##inbox-x{i}", xAt, Icon.X, "Take it off this list (on the site too)", 30, Btn.Quiet, busy))
                     l.Remove(item);
                 Kit.Reserve(at, w, h);
@@ -89,12 +92,22 @@ public sealed partial class MainWindow
     }
 
     /// <summary>A thing from the site, written to the plugin's folder: loaded as choosing that file does (on the framework thread, after a tick).</summary>
+    /// <summary>The design loaded when Open was pressed (one opened since isn't replaced by what comes).</summary>
+    private string? openedOver;
+
     private void OpenFromSite(string path)
     {
         if (runner.Active || Plugin.FixtureRun.Active || Plugin.Errands.Active)
         {
             config.AddRecent(path);
             Notify("It's in Recent: stop the run to open it");
+            return;
+        }
+        // 1.0.2: another design opened while it came stays (what came waits in Recent).
+        if (!string.Equals(session.FilePath, openedOver, StringComparison.OrdinalIgnoreCase))
+        {
+            config.AddRecent(path);
+            Notify("It's in Recent: you opened another design while it came");
             return;
         }
         OpenNow(path);
