@@ -132,7 +132,7 @@ fixture it is on, "1 of 3", on the right (`Model/SettingsWords.FixtureProgress`)
 
 | Mockup | Code |
 | --- | --- |
-| Where-you-are pill (green / danger / neutral) above "Housing *Studio*" | `DrawStart` header: `WherePill` → `Kit.StatusPill`, then `MainWindow.Title(…, "Housing", "Studio")` |
+| Where-you-are pill (green / danger / neutral) above "Housing Studio" (one plain serif run in ivory, no italic part) | `DrawStart` header: `WherePill` → `Kit.StatusPill`, then `MainWindow.Title(…, "Housing Studio", null)` |
 | Settings icon button | `MainWindow.SettingsButton` (opens Settings on the tab it was last on) |
 | The drop zone as one row: round upload well, "Load a design", "Drop a .build or MakePlace file here", Choose a file | `DrawDropZone` (`Kit.Dashed`, the 44px brass well, a small glass `Kit.Button`; the button goes under the words when they'd be narrower than 170px); pressing the zone chooses a file too; drag & drop via `DropTarget` (the zone and the whole body), "Let go to load it" while a file is dragged over |
 | This house card: house thumb, "This house", "Medium house · 312 of 450 pieces placed inside", the meter | `DrawThisHouse` (only in a home you may decorate): `Kit.IconThumb`, words `Model/CareWords.HouseLine` (the count from `Session/Care.Count`, read every 2 s while Start shows; cached per count), `Kit.Meter` (how full, `ItemLimits.Of`) |

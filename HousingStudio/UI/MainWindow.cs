@@ -530,7 +530,7 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>
-    /// A serif title on one line ("kokomed2", "Housing <em>Studio</em>"), line-height 1.1, cut with an
+    /// A serif title on one line ("kokomed2", "Errands <em>done</em>"), line-height 1.1, cut with an
     /// ellipsis to fit; the italic part in brass-soft at weight 400. Returns its line's height.
     /// </summary>
     private static float Title(Vector2 pos, string plain, string? italic, float maxWidth, int px = 32)

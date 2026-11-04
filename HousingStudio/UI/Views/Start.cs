@@ -37,7 +37,7 @@ public sealed partial class MainWindow
         Frame.BeginHeader(20);
         var at = Kit.At;
         var w = Kit.Width;
-        var titleH = Title(at, "Housing", "Studio", w - S(56));
+        var titleH = Title(at, "Housing Studio", null, w - S(56));
         SettingsButton(new Vector2(at.X + w - S(40), at.Y));
         var (where, tone) = WherePill();
         var pillY = at.Y + MathF.Max(titleH, S(40)) + S(8);
