@@ -145,6 +145,12 @@ public sealed record ErrandOptions
     /// <summary>Whether the errands can get to a vendor (walk in your ward, or teleport to its zone).</summary>
     public Func<VendorOffer, bool> Reachable { get; init; } = o => o.Located;
 
+    /// <summary>
+    /// A vendor (or currency vendor) that wouldn't sell this item this run, not to be planned for it again
+    /// (1.0.2: only the fallback list was filtered, so the plan's own vendor came back every replan).
+    /// </summary>
+    public Func<uint, VendorOffer, bool>? Refused { get; init; }
+
     /// <summary>Every vendor for an item, when the plan's own can't be reached (null: only the plan's).</summary>
     public Func<uint, IReadOnlyList<VendorOffer>>? Offers { get; init; }
 
@@ -315,8 +321,9 @@ public static class ErrandPlanner
                         (long)offer.Price * line.Count, true) { Vendor = offer });
                     break;
                 case SourceKind.Exchange when line.Exchange != null:
-                    // A currency vendor: walked to like a vendor, so it has to be reachable as one.
-                    if (!o.Reachable(line.Exchange.Vendor))
+                    // A currency vendor: walked to like a vendor, so it has to be reachable as one (and not
+                    // one that wouldn't exchange it this run).
+                    if (!o.Reachable(line.Exchange.Vendor) || o.Refused?.Invoke(line.ItemId, line.Exchange.Vendor) == true)
                     {
                         if (OnBoard(line)) marketSoFar = MarketUnits(FromBoard(line), o, stack, units, left, marketSoFar, used);
                         else left.Add(new ErrandLeft(line.Need, line.Count, LeftReason.NoVendorReachable));
@@ -387,9 +394,10 @@ public static class ErrandPlanner
     /// <summary>The vendor to go to: the plan's when it can be reached, else the best reachable one.</summary>
     private static VendorOffer? Reachable(ShoppingLine line, ErrandOptions o)
     {
-        if (line.Vendor != null && o.Reachable(line.Vendor)) return line.Vendor;
+        bool Usable(VendorOffer v) => o.Reachable(v) && o.Refused?.Invoke(line.ItemId, v) != true;
+        if (line.Vendor != null && Usable(line.Vendor)) return line.Vendor;
         if (o.Offers == null) return null;
-        return VendorChoice.Ranked(o.Offers(line.ItemId), o.PreferDistrict).FirstOrDefault(o.Reachable);
+        return VendorChoice.Ranked(o.Offers(line.ItemId), o.PreferDistrict).FirstOrDefault(Usable);
     }
 
     /// <summary>
