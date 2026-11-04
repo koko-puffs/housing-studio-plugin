@@ -85,6 +85,9 @@ public sealed unsafe partial class FixtureRunner
         return slots.All(x => x != null) && slots.Distinct().Count() == slots.Count;
     }
 
+    /// <summary>The parts whose kept slot came without a house size (from 1.0.1 or before).</summary>
+    private HashSet<(string Level, string Type)> unsizedKept = new();
+
     /// <summary>A piece you put in by hand: the one slot it went to is its part's, kept for next time.</summary>
     private void LearnFromYou(FixtureTask task)
     {
@@ -97,7 +100,8 @@ public sealed unsafe partial class FixtureRunner
         var slot = went[0];
         known.RemoveAll(k => FixtureJobs.Norm(k.Level) == FixtureJobs.Norm(task.Fixture.Level) && FixtureJobs.Norm(k.Type) == FixtureJobs.Norm(task.Fixture.Type));
         known.Add(new FixtureJobs.KnownSlot(task.Fixture.Level, task.Fixture.Type, slot));
-        config.FixtureSlots[FixtureJobs.SlotKey(side, task.Fixture.Level, task.Fixture.Type)] = slot;
+        config.FixtureSlots[FixtureJobs.SlotKey(side, task.Fixture.Level, task.Fixture.Type, session.Context.HouseSize)] = slot;
+        unsizedKept.Remove((FixtureJobs.Norm(task.Fixture.Level), FixtureJobs.Norm(task.Fixture.Type)));
         config.Save();
         log.Info($"  Learnt: the {Describe(task)} goes in slot {slot} of the window (kept for next time).");
         if (!slotsTrusted && WorkOutSlots())
@@ -428,7 +432,7 @@ public sealed unsafe partial class FixtureRunner
             var current = Current(side, session.Context) ?? new List<CurrentFixture>();
             // 0.9.1: the slots seen holding what's set, and those kept from earlier runs (what's seen now wins).
             var seen = FixtureJobs.SlotsSeen(held, current);
-            known = seen.Concat(FixtureJobs.KeptSlots(config.FixtureSlots, side)
+            known = seen.Concat(FixtureJobs.KeptSlots(config.FixtureSlots, side, session.Context.HouseSize, out unsizedKept)
                 .Where(k => !seen.Any(x => FixtureJobs.Norm(x.Level) == FixtureJobs.Norm(k.Level) && FixtureJobs.Norm(x.Type) == FixtureJobs.Norm(k.Type)))
                 // 0.9.9: a kept slot that's now seen holding another part is out of date.
                 .Where(k => !seen.Any(x => x.Slot == k.Slot))).ToList();
@@ -463,9 +467,13 @@ public sealed unsafe partial class FixtureRunner
                     // holding a part of another level or type now, isn't moved to: you put this one in, and its
                     // slot is learnt. (The part being replaced, this level's and type's now, is what it holds
                     // as a rule: that's the slot.)
+                    // 1.0.2: nor an empty slot kept from a house whose size wasn't kept with it (it may be another
+                    // size's window: its slots are others).
                     var size = ContainerSize();
-                    if (size is not { } n || slot < 0 || slot >= n
-                        || (ContainerItems() is { } held && held.TryGetValue(slot, out var there) && there != task.Fixture.ItemId
+                    var items = ContainerItems();
+                    var unsure = unsizedKept.Contains((FixtureJobs.Norm(task.Fixture.Level), FixtureJobs.Norm(task.Fixture.Type)));
+                    if (size is not { } n || slot < 0 || slot >= n || items == null || (unsure && !items.ContainsKey(slot))
+                        || (items.TryGetValue(slot, out var there) && there != task.Fixture.ItemId
                             && !(Current(side, session.Context) ?? new List<CurrentFixture>()).Any(c => c.ItemId == there
                                 && FixtureJobs.Norm(c.Level) == FixtureJobs.Norm(task.Fixture.Level) && FixtureJobs.Norm(c.Type) == FixtureJobs.Norm(task.Fixture.Type))))
                     {

@@ -218,7 +218,8 @@ public static unsafe class InventoryReader
             if (side == Side.Interior && HousingStudio.Automation.GameUi.IsOpen(HousingStudio.Automation.UiTable.FurnishingList))
             {
                 listOpenSince ??= now;
-                if (now - listOpenSince.Value >= TimeSpan.FromSeconds(5))
+                // (8 s, 1.0.2: 5 s could beat a slow server's storeroom.)
+                if (now - listOpenSince.Value >= TimeSpan.FromSeconds(8))
                 {
                     MarkStoreroomEmpty(side);
                     return true;

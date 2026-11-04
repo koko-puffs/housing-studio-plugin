@@ -62,4 +62,22 @@ public class FixtureSlotTests
         Assert.Equal(new[] { new FixtureJobs.KnownSlot("Ground Floor", "Wall", 2) }, FixtureJobs.KeptSlots(kept, Side.Interior));
         Assert.Equal(new[] { new FixtureJobs.KnownSlot("Exterior", "Roof", 0) }, FixtureJobs.KeptSlots(kept, Side.Garden));
     }
+
+    [Fact]
+    public void SlotsAreKeptPerHouseSizeAndOldOnesFillIn()
+    {
+        // 1.0.2: a medium house's slots aren't another size's; one kept without a size fills in, marked so.
+        var kept = new Dictionary<string, int>
+        {
+            [FixtureJobs.SlotKey(Side.Interior, "Ground Floor", "Wall", "Medium")] = 3,
+            [FixtureJobs.SlotKey(Side.Interior, "Ground Floor", "Wall", "Small")] = 1,
+            [FixtureJobs.SlotKey(Side.Interior, "Ground Floor", "Wall")] = 7,
+            [FixtureJobs.SlotKey(Side.Interior, "Ground Floor", "Floor")] = 8,
+        };
+        var medium = FixtureJobs.KeptSlots(kept, Side.Interior, "Medium", out var unsized);
+        Assert.Equal(3, medium.Single(k => k.Type == "Wall").Slot);
+        Assert.Equal(8, medium.Single(k => k.Type == "Floor").Slot);
+        Assert.Equal(new[] { (FixtureJobs.Norm("Ground Floor"), FixtureJobs.Norm("Floor")) }, unsized);
+        Assert.Equal("in@Medium|Ground Floor|Wall", FixtureJobs.SlotKey(Side.Interior, "Ground Floor", "Wall", "Medium"));
+    }
 }

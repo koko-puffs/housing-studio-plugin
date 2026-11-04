@@ -179,22 +179,44 @@ public static class FixtureJobs
     /// <summary>A part's slot as known: seen holding what's set, or learnt from a fixture put in by hand.</summary>
     public readonly record struct KnownSlot(string Level, string Type, int Slot);
 
-    /// <summary>The key a known slot is kept under in the configuration ("in|Ground Floor|Wall").</summary>
-    public static string SlotKey(Side side, string level, string type) => $"{(side == Side.Interior ? "in" : "out")}|{level}|{type}";
+    /// <summary>
+    /// The key a known slot is kept under in the configuration: "in@Medium|Ground Floor|Wall" for a house
+    /// size (1.0.2: another size's window has other slots), "in|Ground Floor|Wall" when the size isn't known
+    /// (and as 1.0.1 and before kept them).
+    /// </summary>
+    public static string SlotKey(Side side, string level, string type, string? size = null) =>
+        $"{(side == Side.Interior ? "in" : "out")}{(string.IsNullOrEmpty(size) ? string.Empty : "@" + size)}|{level}|{type}";
 
-    /// <summary>The known slots kept for a side (<see cref="SlotKey"/>'s), read back.</summary>
-    public static List<KnownSlot> KeptSlots(IReadOnlyDictionary<string, int> kept, Side side)
+    /// <summary>
+    /// The known slots kept for a side and house size (<see cref="SlotKey"/>'s), read back: this size's,
+    /// then those kept without a size for a part this size has none for (<paramref name="unsized"/> says which).
+    /// </summary>
+    public static List<KnownSlot> KeptSlots(IReadOnlyDictionary<string, int> kept, Side side, string? size, out HashSet<(string Level, string Type)> unsized)
     {
-        var prefix = side == Side.Interior ? "in|" : "out|";
+        var bare = side == Side.Interior ? "in|" : "out|";
+        var sized = string.IsNullOrEmpty(size) ? null : (side == Side.Interior ? "in@" : "out@") + size + "|";
         var list = new List<KnownSlot>();
+        var old = new List<KnownSlot>();
         foreach (var (key, slot) in kept)
         {
-            if (!key.StartsWith(prefix, StringComparison.Ordinal)) continue;
+            var mine = sized != null && key.StartsWith(sized, StringComparison.Ordinal);
+            if (!mine && !key.StartsWith(bare, StringComparison.Ordinal)) continue;
             var parts = key.Split('|');
-            if (parts.Length == 3) list.Add(new KnownSlot(parts[1], parts[2], slot));
+            if (parts.Length != 3) continue;
+            (mine ? list : old).Add(new KnownSlot(parts[1], parts[2], slot));
+        }
+        unsized = new HashSet<(string, string)>();
+        foreach (var k in old)
+        {
+            if (list.Any(x => Norm(x.Level) == Norm(k.Level) && Norm(x.Type) == Norm(k.Type))) continue;
+            list.Add(k);
+            unsized.Add((Norm(k.Level), Norm(k.Type)));
         }
         return list;
     }
+
+    /// <summary>The known slots kept for a side, whatever the house size (tests, and the old callers).</summary>
+    public static List<KnownSlot> KeptSlots(IReadOnlyDictionary<string, int> kept, Side side) => KeptSlots(kept, side, null, out _);
 
     /// <summary>
     /// The slots holding what's set now: a part whose item is in one slot only (and set in no other

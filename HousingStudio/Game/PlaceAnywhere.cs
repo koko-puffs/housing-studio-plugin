@@ -100,11 +100,18 @@ public sealed class PlaceAnywhere : IDisposable
     public void Disable()
     {
         if (applied.Count == 0) return;
+        // 1.0.2: one that couldn't be put back is kept, so the next Disable (the run's end, the plugin's)
+        // tries again, and Active still says it's on.
+        var stuck = new List<(string Name, nint Address, byte Original)>();
         foreach (var (name, address, original) in applied)
             if (!Write(address, original))
+            {
                 Services.Log.Error($"Couldn't put \"{name}\" back. Restarting the game clears it.");
+                stuck.Add((name, address, original));
+            }
         applied.Clear();
-        Services.Log.Information("Place anywhere put back.");
+        applied.AddRange(stuck);
+        Services.Log.Information(stuck.Count == 0 ? "Place anywhere put back." : $"Place anywhere put back, but {stuck.Count} switch(es) not yet.");
     }
 
     private static bool Write(nint address, byte value)

@@ -115,8 +115,9 @@ public sealed record HousingContext(
             var ot = hm->OutdoorTerritory;
             var district = plots.DistrictOfWard(name);
             // The plot whose furnishings you're editing, else the one you're standing on.
-            int? plot = ot->EditingFurnishingsOfPlot >= 0 ? ot->EditingFurnishingsOfPlot + 1
-                : ot->HouseUnit.IsApartment ? null : ot->HouseUnit.PlotIndex + 1;
+            // (Off every plot the house id's plot reads 127 or more: no plot then, 1.0.2, not "plot 128".)
+            int? plot = ot->EditingFurnishingsOfPlot is >= 0 and < 60 ? ot->EditingFurnishingsOfPlot + 1
+                : ot->HouseUnit.IsApartment || ot->HouseUnit.PlotIndex >= 60 ? null : ot->HouseUnit.PlotIndex + 1;
             string? size = null;
             if (district != null && plot != null && plots.TryGet(district, plot.Value, out var spot)) size = Districts.HouseSizeOfPlot(spot.Size);
             return new HousingContext(PlaceKind.Ward, territory, name, ot->HouseId.Id, hm->HasHousePermissions(), size, district, plot, mode, open, busy);
