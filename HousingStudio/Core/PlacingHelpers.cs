@@ -29,7 +29,10 @@ public static class ListWindows
             for (var i = 0; i < window.Count; i++)
             {
                 if (!known.TryGetValue(offset + i, out var name)) continue;
-                if (!string.Equals(Menus.Clean(name), Menus.Clean(window[i]), StringComparison.OrdinalIgnoreCase))
+                // 1.0.2: a blank row (read mid-redraw) neither matches nor rules the offset out.
+                var seen = Menus.Clean(window[i]);
+                if (seen.Length == 0) continue;
+                if (!string.Equals(Menus.Clean(name), seen, StringComparison.OrdinalIgnoreCase))
                 {
                     ok = false;
                     break;

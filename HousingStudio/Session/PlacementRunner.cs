@@ -366,6 +366,12 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         {
             StopReason = "Nothing to do: every piece shown is in place, in its dye (or missing).";
             log.Info(StopReason);
+            PutBack();
+            return;
+        }
+
+        void PutBack()
+        {
             entries = before.Entries;
             jobs.Clear();
             jobs.AddRange(before.Jobs);
@@ -381,9 +387,9 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             clearOutLater = before.ClearOutLater;
             pendingClearOut = before.PendingClearOut;
             dyesExpected = before.DyesExpected;
-            return;
         }
 
+        var (wasDry, wasRehearsal, wasSide) = (DryRun, Rehearsal, side);
         RunNumber++;
         var ctx = session.Context;
         startKind = ctx.Kind;
@@ -464,6 +470,12 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 StopReason = "Couldn't keep what's here (see the log), so the swap didn't start.";
                 log.Warn(StopReason);
                 keepAs = null;
+                // 1.0.2: the last run's results, Try again and Swap back put back too (they were gone).
+                PutBack();
+                RunNumber--;
+                DryRun = wasDry;
+                Rehearsal = wasRehearsal;
+                side = wasSide;
                 return;
             }
             else
@@ -586,12 +598,23 @@ public sealed unsafe partial class PlacementRunner : IDisposable
     /// <summary>Where the last backup was taken: a restore only runs there (another home's, or the garden's inside, would store everything).</summary>
     private (PlaceKind Kind, uint Territory, ulong House, int? Plot)? backupOf;
 
+    private (string Path, DateTime At, bool There) backupSeen;
+
+    /// <summary>The backup file is there (looked at once a second at most: Done and Clear out ask every frame, 1.0.2).</summary>
+    private bool BackupThere(string path)
+    {
+        var now = DateTime.UtcNow;
+        if (backupSeen.Path != path || now - backupSeen.At > TimeSpan.FromSeconds(1))
+            backupSeen = (path, now, System.IO.File.Exists(path));
+        return backupSeen.There;
+    }
+
     /// <summary>Why the last backup can't be put back here and now, or null.</summary>
     public string? CanRestore()
     {
         if (Active) return "Already running.";
         if (LastBackupPath == null || backupOf == null) return "There's no backup from this session.";
-        if (!System.IO.File.Exists(LastBackupPath)) return "The backup isn't there any more.";
+        if (!BackupThere(LastBackupPath)) return "The backup isn't there any more.";
         var c = session.Context;
         // (A garden's plot too: the ward's other plots have the same territory and may share its id.)
         if ((c.Kind, c.TerritoryId, c.HouseId, c.Plot) != backupOf.Value)
@@ -759,6 +782,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             Stop("You're no longer allowed to decorate here.");
             return;
         }
+        WatchDyeQuestion();
         if (State == RunState.Paused) return;
         if (!DryRun && !ctx.EditorOpen && DateTime.UtcNow > editorMayCloseUntil && !GameUi.IsOpen(UiTable.HousingMenu))
         {
@@ -1151,6 +1175,13 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     // The piece's object as the furniture list has it now (not one remembered from before: the
                     // game may make a new one once a placement goes through).
                     instance = piece.Instance;
+                    // 1.0.2: the quick move's late hold (the game took it after its 300 ms): already held, so not
+                    // picked again (that can let go of it).
+                    if (!justPlaced && attempt > 0 && HousingEditor.ActiveItem == instance)
+                    {
+                        log.Info($"  The game holds 0x{instance:X} now: not picked again.");
+                        return StepOutcome.Done;
+                    }
                     if (justPlaced || attempt > 0)
                         log.Info($"  Picking up 0x{instance:X} (slot {key}); held before: {(HousingEditor.ActiveItem == 0 ? "nothing" : $"0x{HousingEditor.ActiveItem:X}")}.");
                     return editor.Select(instance) ? StepOutcome.Done : StepOutcome.Halt("Couldn't pick the piece up (the editor closed?).");
@@ -1429,26 +1460,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     var count = FurnitureReader.PlacedCount(side == Side.Garden);
                     log.Info($"  Placed: furniture slot {key} ({placedBefore} → {count} pieces placed).");
                     job.Key = key;
-                    // The picked piece's row now: found by its storeroom slot, as rows above it may have
-                    // come out (and the rest moved down one) since it was picked.
-                    var r = chosen[0];
-                    if (chosen[1] >= 0)
-                    {
-                        var (c, sl, picked) = (chosen[1], chosen[2], chosen[0]);
-                        r = rows.Known.Where(kv => kv.Value.Container == c && kv.Value.Slot == sl)
-                            .OrderBy(kv => Math.Abs(kv.Key - picked)).Select(kv => kv.Key).DefaultIfEmpty(-1).First();
-                    }
-                    if (r >= 0 && rows.Known.TryGetValue(r, out var what))
-                    {
-                        rowsLeaving.Add((r, new StockSlot(StockSource.Storeroom, what.Container, what.Slot, what.ItemId, 0, 1)));
-                        RowLeft();
-                    }
-                    // The list shifts (and re-sorts) once a piece leaves it: read its names again before the next piece.
-                    // The list is watched settling while the piece is moved (WatchList), once the storeroom has one fewer.
-                    namesStale = true;
-                    listSettled = false;
-                    listWatch.Reset();
-                    listExpect = storedBefore - 1;
+                    RowGone();
                     if (!Landed(key.Value, job.Target))
                         queue.InsertNext(new[] { SettlesAfterPlace(key.Value, storedBefore, previewItem) }.Concat(MoveSteps(job, key.Value, justPlaced: true)));
                     else job.Note = "Placed at its spot.";
@@ -1472,8 +1484,12 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             // Placed after all, but not told apart (lag, or a slot used again): no second copy.
             var stored = InventoryReader.StoreroomOccupied(side).Count;
             if ((placedBefore >= 0 && count > placedBefore) || (storedBefore >= 0 && stored < storedBefore))
+            {
+                // 1.0.2: its row left the list all the same (the next piece's rows were all learnt again).
+                if (storedBefore >= 0 && stored < storedBefore) RowGone();
                 return StepOutcome.Skip($"It looks placed ({placedBefore} → {count} pieces placed, {storedBefore} → {stored} in the storeroom) but couldn't be told apart, "
                                         + "so it isn't moved to its spot; check it, or run again to move it.", ProblemKind.Other);
+            }
             // A slow server: 4 s more for the counts before a second try, which could place a second copy.
             if (lastToast == null && queue.Elapsed < TimeSpan.FromSeconds(4)) return StepOutcome.Waiting;
             if (attempt == 0)
@@ -1488,6 +1504,30 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         },
         });
         return steps;
+
+        void RowGone()
+        {
+            // The picked piece's row now: found by its storeroom slot, as rows above it may have
+            // come out (and the rest moved down one) since it was picked.
+            var r = chosen[0];
+            if (chosen[1] >= 0)
+            {
+                var (c, sl, picked) = (chosen[1], chosen[2], chosen[0]);
+                r = rows.Known.Where(kv => kv.Value.Container == c && kv.Value.Slot == sl)
+                    .OrderBy(kv => Math.Abs(kv.Key - picked)).Select(kv => kv.Key).DefaultIfEmpty(-1).First();
+            }
+            if (r >= 0 && rows.Known.TryGetValue(r, out var what))
+            {
+                rowsLeaving.Add((r, new StockSlot(StockSource.Storeroom, what.Container, what.Slot, what.ItemId, 0, 1)));
+                RowLeft();
+            }
+            // The list shifts (and re-sorts) once a piece leaves it: read its names again before the next piece.
+            // The list is watched settling while the piece is moved (WatchList), once the storeroom has one fewer.
+            namesStale = true;
+            listSettled = false;
+            listWatch.Reset();
+            listExpect = storedBefore - 1;
+        }
     }
 
     /// <summary>
@@ -1677,9 +1717,9 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         var name = Name(job);
         return new List<Step>
         {
-            Step.Act("Give up looking", () => StepOutcome.Skip(
+            new Step { Label = "Give up looking", Run = () => StepOutcome.Skip(
                 $"The furnishing list didn't show {name} (looked in {tried.Count} rows, and made the list again). Place it from the list by hand, or \"Try again\" later.",
-                ProblemKind.NotFound)),
+                ProblemKind.NotFound) },
         };
     }
 
@@ -1698,24 +1738,38 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         }),
         Step.Wait("The Storeroom tab shows", InventoryReader.StoreroomTabShown, WindowWait),
         Step.Wait("The storeroom is loaded", () => InventoryReader.StoreroomLoaded(side), WindowWait),
-        Step.Act("Read the list afresh", () =>
+        // (No click in it: a plain step, not an action waiting a click gap, 1.0.2.)
+        new Step
         {
-            namesStale = true;
-            listSettled = false;
-            listWatch.Reset();
-            listExpect = null;
-            return StepOutcome.Done;
-        }),
+            Label = "Read the list afresh",
+            Run = () =>
+            {
+                namesStale = true;
+                listSettled = false;
+                listWatch.Reset();
+                listExpect = null;
+                return StepOutcome.Done;
+            },
+        },
         ListSettles(),
     };
 
     /// <summary>Reads the list's names again (cheap: no clicks) after it changed, and forgets picked rows that no longer match.</summary>
+    private DateTime namesRetryAt;
+
     private void RefreshListNames()
     {
-        namesStale = false;
+        // 1.0.2: a read that failed (the list mid-redraw) is tried again a moment later; the names were
+        // marked fresh before the read and the shifted ones stayed in use.
+        if (DateTime.UtcNow < namesRetryAt) return;
         var occupied = Occupied();
         var read = ReadNames(occupied);
-        if (read == null) return;
+        if (read == null)
+        {
+            namesRetryAt = DateTime.UtcNow + TimeSpan.FromMilliseconds(250);
+            return;
+        }
+        namesStale = false;
         var forgotten = rows.RefreshNames(0, read.Value.Names, data.ItemName);
         listExhausted = false;
         log.Info($"  Read the list's names again ({read.Value.Names.Count} of {rows.Count} rows, {read.Value.Source}){(forgotten > 0 ? $"; {forgotten} remembered rows had moved and were forgotten" : string.Empty)}.");
@@ -1787,6 +1841,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 log.Info("  Couldn't scroll the list to read further rows: the rest are found by picking.");
                 return StepOutcome.Done;
             }
+            DateTime? blankSince = null;
             queue.InsertNext(new[]
             {
                 new Step
@@ -1796,6 +1851,11 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     Run = () =>
                     {
                         var list = ListReader.Read(UiTable.FurnishingList).FirstOrDefault(l => l.NodeId == listNode);
+                        // 1.0.2: rows mostly blank (still being drawn) are read once more a moment later before
+                        // scrolling is given up on for the run.
+                        if (blankSince == null && list != null && list.Rows.Count(r => Menus.Clean(r).Length > 0) * 2 < list.Rows.Count)
+                            blankSince = DateTime.UtcNow;
+                        if (blankSince is { } blank && DateTime.UtcNow - blank < TimeSpan.FromMilliseconds(400)) return StepOutcome.Waiting;
                         var offset = list == null ? null : ListWindows.Align(rows.Names, list.Rows);
                         var before = NamedUpTo();
                         if (list != null && offset != null && offset.Value + list.Rows.Count > before)
@@ -1881,7 +1941,8 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         for (var i = index + 1; i < jobs.Count; i++)
         {
             var j = jobs[i];
-            if (j.Outcome == JobOutcome.Pending && (j.Kind == JobKind.PlaceFromStoreroom || j.Kind == JobKind.PlaceFromBags && j.StoredAhead) && j.Target.ItemId == job.Target.ItemId
+            // (Not a piece set aside to try again later, 1.0.2: as ChooseReadable leaves those out.)
+            if (j.Outcome == JobOutcome.Pending && !triedAgainLater.Contains(j) && (j.Kind == JobKind.PlaceFromStoreroom || j.Kind == JobKind.PlaceFromBags && j.StoredAhead) && j.Target.ItemId == job.Target.ItemId
                 && j.Target.Floor == job.Target.Floor && j.Target.Late == job.Target.Late && DyeWanted(j) == stain)
                 return j;
         }
@@ -2017,8 +2078,12 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     if (lastToast != null && FurnitureReader.Preview() == null && (held.ItemId == job.Target.ItemId || held.ItemId == 0 && expected))
                         return Refused(job);
                     var seen = new StoreroomRow(container, slot, held.ItemId, held.Stain);
-                    if (held.ItemId != 0) rows.Learn(row, seen, occupied.Count(o => o.ItemId == held.ItemId));
-                    rowsDirty = true;
+                    // (Saved only when a row was learnt, 1.0.2: an empty read wrote the settings to disk every 10 s.)
+                    if (held.ItemId != 0)
+                    {
+                        rows.Learn(row, seen, occupied.Count(o => o.ItemId == held.ItemId));
+                        rowsDirty = true;
+                    }
                     // The piece in the dye the plan chose it in (the design's, or one to dye) while the storeroom
                     // has one: 0.3.2 took any of the item, so an undyed table placed for a black one used up a
                     // dye and the black one was left over.
@@ -2114,7 +2179,8 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 Run = () =>
                 {
                     var menu = GameUi.MenuEntries();
-                    if (menu == null) return StepOutcome.Halt("The item's menu closed before \"Store\" could be chosen.");
+                    // 1.0.2: only this piece is skipped (as ChooseEntry does), not the whole run.
+                    if (menu == null) return StepOutcome.Skip("The item's menu closed before \"Store\" could be chosen.", ProblemKind.Other);
                     log.Info($"  menu entries: {string.Join(" | ", menu.Select((e, i) => $"{i}:{e}"))}");
                     var entry = Menus.FindEntry(menu, storeWords);
                     if (entry < 0)
@@ -2127,7 +2193,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     }
                     var blanks = UiCallValues.Of(("entry", entry));
                     log.Info($"  → {UiTable.MenuChoose.Describe(blanks)}");
-                    return GameUi.Fire(UiTable.MenuChoose, blanks) ? StepOutcome.Done : StepOutcome.Halt("The item's menu closed.");
+                    return GameUi.Fire(UiTable.MenuChoose, blanks) ? StepOutcome.Done : StepOutcome.Skip("The item's menu closed before \"Store\" could be chosen.", ProblemKind.Other);
                 },
             },
             new Step
@@ -2169,7 +2235,32 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     // Taken for a full storeroom only when it nearly is: a refusal with room is the piece's own.
                     if (refused && InventoryReader.StoreroomRoom(side) is not > 1) refusedAtRoom = InventoryReader.StoreroomRoom(side) ?? 0;
                     if (GameUi.IsOpen(UiTable.ContextMenu)) GameUi.Fire(UiTable.MenuCancel);
-                    queue.InsertNext(new[] { Step.Wait("Its menu closes", () => !GameUi.IsOpen(UiTable.ContextMenu), WindowWait, StepStatus.Done) }.Concat(HeldAttempt(job)));
+                    // 1.0.2: the store's question still up is said no to and waited out, then the storeroom looked at
+                    // once more: the bag's way answers yes to any question, and that late yes stored it untracked.
+                    var asking = GameUi.YesNoText() != null;
+                    if (asking) GameUi.Close(UiTable.YesNo);
+                    queue.InsertNext(new[]
+                    {
+                        Step.Wait("Its menu closes", () => !GameUi.IsOpen(UiTable.ContextMenu), WindowWait, StepStatus.Done),
+                        Step.Wait("The question closes", () => GameUi.YesNoText() == null, TimeSpan.FromSeconds(3), StepStatus.SkipJob),
+                        new Step
+                        {
+                            Label = $"{name} wasn't stored after all?",
+                            Delay = asking ? Speed.Wait(300) : TimeSpan.Zero,
+                            Run = () =>
+                            {
+                                if (BagRoute.Stored(storedBefore, StoredCount(job.Target.ItemId), inBagsBefore, BagCount(job.Target.ItemId)))
+                                {
+                                    log.Info("  It went to the storeroom after all: placing it from there.");
+                                    NoteStored(job.Target.ItemId);
+                                    queue.InsertNext(StoreroomSteps(job));
+                                    return StepOutcome.Done;
+                                }
+                                queue.InsertNext(HeldAttempt(job));
+                                return StepOutcome.Done;
+                            },
+                        },
+                    });
                     return StepOutcome.Done;
                 },
             },
@@ -2504,6 +2595,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         var name = Name(job);
         var where = job.Entry?.Stock is { } s ? InventoryReader.Describe(s) : "your bags or the storeroom";
         var announced = false;
+        var nextLook = DateTime.MinValue;
         return new List<Step>
         {
             new Step
@@ -2516,6 +2608,9 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                         announced = true;
                         if (config.ChatMessages) Services.Chat.Print($"Put {name} down anywhere (from {where}); Housing Studio sets it at its spot.", "Housing Studio");
                     }
+                    // Looked for four times a second (1.0.2: every frame, for up to five minutes).
+                    if (DateTime.UtcNow < nextLook) return StepOutcome.Waiting;
+                    nextLook = DateTime.UtcNow + TimeSpan.FromMilliseconds(250);
                     return FindNewPiece(job) ? StepOutcome.Done : StepOutcome.Waiting;
                 },
                 Timeout = ByHandWait,
@@ -2551,6 +2646,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         // and closing the window without dyeing puts this back (0.8.2's rehearsal, Icebox).
         var stainBefore = new byte[] { 0 };
         var asked = new[] { false };
+        var interacted = new[] { false };
         nint instance = 0;
         // The dye window's list, held steady for a few frames before anything goes into it (this piece's own).
         var windowFilled = new Settle(3, TimeSpan.FromMilliseconds(80));
@@ -2563,6 +2659,9 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             DyeWindowsClosedFirst(StepStatus.SkipJob)[1],
             Step.Act($"Pick {name}", () =>
             {
+                // 1.0.2: the editor switched to Store or To your bags meanwhile (by you, while this waited for
+                // Continue or a pause): a pick then would put the piece away (in a rehearsal too).
+                if (HousingEditor.Mode != EditorMode.Dye) return StepOutcome.Skip("The editor isn't in Furnishing Color any more.", ProblemKind.Other);
                 var live = ReadLive();
                 if (live == null || !live.TryGetValue(key, out var piece) || piece.ItemId != job.Target.ItemId)
                     return StepOutcome.Skip("It's no longer where the plan saw it.", ProblemKind.NotFound);
@@ -2602,15 +2701,19 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     // would use up the dye on it.
                     if (HousingEditor.ActiveItem != instance) return StepOutcome.Waiting;
                     if (!actions.CanDye || !actions.OpenDyeWindow()) log.Info($"  The game's \"interact\" didn't open the dye window ({actions.DyeError ?? "it didn't say which piece is picked"}).");
+                    else interacted[0] = true;
                     return StepOutcome.Done;
                 },
             },
             new Step
             {
                 Label = $"The dye window ({UiTable.DyeWindow}) opens",
-                Timeout = TimeSpan.FromSeconds(1.5),
+                Timeout = TimeSpan.FromSeconds(4),
                 OnTimeout = StepStatus.Done,
-                Run = () => GameUi.IsOpen(UiTable.DyeWindow) ? StepOutcome.Done : StepOutcome.Waiting,
+                // 1.5 s, or 4 s once "interact" was sent or while the window is still loading (1.0.2: a slow one
+                // was opened a second time from the list while it came up).
+                Run = () => GameUi.IsOpen(UiTable.DyeWindow) || (!interacted[0] && !Coming(UiTable.DyeWindow) && queue.Elapsed > TimeSpan.FromSeconds(1.5))
+                    ? StepOutcome.Done : StepOutcome.Waiting,
             },
             // (Not an action: it only adds the list's steps, which are.)
             new Step
@@ -2619,6 +2722,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 Run = () =>
                 {
                     if (GameUi.IsOpen(UiTable.DyeWindow)) return StepOutcome.Done;
+                    if (interacted[0] && Coming(UiTable.DyeWindow)) return StepOutcome.Skip("The dye window was still coming up after 4 s: left, so nothing is clicked into it.", ProblemKind.DyeFailed);
                     queue.InsertNext(DyeListSteps(job, instance));
                     return StepOutcome.Done;
                 },
@@ -2659,6 +2763,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                         // the window opens on the piece's own dye's palette.
                         var first = UiCallValues.Of(("shade", 0));
                         log.Info($"  Taking the dye off: {UiTable.DyeShade.Describe(first)}");
+                        string? firstBefore = null;
                         queue.InsertNext(new[]
                         {
                             new Step
@@ -2666,7 +2771,11 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                                 Label = $"Switch to the first palette: {UiTable.DyeShade.Describe(first)}",
                                 IsAction = true,
                                 MinGap = DyeWindowGap,
-                                Run = () => FireOrSkip(UiTable.DyeShade, first),
+                                Run = () =>
+                                {
+                                    firstBefore = GameUi.TextValues(UiTable.DyeWindow).GetValueOrDefault(UiTable.DyeListFirstValue);
+                                    return FireOrSkip(UiTable.DyeShade, first);
+                                },
                             },
                             new Step
                             {
@@ -2680,7 +2789,12 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                                     // 0.3 s after the switch, as for any shade; its first place may have no name
                                     // to read, so after 0.6 s more it's taken as in (it's where the recording clicked).
                                     if (queue.Elapsed < DyeWait(300)) return StepOutcome.Waiting;
-                                    if (Menus.DyeListCount(GameUi.TextValues(UiTable.DyeWindow), UiTable.DyeListFirstValue) < 1
+                                    // 1.0.2: the list has changed from the palette shown before (the old one's
+                                    // list counted as in, and its first dye could be put on), or 0.9 s went by
+                                    // (the first palette was already shown).
+                                    var shown = GameUi.TextValues(UiTable.DyeWindow);
+                                    var changed = shown.GetValueOrDefault(UiTable.DyeListFirstValue) != firstBefore;
+                                    if ((!changed || Menus.DyeListCount(shown, UiTable.DyeListFirstValue) < 1)
                                         && queue.Elapsed < DyeWait(900)) return StepOutcome.Waiting;
                                     row[0] = 0;
                                     return StepOutcome.Done;
@@ -2755,6 +2869,14 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                         // it are skipped: one misread list isn't enough, 0.9.9).
                         return StepOutcome.Skip($"Out of {dye}: it isn't in the dye window's list. Get some and Try again.", ProblemKind.DyeMissing);
                     }
+                    // 1.0.2: the row still holds this dye (the palette switched between Find and here, by ReMakePlace's
+                    // "select previous dye" or by you, picked another dye from the same row).
+                    if (!undye)
+                    {
+                        var now = Menus.DyeRow(GameUi.TextValues(UiTable.DyeWindow), dye, UiTable.DyeListFirstValue);
+                        if (now == null) return StepOutcome.Skip($"The dye window's list changed: {dye} isn't in the list shown now, so nothing was picked.", ProblemKind.DyeFailed);
+                        row[0] = now.Value;
+                    }
                     var values = UiCallValues.Of(("row", row[0]), ("stain", job.Target.Stain));
                     log.Info($"  → {UiTable.DyePick.Describe(values)}");
                     if (Rehearsal) queue.InsertNext(RehearseDyeEnd(job, key, stainBefore[0]));
@@ -2792,6 +2914,8 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     // A new question comes: the last one's Yes no longer stands for it, nor when it was seen up.
                     yesOnOpenQuestion = false;
                     confirmUpSince = null;
+                    questionUpAt = null;
+                    dyePressedAt = DateTime.UtcNow;
                     return FireOrSkip(UiTable.DyeApply);
                 },
             },
@@ -2805,6 +2929,9 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 Run = () =>
                 {
                     var now = DateTime.UtcNow;
+                    // 1.0.2: seen by the frame watch while this waited out its gap (ReMakePlace may answer it
+                    // within the 0.2 s, and it read as "no question": the dye counted out after two).
+                    confirmSeen ??= questionUpAt;
                     if (GameUi.IsOpen(UiTable.DyeConfirm))
                     {
                         confirmSeen ??= now;
@@ -2829,7 +2956,13 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     }
                     // The piece's dye alone proves nothing while the window is open (it shows the
                     // preview): only the window closed on its own with the dye in place counts.
-                    return !GameUi.IsOpen(UiTable.DyeWindow) && StainOf(key) == job.Target.Stain ? StepOutcome.Done : StepOutcome.Waiting;
+                    if (GameUi.IsOpen(UiTable.DyeWindow) || Coming(UiTable.DyeConfirm)) return StepOutcome.Waiting;
+                    if (StainOf(key) == job.Target.Stain) return StepOutcome.Done;
+                    // The window closed with no question and no dye: a failed dye, not a dye missing (which
+                    // counts the dye out after two).
+                    return queue.Elapsed > TimeSpan.FromSeconds(2.5)
+                        ? StepOutcome.Skip($"The dye window closed without asking, and it still reads {DyeWord(StainOf(key))}.", ProblemKind.DyeFailed)
+                        : StepOutcome.Waiting;
                 },
                 // The confirmation is the game's own window, not the server's answer: it came in 30-200 ms in
                 // 0.8.6's run, so 3 s (not 6) before taking the Dye button for greyed out.
@@ -3015,10 +3148,14 @@ public sealed unsafe partial class PlacementRunner : IDisposable
     private void CloseDyeWindows()
     {
         var now = DateTime.UtcNow;
+        // 1.0.2: nothing while either is still coming up (it read as closed: the window was closed, or the
+        // question said No to, as it opened).
+        if (Coming(UiTable.DyeConfirm) || Coming(UiTable.DyeWindow)) return;
         var confirm = GameUi.IsOpen(UiTable.DyeConfirm);
         if (!confirm)
         {
-            yesOnOpenQuestion = false;
+            // (Yes still stands while the game has the question at all: one frame read closed isn't gone.)
+            if (!GameUi.Exists(UiTable.DyeConfirm)) yesOnOpenQuestion = false;
             confirmUpSince = null;
         }
         else confirmUpSince ??= now;
@@ -3038,10 +3175,41 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         }
         else if (GameUi.IsOpen(UiTable.DyeWindow))
         {
+            // Not within 3 s of Dye with no question seen yet: it may still be coming (1.0.2).
+            if (now - dyePressedAt < TimeSpan.FromSeconds(3) && questionUpAt == null) return;
             dyeCloseAgainAt = now;
             lastDyeClick = now;
             GameUi.Fire(UiTable.DyeClose);
         }
+    }
+
+    private readonly Dictionary<string, DateTime> loadingSince = new();
+
+    /// <summary>
+    /// A dye window or question the game has made but not finished loading, for its first 3 s so seen (a
+    /// window the game keeps made but never ready, if there is one, doesn't hold everything up for ever).
+    /// </summary>
+    private bool Coming(string name)
+    {
+        if (!GameUi.Loading(name))
+        {
+            loadingSince.Remove(name);
+            return false;
+        }
+        var now = DateTime.UtcNow;
+        if (!loadingSince.TryGetValue(name, out var since)) loadingSince[name] = since = now;
+        return now - since < TimeSpan.FromSeconds(3);
+    }
+
+    /// <summary>When Dye was last pressed, and when its question was first seen up (watched every frame).</summary>
+    private DateTime dyePressedAt = DateTime.MinValue;
+    private DateTime? questionUpAt;
+
+    /// <summary>Every frame: notes the dye question as soon as it's up after Dye (before a step looks).</summary>
+    private void WatchDyeQuestion()
+    {
+        if (questionUpAt == null && DateTime.UtcNow - dyePressedAt < TimeSpan.FromSeconds(5) && GameUi.IsOpen(UiTable.DyeConfirm))
+            questionUpAt = DateTime.UtcNow;
     }
 
     /// <summary>
@@ -3174,7 +3342,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     {
                         Step.Act($"Open its menu: {UiTable.DyeListMenu.Describe(values)}", () => Fire(UiTable.DyeListMenu, values)),
                         Step.Wait("Its menu opens", () => GameUi.IsOpen(UiTable.ContextMenu), WindowWait, StepStatus.SkipJob),
-                        ChooseEntry(UiTable.PaintLabels(Services.ClientState.ClientLanguage), "Furnishing Color's menu"),
+                        ChooseEntry(UiTable.PaintLabels(Services.ClientState.ClientLanguage), "Furnishing Color's menu", dyeing: true),
                     });
                     return StepOutcome.Done;
                 },
@@ -3426,13 +3594,19 @@ public sealed unsafe partial class PlacementRunner : IDisposable
 
     private Step ChoosePlace(string where) => ChooseEntry(PlaceLabels(), where);
 
-    private Step ChooseEntry(IReadOnlyList<string> labels, string where) => Step.Act($"Choose \"{labels.FirstOrDefault()}\" in {where}", () =>
+    private Step ChooseEntry(IReadOnlyList<string> labels, string where, bool dyeing = false) => Step.Act($"Choose \"{labels.FirstOrDefault()}\" in {where}", () =>
     {
         var menu = GameUi.MenuEntries();
         // 1.0.0: only this piece (the menu closed by a click elsewhere, or Esc): the run goes on.
         if (menu == null) return StepOutcome.Skip($"The menu closed before \"{labels.FirstOrDefault()}\" could be chosen.", ProblemKind.Other);
         var entry = Menus.FindEntry(menu, labels);
         log.Info($"  menu entries: {string.Join(" | ", menu.Select((e, i) => $"{i}:{e}"))}");
+        // (Furnishing Color's menu without "Paint" is that piece's own: skipped, not the run stopped, 1.0.2.)
+        if (entry < 0 && dyeing)
+        {
+            GameUi.Fire(UiTable.MenuCancel);
+            return StepOutcome.Skip($"Furnishing Color's menu for it has no \"{labels.FirstOrDefault()}\" (it has: {string.Join(", ", menu)}).", ProblemKind.DyeFailed);
+        }
         if (entry < 0)
             return StepOutcome.Halt($"The menu has no entry like \"{string.Join("\" / \"", labels)}\" (it has: {string.Join(", ", menu)}). Type the right words in Settings → Help → The \"Place\" words.");
         var blanks = UiCallValues.Of(("entry", entry));
@@ -3738,9 +3912,10 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                         // ("Unable to remove. Another furnishing has been placed on that item."). Not a full
                         // storeroom (0.8.6 took it for one and sent 100 pieces to your bags): it's put away
                         // after the others, which take what stands on it off first.
-                        if (said && room is > 0 && DeferStore(job))
+                        // (Going to your bags with room in them too, 1.0.2: a full storeroom kept it from being put off.)
+                        if (said && (room is > 0 || toBags && ErrandGame.FreeSlots() > 0) && DeferStore(job))
                         {
-                            log.Info($"  The storeroom has room, so the game refused {name} itself (something on it?): it's put away after the others.");
+                            log.Info($"  {(toBags ? "Your bags have" : "The storeroom has")} room, so the game refused {name} itself (something on it?): it's put away after the others.");
                             return StepOutcome.Skip("Put away later.", ProblemKind.Other);
                         }
                         if (said && room is > 0)
@@ -3757,7 +3932,9 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                                 return StepOutcome.Done;
                             }
                             return StepOutcome.Skip(said
-                                ? $"It wasn't put away (the game said \"{lastToast}\"): make room in the storeroom and Try again, or put it in your bags by hand (the editor's inventory button)."
+                                ? toBags
+                                    ? $"It wasn't put in your bags (the game said \"{lastToast}\"). If something stands on it, take that off first; then Try again."
+                                    : $"It wasn't put away (the game said \"{lastToast}\"): make room in the storeroom and Try again, or put it in your bags by hand (the editor's inventory button)."
                                 : StoreroomFullWords, ProblemKind.Other);
                         }
                         return StepOutcome.Skip("It wasn't put away (Store mode didn't take it from the plugin). Put it in the storeroom by hand.", ProblemKind.Other);

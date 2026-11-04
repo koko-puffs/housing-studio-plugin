@@ -79,6 +79,19 @@ public static unsafe class GameUi
 
     public static bool IsOpen(string name) => Ready(name) != null;
 
+    /// <summary>The game has this window at all (shown or not, loaded or not).</summary>
+    public static bool Exists(string name) => Services.GameGui.GetAddonByName<AtkUnitBase>(name) != null;
+
+    /// <summary>
+    /// A window the game has made but not finished loading (1.0.2: one still coming up read as closed, so
+    /// the dye clean-up closed or clicked into it). False when it isn't there or is ready.
+    /// </summary>
+    public static bool Loading(string name)
+    {
+        var a = Services.GameGui.GetAddonByName<AtkUnitBase>(name);
+        return a != null && !(a->IsReady && a->IsFullyLoaded());
+    }
+
     /// <summary>
     /// A node found by its ids, as ECommons' GetNodeByIDChain walks a window (0.9.8, for the dye window's
     /// checks RemakePlace/plugin makes): from <paramref name="start"/>, the node with the first id among
