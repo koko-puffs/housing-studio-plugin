@@ -173,6 +173,11 @@ public sealed partial class MainWindow
                 figure = config.DyeAfterPlacing || runner.DyesStillExpected > 0 ? "next" : "off";
                 dim = true;
             }
+            else if (total == 0 && phase == RunPhase.Move && runner.PutAwayProgress is { Total: > 0 } away && (now || finished || before))
+            {
+                // Only pieces to put away (a clear out): those, as their own count.
+                figure = $"{away.Done} of {away.Total} put away";
+            }
             else if (total == 0)
             {
                 figure = finished || before ? "none" : "next";

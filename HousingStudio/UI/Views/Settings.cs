@@ -333,7 +333,10 @@ public sealed partial class MainWindow
             {
                 var label = FloorLabels[f];
                 var on = f switch { 0 => config.ShowBasement, 1 => config.ShowGround, _ => config.ShowUpper };
-                if (Kit.Button($"##floor-pick{f}", new Vector2(x, p.Y), label, on ? Btn.Picked : Btn.Glass, BtnSize.Tiny))
+                // The last floor on can't be turned off (1.0.2: with none, nothing inside was placed or listed).
+                var last = on && (config.ShowBasement ? 1 : 0) + (config.ShowGround ? 1 : 0) + (config.ShowUpper ? 1 : 0) == 1;
+                if (Kit.Button($"##floor-pick{f}", new Vector2(x, p.Y), label, on ? Btn.Picked : Btn.Glass, BtnSize.Tiny, null, 0, last,
+                        last ? "At least one floor stays picked" : null))
                 {
                     switch (f)
                     {
@@ -585,8 +588,10 @@ public sealed partial class MainWindow
         SetRow(index, "Home is", here == null ? "Where \"go home\" takes you (read from the home you're in)" : "The game doesn't say this home is yours: which is it?",
             Kit.SegmentedWidth(HomeLabels), S(40), p =>
             {
-                var picked = Kit.Segmented(id, p, HomeLabels, homeNow, 0, Kit.Width - S(40));
-                if (picked != homeNow)
+                // 1.0.2: pressing the one lit (only suggested, from what the game says) saves it too; the errands
+                // stayed blocked asking which home it is until another was pressed and then this one again.
+                var picked = Kit.SegmentedPress(id, p, HomeLabels, homeNow, 0, Kit.Width - S(40));
+                if (picked >= 0 && picked != config.HomeChoice())
                 {
                     config.ChooseHome(picked);
                     config.Save();
@@ -599,10 +604,16 @@ public sealed partial class MainWindow
     /// once, and the errands follow that way (vnavmesh's own runs into the walls: a ward's map has no
     /// houses in it). Record (again, to replace it) / Stop. The note says whether this home's plot has one.
     /// </summary>
+    private HomeRef? lastHomeInside;
+
     private void DrawDoorWayRow(int index)
     {
         var errands = Plugin.Errands;
+        // Outside, where a way is recorded, the home last seen inside (1.0.2: it read as unknown there always,
+        // and Record replaced a way already kept without saying so).
         var home = ErrandGame.HomeHere(session.Context);
+        if (home != null) lastHomeInside = home;
+        else if (session.Context.Kind == PlaceKind.Ward) home = lastHomeInside;
         var way = errands.WayFor(home);
         var note = errands.WayNote
                    ?? (home is null ? "Learnt on the errands' first walk home"

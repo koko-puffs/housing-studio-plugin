@@ -163,7 +163,7 @@ public static class ErrandWords
                     LeftReason.OverCeiling => $"{n} past the market ceiling",
                     LeftReason.NotListedHere => $"{n} not listed where it buys",
                     LeftReason.NoRoom => $"{n} with no room in your bags",
-                    LeftReason.Currency => $"{n} for {string.Join(", ", g.Select(l => l.Exchange?.CurrencyName).Where(c => !string.IsNullOrEmpty(c)).Distinct())}",
+                    LeftReason.Currency => $"{n} for {(string.Join(", ", g.Select(l => l.Exchange?.CurrencyName).Where(c => !string.IsNullOrEmpty(c)).Distinct()) is { Length: > 0 } cs ? cs : "a currency")}",
                     LeftReason.NoneListed => $"{n} not on the board just now",
                     _ => $"{n} not known where from",
                 };
@@ -201,7 +201,7 @@ public static class ErrandWords
     /// </summary>
     public static (int Value, string Label)[] HaveFigures(int placed, int storeroom, int bags, int onRetainers) => new[]
     {
-        (storeroom, "in storeroom"),
+        (storeroom, "in your storeroom"),
         (bags, "in your bags"),
         (onRetainers, onRetainers == 1 ? "on a retainer" : "on retainers"),
         (placed, "placed"),
@@ -556,12 +556,18 @@ public static class ErrandWords
         }
         else
         {
-            var digits = new string(t.Where(char.IsDigit).ToArray());
-            if (digits.Length == 0) return null;
+            // A last separator with one or two digits after it is a decimal point (1.0.2: "1,234.50" read as
+            // 123,450 gil, and "2.5" as 25): the gil rounded.
+            var last = t.LastIndexOfAny(new[] { '.', ',' });
+            var (whole, tail) = last >= 0 && t.Length - last - 1 is >= 1 and <= 2 && t[(last + 1)..].All(char.IsDigit)
+                ? (t[..last], t[(last + 1)..])
+                : (t, string.Empty);
+            var digits = new string(whole.Where(char.IsDigit).ToArray());
+            if (digits.Length == 0 && tail.Length == 0) return null;
             if (digits.Length > 12) return GilCap;
-            value = double.Parse(digits, CultureInfo.InvariantCulture);
+            value = double.Parse((digits.Length == 0 ? "0" : digits) + (tail.Length > 0 ? "." + tail : string.Empty), CultureInfo.InvariantCulture);
         }
-        return (long)Math.Clamp(Math.Round(value * scale), 0, GilCap);
+        return (long)Math.Clamp(Math.Round(value * scale, MidpointRounding.AwayFromZero), 0, GilCap);
     }
 
     /// <summary>The next ceiling up or down from <paramref name="now"/>.</summary>

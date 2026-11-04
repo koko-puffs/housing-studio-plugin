@@ -201,8 +201,8 @@ public sealed partial class MainWindow
         var bags = ErrandGame.FreeSlots();
         var what = placed is { } n ? Words.Count(n, "piece") : "Everything";
         var where = side == Side.Garden ? "in this garden" : "in this house";
-        AskChoice("Clear out this house?",
-            $"{what} placed {where} {(placed == 1 ? "is" : "are")} put away, whatever design is loaded. Pieces standing on others and those on walls go first. "
+        AskChoice(side == Side.Garden ? "Clear out this garden?" : "Clear out this house?",
+            $"{what} placed {where} {(placed is null or 1 ? "is" : "are")} put away, whatever design is loaded. Pieces standing on others and those on walls go first. "
             + $"Room now: {(room?.ToString() ?? "?")} in the storeroom, {bags} in your bags."
             + (config.BackupBeforePlacing ? " A backup of what's placed is saved first, to put it all back." : " No backup is saved first (Settings)."),
             ClearHomeChoices, "Clear out", "Not now", i => Later(() => ClearHome(side, i switch
@@ -284,9 +284,16 @@ public sealed partial class MainWindow
         }
         var done = runner.PutAwayDone;
         var left = count - done;
+        // (Where they went as the run sent them, 1.0.2: "in the storeroom" after "Your bags only" too.)
+        var into = runner.PutAwayInto switch
+        {
+            PutAwayTo.Bags => "in your bags",
+            PutAwayTo.Storeroom => "in the storeroom",
+            _ => "in the storeroom (your bags once it was full)",
+        };
         Txt.Note(left > 0
-            ? $"{done} of {Words.Count(count, "piece")} not in the design {(done == 1 ? "was" : "were")} put away in the storeroom."
-            : $"{Words.Capital(Words.Count(done, "piece"))} not in the design {(done == 1 ? "was" : "were")} put away in the storeroom.");
+            ? $"{done} of {Words.Count(count, "piece")} not in the design {(done == 1 ? "was" : "were")} put away {into}."
+            : $"{Words.Capital(Words.Count(done, "piece"))} not in the design {(done == 1 ? "was" : "were")} put away {into}.");
     }
 
     private (string? Kept, string Line) swapBackLine = (null, string.Empty);

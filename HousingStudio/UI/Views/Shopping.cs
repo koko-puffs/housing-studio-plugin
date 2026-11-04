@@ -328,11 +328,10 @@ public sealed partial class MainWindow
         var noteW = w - S(18) * 2 - bw - S(12);
         Txt.Line(Kit.Dl, new Vector2(at.X + S(18), at.Y + h / 2 - S(19.5f) / 2), Txt.Fit("A crafting list of these, and what they're made from", Face.Sans, 13, noteW),
             Face.Sans, 13, Palette.Ash, 19.5f);
-        var items = lines.Select(l => (l.ItemId, l.Count)).ToList();
         if (Kit.Button("##teamcraft", new Vector2(at.X + w - S(18) - bw, at.Y + S(12)), label, Btn.Glass, BtnSize.Sm, null, 0, false,
                 "Opens ffxivteamcraft.com in your browser with these items in a new list"))
         {
-            var url = Teamcraft.ImportUrl(items);
+            var url = Teamcraft.ImportUrl(lines.Select(l => (l.ItemId, l.Count)).ToList());
             if (url != null)
             {
                 Dalamud.Utility.Util.OpenLink(url);

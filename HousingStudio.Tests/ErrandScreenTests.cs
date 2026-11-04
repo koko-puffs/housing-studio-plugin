@@ -26,7 +26,7 @@ public class ErrandScreenTests
     public void AlreadyHereIsFourFigures()
     {
         var cells = ErrandWords.HaveFigures(placed: 0, storeroom: 45, bags: 1, onRetainers: 1);
-        Assert.Equal(new[] { (45, "in storeroom"), (1, "in your bags"), (1, "on a retainer"), (0, "placed") }, cells);
+        Assert.Equal(new[] { (45, "in your storeroom"), (1, "in your bags"), (1, "on a retainer"), (0, "placed") }, cells);
         Assert.Equal("on retainers", ErrandWords.HaveFigures(0, 0, 0, 3)[2].Label);
     }
 

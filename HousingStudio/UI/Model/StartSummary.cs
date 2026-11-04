@@ -31,6 +31,14 @@ public sealed record StartSummary(IReadOnlyList<PlanEntry> Moves, int Storeroom,
     }
 
     /// <summary>About how long Start takes at a pace, with the runner's own guesses per piece (<see cref="RunEstimate"/>).</summary>
-    public TimeSpan Estimate(IReadOnlyCollection<PlanEntry> entries, Pace pace) =>
-        RunEstimate.TimeLeft(RunSequence.Build(entries), Pacing.Profile(pace), dyesStillToPlan: Dyes > 0, dyesExpected: Dyes);
+    /// <param name="putAways">Pieces Clear out or Swap puts away first (1.0.2: left out, so "about N min" came out far too low).</param>
+    public TimeSpan Estimate(IReadOnlyCollection<PlanEntry> entries, Pace pace, int putAways = 0)
+    {
+        var profile = Pacing.Profile(pace);
+        var time = RunEstimate.TimeLeft(RunSequence.Build(entries), profile, dyesStillToPlan: Dyes > 0, dyesExpected: Dyes);
+        if (putAways <= 0) return time;
+        // As a move: picked, then put away (Quick's 1.5 s, longer or shorter with the pace's waits), and the gap.
+        var each = profile.WaitScale * 1.5 + System.Math.Max(Pacing.MinimumMs, profile.PieceGapMs) / 1000.0;
+        return time + System.TimeSpan.FromSeconds(putAways * each);
+    }
 }

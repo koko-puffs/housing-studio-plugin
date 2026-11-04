@@ -22,13 +22,14 @@ public sealed partial class MainWindow
 {
     /// <summary>Finish's Tick off: the fixtures' tick list shows.</summary>
     private bool fixturesOpen;
-    private (List<PlanEntry>? Entries, Pace Pace, bool Dyes, TimeSpan Time) estimate;
+    private (List<PlanEntry>? Entries, Pace Pace, bool Dyes, int PutAways, TimeSpan Time) estimate;
 
-    /// <summary>The time estimate, worked out again only when the pieces (<see cref="FilteredList"/>'s list) or the pace change.</summary>
+    /// <summary>The time estimate, worked out again only when the pieces (<see cref="FilteredList"/>'s list), the pace or the clear out change.</summary>
     private TimeSpan Estimate(StartSummary s, List<PlanEntry> entries)
     {
-        if (!ReferenceEquals(estimate.Entries, entries) || estimate.Pace != config.Pace || estimate.Dyes != config.DyeAfterPlacing)
-            estimate = (entries, config.Pace, config.DyeAfterPlacing, s.Estimate(entries, config.Pace));
+        var putAways = ChosenClearOut()?.Count ?? 0;
+        if (!ReferenceEquals(estimate.Entries, entries) || estimate.Pace != config.Pace || estimate.Dyes != config.DyeAfterPlacing || estimate.PutAways != putAways)
+            estimate = (entries, config.Pace, config.DyeAfterPlacing, putAways, s.Estimate(entries, config.Pace, putAways));
         return estimate.Time;
     }
 
@@ -249,7 +250,7 @@ public sealed partial class MainWindow
         {
             Kit.StageHead(ReadyGet, "Not known yet");
             Kit.Gap(4);
-            Txt.Note("Go to your home: what's missing is worked out from your storeroom and bags there.");
+            Txt.Note(NotHomeWhy("Go to your home: what's missing is worked out from your storeroom and bags there."));
         }
         else if (shop.IsEmpty)
         {
@@ -313,7 +314,7 @@ public sealed partial class MainWindow
             var count = ReadySide == Side.Garden ? layout.Garden.Count : layout.Interior.Count;
             Kit.StageHead(ReadyPlace, Words.Count(count, "piece"));
             Kit.Gap(4);
-            Txt.Note("Go to your home to see what Start does: what's placed there is matched against the design, what moves, what comes from your storeroom and bags, and what gets dyed.");
+            Txt.Note(NotHomeWhy("Go to your home to see what Start does: what's placed there is matched against the design, what moves, what comes from your storeroom and bags, and what gets dyed."));
             Kit.EndStage();
             return;
         }

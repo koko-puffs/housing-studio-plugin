@@ -90,7 +90,7 @@ public sealed partial class MainWindow
     {
         var row = new Kit.Wrap(8);
         var h = Kit.ButtonHeight(BtnSize.Tiny);
-        var cantShow = session.Context.Side == null ? "Go to your home to see where they go" : null;
+        var cantShow = AwayFromPlan ? "Go to your home to see where they go" : null;
         if ((actions & (CheckActions.ShowClashes | CheckActions.ShowWrongSide)) != 0)
         {
             const string show = "Show where";

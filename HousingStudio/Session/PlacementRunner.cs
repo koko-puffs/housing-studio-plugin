@@ -216,8 +216,16 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         jobs.Count(j => j.Phase == phase && (outcome == null || j.Outcome == outcome));
 
     /// <summary>A phase's progress: done, didn't work (failed or skipped), and how many in all.</summary>
-    public (int Done, int Problems, int Total) PhaseProgress(RunPhase phase) =>
-        (Count(phase, JobOutcome.Done), jobs.Count(j => j.Phase == phase && j.Outcome is JobOutcome.Failed or JobOutcome.Skipped), Count(phase));
+    /// <remarks>(Move's leaves out the pieces put away, 1.0.2: a clear out read "40 of 170" moved; see <see cref="PutAwayProgress"/>.)</remarks>
+    public (int Done, int Problems, int Total) PhaseProgress(RunPhase phase)
+    {
+        bool In(RunJob j) => j.Phase == phase && j.Kind != JobKind.Store;
+        return (jobs.Count(j => In(j) && j.Outcome == JobOutcome.Done), jobs.Count(j => In(j) && j.Outcome is JobOutcome.Failed or JobOutcome.Skipped), jobs.Count(In));
+    }
+
+    /// <summary>The pieces put away so far, of those planned (clear out, Put them back).</summary>
+    public (int Done, int Total) PutAwayProgress =>
+        (jobs.Count(j => j.Kind == JobKind.Store && j.Outcome == JobOutcome.Done), jobs.Count(j => j.Kind == JobKind.Store));
 
     public int Done => jobs.Count(j => j.Outcome == JobOutcome.Done);
     public int Failed => jobs.Count(j => j.Outcome == JobOutcome.Failed);

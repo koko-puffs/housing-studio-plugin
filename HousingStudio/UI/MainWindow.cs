@@ -141,8 +141,9 @@ public sealed partial class MainWindow : Window
         vm.Observe();
         using (fonts.Push(Face.Sans, 14))
         {
-            // (Setting the fixtures: its Continue and Stop are in Ready's Finish stage and on Done.)
-            if (runner.Active || Plugin.FixtureRun.Active || Plugin.Errands.Active) sub = Sub.None;
+            // (Setting the fixtures keeps the other screens: its Continue and Stop are in Ready's Finish stage and
+            // on Done, and 1.0.2's Settings, Pieces and the shopping list did nothing when pressed during it.)
+            if (runner.Active || Plugin.Errands.Active) sub = Sub.None;
             // With a question up, nothing under it reacts (its own window takes the clicks too).
             Kit.Blocked = confirm != null;
             try

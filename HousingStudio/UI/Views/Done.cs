@@ -229,7 +229,7 @@ public sealed partial class MainWindow
         if ((tip != issue.Reason || !ReferenceEquals(reason, issue.Reason)) && !Kit.Blocked && ImGui.IsWindowHovered()
             && ImGui.IsMouseHoveringRect(new Vector2(x, top), new Vector2(x + tw, top + wordsH)))
             Kit.Tooltip(tip);
-        var cantShow = issue.NeedsHome && session.Context.Side == null;
+        var cantShow = issue.NeedsHome && AwayFromPlan;
         if (Kit.Button($"##issue{index}", new Vector2(at.X + w - S(14) - bw, mid - bh / 2), issue.Action, Btn.Quiet, BtnSize.Tiny, issue.ActionIcon, 0, cantShow,
                 cantShow ? "Go to your home to see where it goes" : null))
             issue.OnAction();
@@ -357,13 +357,24 @@ public sealed partial class MainWindow
         else
         {
             // Nothing needs you: Done is the one thing to do.
-            if (Kit.Button("##done-only", at, done, Btn.Primary, BtnSize.Lg, null, w)) vm.Dismiss();
+            if (Kit.Button("##done-only", at, done, Btn.Primary, BtnSize.Lg, null, w)) FinishDone();
             Kit.Reserve(at, w, S(46));
             Frame.EndFooter();
             return;
         }
-        if (Kit.Button("##done", new Vector2(at.X + w - dw, at.Y), done, Btn.Glass, BtnSize.Lg)) vm.Dismiss();
+        if (Kit.Button("##done", new Vector2(at.X + w - dw, at.Y), done, Btn.Glass, BtnSize.Lg)) FinishDone();
         Kit.Reserve(at, w, S(46));
         Frame.EndFooter();
+    }
+
+    /// <summary>
+    /// Done: back to Ready; after "Clear out this house" (an empty design made for it, no file), the empty
+    /// design is let go too (1.0.2: Ready showed it, Start disabled, as if a design were loaded).
+    /// </summary>
+    private void FinishDone()
+    {
+        vm.Dismiss();
+        if (session.FilePath == null && session.Layout is { } l && l.Interior.Count == 0 && l.Garden.Count == 0 && !runner.Active)
+            session.Unload();
     }
 }

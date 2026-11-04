@@ -26,7 +26,9 @@ public sealed class ShotPanel : SmallPanel
     protected override void Body()
     {
         var s = link.Taken;
-        if (Head("Shot from the game", s is { Sent: true } ? "Close" : "Discard this shot")) link.Discard();
+        // (Not while it's being sent, 1.0.2: the × dropped it here and the upload went on to the site.)
+        var sending = s is { Sending: true };
+        if (Head("Shot from the game", sending ? "Sending it: wait a moment" : s is { Sent: true } ? "Close" : "Discard this shot") && !sending) link.Discard();
         Kit.Gap(12);
         if (s == null)
         {

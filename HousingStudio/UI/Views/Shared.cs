@@ -212,4 +212,14 @@ public sealed partial class MainWindow
         if (hovered) Kit.Tooltip(tip);
         return clicked;
     }
+
+    /// <summary>
+    /// Why the design isn't matched yet: <paramref name="away"/> when you're not home; at home (1.0.2: it said
+    /// "Go to your home" there too), what's in the way, or that what's placed is being read.
+    /// </summary>
+    private string NotHomeWhy(string away) =>
+        session.Context.Side == null ? away : session.Warnings.Count > 0 ? session.Warnings[0] : "Reading what's placed here…";
+
+    /// <summary>Not at home, or on the other side of it from the plan (inside for a garden's): Show where can't show it.</summary>
+    private bool AwayFromPlan => session.Context.Side == null || (session.PlanSide != null && session.Context.Side != session.PlanSide);
 }

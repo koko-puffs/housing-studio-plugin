@@ -439,6 +439,9 @@ public class ErrandWordsTests
     [InlineData("0", 0L)]
     [InlineData("99999999999999", 999_999_999L)]
     [InlineData(" 12 000 000 ", 12_000_000L)]
+    [InlineData("1,234.50", 1_235L)]
+    [InlineData("2.5", 3L)]
+    [InlineData("10,000", 10_000L)]
     public void ACeilingCanBeTypedIn(string typed, long want) => Assert.Equal(want, HousingStudio.UI.Model.ErrandWords.ParseGil(typed));
 
     [Theory]

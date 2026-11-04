@@ -93,7 +93,7 @@ public sealed partial class MainWindow
         Frame.BeginBody("##pieces", "pieces-foot", 16, 22);
         if (!known)
         {
-            AlertNote("Go to your home to see where each piece stands: what's in place, what moves, and what comes from your storeroom or bags.", Palette.Dim, Icon.Info);
+            AlertNote(NotHomeWhy("Go to your home to see where each piece stands: what's in place, what moves, and what comes from your storeroom or bags."), Palette.Dim, Icon.Info);
             Kit.Gap(14);
         }
         DrawPiecesClashes();
@@ -232,7 +232,7 @@ public sealed partial class MainWindow
 
         if (retainerOnly) RetainerPill(new Vector2(stateX, mid - Kit.StatePillHeight / 2));
         else if (row.State is { } state) Kit.StatePill(new Vector2(stateX, mid - Kit.StatePillHeight / 2), state);
-        var away = session.Context.Side == null || (session.PlanSide != null && session.Context.Side != session.PlanSide);
+        var away = AwayFromPlan;
         var tip = away ? "Go to your home to see where it goes" : row.Count > 1 ? "Show where they go" : row.State == PieceState.InPlace ? "Show where it is" : "Show where it goes";
         if (Kit.IconButton($"##where{row.ItemId}-{row.Stain}-{row.State}-{row.Floor}", new Vector2(pinX, mid - S(16)), Icon.MapPin, tip, 32, Btn.Glass, away))
             ShowWhere(row.Entries.Select(e => e.Target));
@@ -280,7 +280,7 @@ public sealed partial class MainWindow
             }
             Txt.Note(piecesFoot.Line);
         }
-        else Txt.Note("Go to your home to see what's missing.");
+        else Txt.Note(NotHomeWhy("Go to your home to see what's missing."));
         Frame.EndFooter();
     }
 

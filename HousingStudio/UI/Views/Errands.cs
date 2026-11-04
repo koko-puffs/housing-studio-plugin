@@ -192,6 +192,7 @@ public sealed partial class MainWindow
         public ShoppingPlan? Shop;
         public bool Rehearse;
         public int Spare = -1;
+        public (int Hub, bool Bell, string World) Where;
         public string Eyebrow = string.Empty;
         public string For = string.Empty;
         public string TitlePlain = string.Empty;
@@ -210,6 +211,8 @@ public sealed partial class MainWindow
     }
 
     private readonly GetScreenWords getScreen = new();
+    private DateTime whereReadAt;
+    private (bool Bell, string World) whereNow = (false, string.Empty);
 
     /// <param name="shortTitle">The design's short name, for the eyebrow ("Solution9Loft · errands").</param>
     private GetScreenWords GetScreen(ErrandPlan plan, ShoppingPlan shop, string shortTitle, bool rehearse)
@@ -217,9 +220,18 @@ public sealed partial class MainWindow
         var g = getScreen;
         var p = session.Plan;
         var spare = config.ErrandsSpareSlots;
+        // (The market city, the bell and your home world too, 1.0.2: a new market city showed the old one's
+        // route until the plan changed. The bell and world are looked at once a second.)
+        if (DateTime.UtcNow >= whereReadAt)
+        {
+            whereReadAt = DateTime.UtcNow + TimeSpan.FromSeconds(1);
+            whereNow = (ErrandRunner.BellNearby(), ErrandGame.HomeWorld());
+        }
+        var where = (config.ErrandsHub, whereNow.Bell, whereNow.World);
         if (ReferenceEquals(g.Plan, plan) && ReferenceEquals(g.From, p) && ReferenceEquals(g.Shop, shop) && g.For == shortTitle && g.Rehearse == rehearse
-            && g.Spare == spare)
+            && g.Spare == spare && g.Where == where)
             return g;
+        g.Where = where;
         g.Plan = plan;
         g.From = p;
         g.Shop = shop;
@@ -232,7 +244,7 @@ public sealed partial class MainWindow
         g.Hint = rehearse ? "You can stop at any time. Nothing is bought or taken."
             : ErrandWords.SetOutHint(ErrandWords.Expected(shop, plan), plan.TotalGil, plan.Needs(StopKind.Market));
         g.Currencies = ErrandWords.CurrencyLine(plan.CurrencyCosts, Plugin.Shop.Balance);
-        var route = ErrandWords.Route(plan, data.AnyItemName, ErrandRunner.BellNearby(), ErrandGame.HomeWorld(), ErrandWords.City(config.ErrandsHub));
+        var route = ErrandWords.Route(plan, data.AnyItemName, where.Bell, where.World, ErrandWords.City(config.ErrandsHub));
         // "fills 28 bag slots, 6 spare" (0.9.0: "28 of 28 bag slots" read as full bags).
         for (var i = 0; i < route.Count && i < plan.Trips.Count; i++)
             route[i] = route[i] with { Rest = ErrandWords.TripSlots(plan.Trips[i], plan.FreeSlots, spare) };

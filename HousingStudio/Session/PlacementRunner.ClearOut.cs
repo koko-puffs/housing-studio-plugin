@@ -36,6 +36,9 @@ public sealed unsafe partial class PlacementRunner
     /// <summary>Where this run puts pieces away.</summary>
     private PutAwayTo putAwayTo = PutAwayTo.StoreroomThenBags;
 
+    /// <summary>Where the run puts away what it clears out (Done's words).</summary>
+    public PutAwayTo PutAwayInto => putAwayTo;
+
     /// <summary>May this run put pieces in your bags (and do they have room)?</summary>
     private bool BagsTakeIt => putAwayTo != PutAwayTo.Storeroom && ErrandGame.FreeSlots() > 0;
 
