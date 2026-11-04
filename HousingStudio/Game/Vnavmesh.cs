@@ -82,7 +82,12 @@ public sealed class Vnavmesh
     public bool Ready => Call("Nav.IsReady", () => isReady.InvokeFunc(), false);
 
     /// <summary>Starts walking to a spot. False when it couldn't start.</summary>
-    public bool MoveTo(Vector3 to) => Call("SimpleMove.PathfindAndMoveTo", () => pathfindAndMoveTo.InvokeFunc(to, false), false);
+    public bool MoveTo(Vector3 to)
+    {
+        // 1.0.2: a walk still going (or a path still being worked out) is stopped first, so two never race.
+        if (Busy) Stop();
+        return Call("SimpleMove.PathfindAndMoveTo", () => pathfindAndMoveTo.InvokeFunc(to, false), false);
+    }
 
     /// <summary>Walks through these spots in order, as they are (no pathfinding). False when it couldn't start.</summary>
     public bool Follow(List<Vector3> spots) => spots.Count > 0 && Call("Path.MoveTo", () =>

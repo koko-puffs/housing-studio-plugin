@@ -514,25 +514,35 @@ public sealed partial class ErrandRunner : IDisposable
     public void Stop(string reason)
     {
         if (!Active) return;
-        if (queue.State is QueueState.Running or QueueState.AwaitingContinue) queue.Abort(reason);
-        if (LetsPlace && runner.Active) runner.Stop(reason);
-        LetsPlace = false;
-        Nav.Stop();
-        walkTarget = null;
-        followWay = null;
-        if (travelling || Travel.Busy) Travel.Abort();
-        travelling = false;
-        CloseWindows();
-        shop.AutoRetainer.LetBe();
-        clearOutFirst = null;
-        keepAsFirst = null;
+        // 1.0.2: stopped first, then each clean-up on its own: one that throws (another plugin's IPC, the game's
+        // UI) no longer leaves the run "running" with nothing driving it, nor skips the rest of the clean-up.
+        var placing = LetsPlace && runner.Active;
         State = RunState.Stopped;
         StopReason = reason;
         StatusText = reason;
         ResultWaiting = true;
+        LetsPlace = false;
+        walkTarget = null;
+        followWay = null;
+        clearOutFirst = null;
+        keepAsFirst = null;
+        var wasTravelling = travelling;
+        travelling = false;
+        Safely("stop the steps", () => { if (queue.State is QueueState.Running or QueueState.AwaitingContinue) queue.Abort(reason); });
+        if (placing) Safely("stop placing", () => runner.Stop(reason));
+        Safely("stop vnavmesh", Nav.Stop);
+        Safely("stop Lifestream", () => { if (wasTravelling || Travel.Busy) Travel.Abort(); });
+        Safely("close the windows", CloseWindows);
+        Safely("let AutoRetainer be", shop.AutoRetainer.LetBe);
         if (Rehearsal && !reason.StartsWith("Stopped by you", StringComparison.Ordinal)) Rehearsals.Report.Issue("The errands", $"Stopped: {reason}");
         log.Warn($"Errands {(Rehearsal ? "rehearsal " : string.Empty)}stopped: {reason} ({Summary()})");
         if (config.ChatMessages) Services.Chat.PrintError($"Errands stopped: {reason}", "Housing Studio");
+    }
+
+    private void Safely(string what, Action act)
+    {
+        try { act(); }
+        catch (Exception ex) { log.Warn($"  Couldn't {what} while stopping: {ex.Message}"); }
     }
 
     private void Finish(string why)
@@ -1057,6 +1067,8 @@ public sealed partial class ErrandRunner : IDisposable
         var sprintTried = DateTime.MinValue;
         var gotDown = false;
         var downAt = DateTime.MinValue;
+        var closest = float.MaxValue;
+        var closerAt = DateTime.MinValue;
         return new List<Step>
         {
             WaitFor("vnavmesh has this zone's map", () => Nav.Ready, TimeSpan.FromSeconds(90),
@@ -1094,6 +1106,8 @@ public sealed partial class ErrandRunner : IDisposable
                 if (!Nav.MoveTo(to.Value)) return StepOutcome.Halt($"vnavmesh wouldn't walk to {what}.");
                 walkTarget = to;
                 started = DateTime.UtcNow;
+                closerAt = started;
+                closest = float.MaxValue;
                 tries = 1;
                 return StepOutcome.Done;
             }),
@@ -1116,7 +1130,21 @@ public sealed partial class ErrandRunner : IDisposable
                         sprintTried = DateTime.UtcNow;
                         Movement.TrySprint(log.Info);
                     }
-                    if (Nav.Busy || DateTime.UtcNow - started < TimeSpan.FromSeconds(2)) return StepOutcome.Waiting;
+                    // 1.0.2: still "walking" but no closer by half a yalm for 12 s (caught on a wall or a rail,
+                    // or a path that never finishes): stopped and asked again, the same as stopping short.
+                    var now = DateTime.UtcNow;
+                    if (d < closest - 0.5f)
+                    {
+                        closest = d;
+                        closerAt = now;
+                    }
+                    var stuck = Nav.Busy && now - closerAt > TimeSpan.FromSeconds(12);
+                    if (stuck)
+                    {
+                        log.Info($"  No closer to {what} in 12 s ({d:0} yalms away): walking there again.");
+                        Nav.Stop();
+                    }
+                    else if (Nav.Busy || now - started < TimeSpan.FromSeconds(2)) return StepOutcome.Waiting;
                     // vnavmesh stopped short: once more, then it's no way through.
                     if (tries >= 2)
                     {
@@ -1124,7 +1152,9 @@ public sealed partial class ErrandRunner : IDisposable
                         return StepOutcome.Halt($"vnavmesh couldn't find a way to {what} (it stopped {d:0} yalms away).");
                     }
                     tries++;
-                    started = DateTime.UtcNow;
+                    started = now;
+                    closerAt = now;
+                    closest = d;
                     return Nav.MoveTo(to.Value) ? StepOutcome.Waiting : StepOutcome.Halt($"vnavmesh wouldn't walk to {what}.");
                 },
                 Timeout = WalkWait,
@@ -1468,7 +1498,9 @@ public sealed partial class ErrandRunner : IDisposable
                     }
                     var now = ErrandGame.BagCount(item.ItemId);
                     if (now <= before) return StepOutcome.Waiting;
-                    Count(item.ItemId, now - before);
+                    // The whole stack comes; only what was needed counts as got (1.0.2: a stack of 99 for 3 needed
+                    // said 99 got).
+                    Count(item.ItemId, Math.Min(now - before, item.Count - taken));
                     taken += now - before;
                     if (taken < item.Count) queue.InsertNext(Once());
                     return StepOutcome.Done;
@@ -1546,7 +1578,7 @@ public sealed partial class ErrandRunner : IDisposable
     private List<Step> VendorTravelSteps(VendorOffer v)
     {
         var steps = new List<Step>();
-        if (v.District != null && home is { } h && v.District == h.District && h.Kind != HomeKind.Apartment)
+        if (v.District != null && home is { } h && v.District == h.District && homeKind != HomeKind.Apartment)
         {
             // Your own district's: your home's teleport lands you in your ward, where they stand.
             if (!ErrandGame.InHomeWard(home!)) steps.AddRange(GoHomeSteps(leave: true));
@@ -1715,7 +1747,12 @@ public sealed partial class ErrandRunner : IDisposable
                     var cost = (long)v.Price * n;
                     var gil = ErrandGame.Gil();
                     if (gil < cost) return StepOutcome.Halt($"Not enough gil: {cost:N0} for {n} {Name(item.ItemId)}, and you have {gil:N0}.");
-                    if (Spent + cost > agreedGil) return StepOutcome.Halt($"That would spend more than the {agreedGil:N0} gil you agreed to.");
+                    if (Spent + cost > agreedGil)
+                    {
+                        // 1.0.2: this item is left (the rest of the run may still fit), not the whole run stopped.
+                        log.Warn($"  {n} × {Name(item.ItemId)} for {cost:N0} gil would spend more than the {agreedGil:N0} gil you agreed to ({Spent:N0} spent): left for you.");
+                        return Finished();
+                    }
                     var room = ErrandGame.FreeSlots();
                     if (room < ErrandPlanner.NewSlots(ErrandGame.NqCount(item.ItemId), n, stack)) return StepOutcome.Halt($"Your bags are full ({room} free slots).");
                     var row = ErrandGame.ShopRow(v.ShopId, item.ItemId);
@@ -2012,7 +2049,19 @@ public sealed partial class ErrandRunner : IDisposable
     {
         Label = $"Answer yes to \"{question}\"",
         IsAction = true,
-        Run = () => GameUi.Fire(UiTable.YesNoYes) ? StepOutcome.Done : StepOutcome.Halt("The yes/no closed."),
+        Run = () =>
+        {
+            // 1.0.2: the question is read again after the click gap; one that changed meanwhile (another
+            // purchase's, or the game's own) isn't answered yes on the strength of the one checked.
+            var now = GameUi.YesNoText();
+            if (now == null) return StepOutcome.Halt("The yes/no closed.");
+            if (now != question)
+            {
+                GameUi.Close(UiTable.YesNo);
+                return StepOutcome.Halt($"The question changed before yes was said (now \"{now}\"): said no.");
+            }
+            return GameUi.Fire(UiTable.YesNoYes) ? StepOutcome.Done : StepOutcome.Halt("The yes/no closed.");
+        },
     };
 
     // ---------------------------------------------------------------------------------------------
@@ -2994,10 +3043,15 @@ public sealed partial class ErrandRunner : IDisposable
         },
     };
 
+    private DateTime? placingSeen;
+    private TimeSpan placingFor;
+
     private List<Step> PlaceSteps() => new()
     {
         Step.Act("Start placing (Housing Studio's own run)", () =>
         {
+            placingSeen = null;
+            placingFor = TimeSpan.Zero;
             if (session.Plan == null) return StepOutcome.Halt("Your home isn't matched against the design.");
             var entries = session.Plan.Entries.Where(e => config.FloorShown(e.Target.Floor)).ToList();
             // Ready's Clear out or Swap, on the first placing only: the pieces chosen, as far as they're still here.
@@ -3035,13 +3089,23 @@ public sealed partial class ErrandRunner : IDisposable
             Label = "Placing",
             Run = () =>
             {
+                // 1.0.2: the two hours count only while placing runs (a pause, or a step waiting on you to
+                // Continue, no longer stops the errands under you).
+                var at = DateTime.UtcNow;
+                if (placingSeen is { } seen && runner.State == RunState.Running && !runner.AwaitingContinue) placingFor += at - seen;
+                placingSeen = at;
+                if (LetsPlace && runner.Active && placingFor > PlaceWait)
+                {
+                    LetsPlace = false;
+                    runner.Stop($"Placing took longer than {PlaceWait.TotalHours:0} hours.");
+                    return StepOutcome.Halt($"Placing took longer than {PlaceWait.TotalHours:0} hours.");
+                }
                 if (LetsPlace && runner.Active) return StepOutcome.Waiting;
                 var stopped = LetsPlace && runner.State == RunState.Stopped;
                 LetsPlace = false;
                 readAfter = DateTime.UtcNow + TimeSpan.FromSeconds(1.5);
                 return stopped ? StepOutcome.Halt($"Placing stopped: {runner.StopReason}") : StepOutcome.Done;
             },
-            Timeout = PlaceWait,
         },
     };
 
@@ -3054,6 +3118,8 @@ public sealed partial class ErrandRunner : IDisposable
             Run = () =>
             {
                 var ctx = session.Context;
+                // 1.0.2: a bell put in (or taken out) since the start counts for the trips still to come.
+                if (home != null && ErrandGame.InHouseOf(home)) houseBell = BellNearby();
                 var shopping = shop.Plan(session.Plan, session.MissingDyes(), ctx.District ?? session.Layout?.District);
                 var next = Estimate(shopping, home);
                 Plan = next;
