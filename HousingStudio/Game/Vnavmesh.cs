@@ -97,6 +97,9 @@ public sealed class Vnavmesh
     }, false);
 
     /// <summary>Finding a path or walking one.</summary>
+    /// <summary>Walking a path found (not still working one out).</summary>
+    public bool Walking => Call("Path.IsRunning", () => isRunning.InvokeFunc(), false);
+
     public bool Busy => Call("SimpleMove.PathfindInProgress", () => pathfindInProgress.InvokeFunc(), false) || Call("Path.IsRunning", () => isRunning.InvokeFunc(), false);
 
     /// <summary>Stops walking (safe to call whenever: nothing happens when it isn't).</summary>

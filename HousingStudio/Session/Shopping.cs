@@ -178,9 +178,11 @@ public sealed class Shopping : IDisposable
         if (unitPrice == 0) return false;
         var key = ShopKey(itemId, at);
         var data = Vendors.Offers(itemId).FirstOrDefault(o => o.NpcId == at.NpcId && o.ShopId == at.ShopId);
-        var known = config.ErrandsShopPrices.TryGetValue(key, out var kept) ? kept : data?.Price ?? 0;
-        if (known == unitPrice) return false;
-        if (data != null && data.Price == unitPrice) config.ErrandsShopPrices.Remove(key);
+        // Against the price the estimates use for this shop now (an item-wide one from before 1.0.2 included).
+        var inUse = Offers(itemId).FirstOrDefault(o => o.NpcId == at.NpcId && o.ShopId == at.ShopId)?.Price ?? data?.Price ?? 0;
+        if (inUse == unitPrice) return false;
+        // The game's data price again: the shop's own entry goes, unless an item-wide one would then stand.
+        if (data != null && data.Price == unitPrice && !config.ErrandsVendorPrices.ContainsKey(itemId)) config.ErrandsShopPrices.Remove(key);
         else config.ErrandsShopPrices[key] = unitPrice;
         config.Save();
         learnt++;

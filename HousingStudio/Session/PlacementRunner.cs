@@ -398,6 +398,10 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         }
 
         var (wasDry, wasRehearsal, wasSide) = (DryRun, Rehearsal, side);
+        // (And the home it ran in: Try again goes by it, 1.0.2 review.)
+        var wasHome = (startKind, startTerritory, startHouse, startPlot);
+        var wasShortfall = DyeShortfall;
+        var wasDyesOut = dyesOut.ToList();
         RunNumber++;
         var ctx = session.Context;
         startKind = ctx.Kind;
@@ -449,6 +453,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         deferring = false;
         dyesOut.Clear();
         dyeMisses.Clear();
+        loadingSince.Clear();
         queue.Begin(Array.Empty<Step>());
         nextJobAt = DateTime.UtcNow;
         editorMayCloseUntil = DateTime.UtcNow + ModeSwitchGrace;
@@ -484,6 +489,10 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 DryRun = wasDry;
                 Rehearsal = wasRehearsal;
                 side = wasSide;
+                (startKind, startTerritory, startHouse, startPlot) = wasHome;
+                DyeShortfall = wasShortfall;
+                dyesOut.Clear();
+                foreach (var d in wasDyesOut) dyesOut.Add(d);
                 return;
             }
             else
@@ -765,7 +774,8 @@ public sealed unsafe partial class PlacementRunner : IDisposable
             if (DateTime.UtcNow < closeDyeUntil)
             {
                 if (GameUi.IsOpen(UiTable.DyeConfirm) || GameUi.IsOpen(UiTable.DyeWindow)) CloseDyeWindows();
-                else closeDyeUntil = DateTime.MinValue;
+                // (Not while one is still coming up: it's closed once it's in, 1.0.2.)
+                else if (!Coming(UiTable.DyeConfirm) && !Coming(UiTable.DyeWindow)) closeDyeUntil = DateTime.MinValue;
             }
             return;
         }
@@ -2244,27 +2254,47 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     // Taken for a full storeroom only when it nearly is: a refusal with room is the piece's own.
                     if (refused && InventoryReader.StoreroomRoom(side) is not > 1) refusedAtRoom = InventoryReader.StoreroomRoom(side) ?? 0;
                     if (GameUi.IsOpen(UiTable.ContextMenu)) GameUi.Fire(UiTable.MenuCancel);
-                    // 1.0.2: the store's question still up is said no to and waited out, then the storeroom looked at
-                    // once more: the bag's way answers yes to any question, and that late yes stored it untracked.
-                    var asking = GameUi.YesNoText() != null;
-                    if (asking) GameUi.Close(UiTable.YesNo);
+                    // 1.0.2: a store question still up (or one that comes now) is waited out: said no to only once Yes
+                    // is a second behind it (never no straight after yes), and then the storeroom is watched for
+                    // 1.5 s more: the bag's way answers yes to any question, and a late yes stored it untracked.
+                    var noAt = DateTime.MinValue;
                     queue.InsertNext(new[]
                     {
                         Step.Wait("Its menu closes", () => !GameUi.IsOpen(UiTable.ContextMenu), WindowWait, StepStatus.Done),
-                        Step.Wait("The question closes", () => GameUi.YesNoText() == null, TimeSpan.FromSeconds(3), StepStatus.SkipJob),
+                        new Step
+                        {
+                            Label = "The question closes",
+                            Timeout = TimeSpan.FromSeconds(5),
+                            OnTimeout = StepStatus.SkipJob,
+                            Run = () =>
+                            {
+                                if (GameUi.YesNoText() == null) return StepOutcome.Done;
+                                var at = DateTime.UtcNow;
+                                if (at - lastYes > TimeSpan.FromSeconds(1) && at - noAt > TimeSpan.FromSeconds(1))
+                                {
+                                    noAt = at;
+                                    GameUi.Close(UiTable.YesNo);
+                                }
+                                return StepOutcome.Waiting;
+                            },
+                        },
                         new Step
                         {
                             Label = $"{name} wasn't stored after all?",
-                            Delay = asking ? Speed.Wait(300) : TimeSpan.Zero,
+                            Timeout = TimeSpan.FromSeconds(3),
+                            OnTimeout = StepStatus.SkipJob,
                             Run = () =>
                             {
                                 if (BagRoute.Stored(storedBefore, StoredCount(job.Target.ItemId), inBagsBefore, BagCount(job.Target.ItemId)))
                                 {
                                     log.Info("  It went to the storeroom after all: placing it from there.");
+                                    // (It was taken in, so the storeroom didn't refuse at this room.)
+                                    refusedAtRoom = null;
                                     NoteStored(job.Target.ItemId);
                                     queue.InsertNext(StoreroomSteps(job));
                                     return StepOutcome.Done;
                                 }
+                                if (queue.Elapsed < TimeSpan.FromSeconds(1.5)) return StepOutcome.Waiting;
                                 queue.InsertNext(HeldAttempt(job));
                                 return StepOutcome.Done;
                             },
@@ -2661,6 +2691,8 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         var windowFilled = new Settle(3, TimeSpan.FromMilliseconds(80));
         // When the dye confirmation was first seen up (this piece's own).
         DateTime? confirmSeen = null;
+        // When the dye window was first seen closed with no question (this piece's own).
+        DateTime? windowGoneAt = null;
         return new List<Step>
         {
             EnsureMode(EditorMode.Dye),
@@ -2965,17 +2997,23 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     }
                     // The piece's dye alone proves nothing while the window is open (it shows the
                     // preview): only the window closed on its own with the dye in place counts.
-                    if (GameUi.IsOpen(UiTable.DyeWindow) || Coming(UiTable.DyeConfirm)) return StepOutcome.Waiting;
+                    if (GameUi.IsOpen(UiTable.DyeWindow) || Coming(UiTable.DyeConfirm))
+                    {
+                        windowGoneAt = null;
+                        return StepOutcome.Waiting;
+                    }
                     if (StainOf(key) == job.Target.Stain) return StepOutcome.Done;
-                    // The window closed with no question and no dye: a failed dye, not a dye missing (which
-                    // counts the dye out after two).
-                    return queue.Elapsed > TimeSpan.FromSeconds(2.5)
+                    // The window closed with no question and no dye for 1.5 s: a failed dye, not a dye missing
+                    // (which counts the dye out after two). Counted from the close (the dye may come a moment after).
+                    windowGoneAt ??= now;
+                    return now - windowGoneAt.Value > TimeSpan.FromSeconds(1.5)
                         ? StepOutcome.Skip($"The dye window closed without asking, and it still reads {DyeWord(StainOf(key))}.", ProblemKind.DyeFailed)
                         : StepOutcome.Waiting;
                 },
                 // The confirmation is the game's own window, not the server's answer: it came in 30-200 ms in
-                // 0.8.6's run, so 3 s (not 6) before taking the Dye button for greyed out.
-                Timeout = TimeSpan.FromSeconds(3),
+                // 0.8.6's run, so 3 s (not 6) before taking the Dye button for greyed out; 4.5 s when the
+                // window closed late and its dye is still awaited (1.0.2).
+                Timeout = TimeSpan.FromSeconds(4.5),
                 OnTimeout = StepStatus.SkipJob,
                 TimeoutProblem = ProblemKind.DyeMissing,
                 TimeoutMessage = $"The dye confirmation didn't appear after Dye. The Dye button may be greyed out (no {dye} to use, or this piece can't take it).",
@@ -3217,9 +3255,24 @@ public sealed unsafe partial class PlacementRunner : IDisposable
     /// <summary>Every frame: notes the dye question as soon as it's up after Dye (before a step looks).</summary>
     private void WatchDyeQuestion()
     {
-        if (questionUpAt == null && DateTime.UtcNow - dyePressedAt < TimeSpan.FromSeconds(5) && GameUi.IsOpen(UiTable.DyeConfirm))
-            questionUpAt = DateTime.UtcNow;
+        var now = DateTime.UtcNow;
+        var up = GameUi.IsOpen(UiTable.DyeConfirm);
+        if (questionUpAt == null && now - dyePressedAt < TimeSpan.FromSeconds(5) && up) questionUpAt = now;
+        // (Every frame, so a window seen loading once and ready since isn't remembered as loading from then:
+        // the next slow one would read as long past its 3 s.)
+        Coming(UiTable.DyeWindow);
+        Coming(UiTable.DyeConfirm);
+        // Yes stands for the question while it's up; read closed for half a second, it's gone (a window the
+        // game keeps made while hidden would otherwise hold it for ever).
+        if (up) questionDownSince = null;
+        else
+        {
+            questionDownSince ??= now;
+            if (now - questionDownSince.Value > TimeSpan.FromMilliseconds(500)) yesOnOpenQuestion = false;
+        }
     }
+
+    private DateTime? questionDownSince;
 
     /// <summary>
     /// The steps before a job when a dye window (or its question) may be up: if one is, it's closed (an

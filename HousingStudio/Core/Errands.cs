@@ -422,6 +422,7 @@ public static class ErrandPlanner
         var taken = quote.Listings.Any(used.Contains);
         if (taken) quote = quote with { Listings = quote.Listings.Where(l => !used.Contains(l)).ToList() };
         IReadOnlyList<MarketListing> chosen;
+        HashSet<MarketListing>? oldOnes = null;
         var shortBy = 0;
         // Listings Universalis had lately first: older ones have often gone by the time the board is read.
         var fresh = quote.Listings.Where(l => l.SeenAt == null || o.Now - l.SeenAt.Value <= MarketListing.TrustedFor).ToList();
@@ -445,6 +446,7 @@ public static class ErrandPlanner
                 var older = quote.Listings.Where(l => Allowed(l) && !isFresh.Contains(l)).ToList();
                 var rest = (quote with { Listings = older }).CostFor(shortBy);
                 chosen = chosen.Concat(rest.Listings).ToList();
+                oldOnes = new HashSet<MarketListing>(rest.Listings, ReferenceEqualityComparer.Instance);
                 shortBy = rest.Short;
             }
         }
@@ -452,7 +454,8 @@ public static class ErrandPlanner
 
         var wanted = line.Count - shortBy;
         var over = 0;
-        foreach (var l in chosen.OrderBy(l => l.PricePerUnit).ThenBy(l => l.Quantity))
+        // The fresh ones first, the old ones for the rest (a cheap old stack would otherwise cover it all).
+        foreach (var l in chosen.OrderBy(l => oldOnes?.Contains(l) == true ? 1 : 0).ThenBy(l => l.PricePerUnit).ThenBy(l => l.Quantity))
         {
             if (wanted <= 0) break;
             var count = Math.Min(wanted, l.Quantity);

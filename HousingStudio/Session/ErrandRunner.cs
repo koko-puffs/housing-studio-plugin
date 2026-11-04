@@ -1067,8 +1067,9 @@ public sealed partial class ErrandRunner : IDisposable
         var sprintTried = DateTime.MinValue;
         var gotDown = false;
         var downAt = DateTime.MinValue;
-        var closest = float.MaxValue;
+        var movedFrom = Vector3.Zero;
         var closerAt = DateTime.MinValue;
+        DateTime? restartAt = null;
         return new List<Step>
         {
             WaitFor("vnavmesh has this zone's map", () => Nav.Ready, TimeSpan.FromSeconds(90),
@@ -1107,7 +1108,7 @@ public sealed partial class ErrandRunner : IDisposable
                 walkTarget = to;
                 started = DateTime.UtcNow;
                 closerAt = started;
-                closest = float.MaxValue;
+                movedFrom = ErrandGame.Me ?? Vector3.Zero;
                 tries = 1;
                 return StepOutcome.Done;
             }),
@@ -1132,19 +1133,32 @@ public sealed partial class ErrandRunner : IDisposable
                     }
                     // 1.0.2: still "walking" but no closer by half a yalm for 12 s (caught on a wall or a rail,
                     // or a path that never finishes): stopped and asked again, the same as stopping short.
+                    // 1.0.2: walking (a path found, not still being worked out) but not moved half a yalm in 12 s
+                    // (caught on a wall or a rail): stopped, and asked again a moment later, as stopping short is.
+                    // Moved, not closer: a detour round a building gets no closer for a while.
                     var now = DateTime.UtcNow;
-                    if (d < closest - 0.5f)
+                    if (restartAt is { } again)
                     {
-                        closest = d;
-                        closerAt = now;
+                        if (now < again) return StepOutcome.Waiting;
+                        restartAt = null;
                     }
-                    var stuck = Nav.Busy && now - closerAt > TimeSpan.FromSeconds(12);
-                    if (stuck)
+                    else
                     {
-                        log.Info($"  No closer to {what} in 12 s ({d:0} yalms away): walking there again.");
-                        Nav.Stop();
+                        var me = ErrandGame.Me;
+                        if (!Nav.Walking || me is not { } pos || Vector3.Distance(pos, movedFrom) > 0.5f)
+                        {
+                            movedFrom = me ?? movedFrom;
+                            closerAt = now;
+                        }
+                        if (Nav.Walking && now - closerAt > TimeSpan.FromSeconds(12))
+                        {
+                            log.Info($"  Not moving towards {what} for 12 s ({d:0} yalms away): walking there again.");
+                            Nav.Stop();
+                            restartAt = now + TimeSpan.FromMilliseconds(300);
+                            return StepOutcome.Waiting;
+                        }
+                        if (Nav.Busy || now - started < TimeSpan.FromSeconds(2)) return StepOutcome.Waiting;
                     }
-                    else if (Nav.Busy || now - started < TimeSpan.FromSeconds(2)) return StepOutcome.Waiting;
                     // vnavmesh stopped short: once more, then it's no way through.
                     if (tries >= 2)
                     {
@@ -1154,7 +1168,6 @@ public sealed partial class ErrandRunner : IDisposable
                     tries++;
                     started = now;
                     closerAt = now;
-                    closest = d;
                     return Nav.MoveTo(to.Value) ? StepOutcome.Waiting : StepOutcome.Halt($"vnavmesh wouldn't walk to {what}.");
                 },
                 Timeout = WalkWait,
@@ -1751,6 +1764,8 @@ public sealed partial class ErrandRunner : IDisposable
                     {
                         // 1.0.2: this item is left (the rest of the run may still fit), not the whole run stopped.
                         log.Warn($"  {n} × {Name(item.ItemId)} for {cost:N0} gil would spend more than the {agreedGil:N0} gil you agreed to ({Spent:N0} spent): left for you.");
+                        // (Not planned there again this run: the replan said "the last trip got nothing".)
+                        if (refusedVendors.Add((item.ItemId, v.NpcId, v.ShopId))) emptiedThisTrip++;
                         return Finished();
                     }
                     var room = ErrandGame.FreeSlots();
@@ -3111,6 +3126,9 @@ public sealed partial class ErrandRunner : IDisposable
                 readAfter = DateTime.UtcNow + TimeSpan.FromSeconds(1.5);
                 return stopped ? StepOutcome.Halt($"Placing stopped: {runner.StopReason}") : StepOutcome.Done;
             },
+            // (The queue's own limit only as a backstop: the two hours of placing are counted above. A step's
+            // default is 3 s.)
+            Timeout = TimeSpan.FromDays(1),
         },
     };
 

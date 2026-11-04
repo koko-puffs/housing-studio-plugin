@@ -364,6 +364,22 @@ public class ErrandPlannerTests
     }
 
     [Fact]
+    public void ACheapOldStackDoesntPushTheFreshListingOut()
+    {
+        // Two wanted; fresh: one at 1000; old: a stack of 2 at 100. The fresh one, and the old stack for the
+        // other one (not the old stack alone, priced at 100 each: gone, and the fresh one refused).
+        var old = Noon - TimeSpan.FromDays(3);
+        var quote = new MarketQuote(300, "Light", Noon, new List<MarketListing>
+        {
+            new(1000, 1, "Odin", false, 0, Noon - TimeSpan.FromHours(1)),
+            new(100, 2, "Lich", false, 0, old),
+        });
+        var plan = ErrandPlanner.Build(Shop(new[] { new Need(300, 2, NeedKind.Piece) }, quotes: new[] { quote }), Options() with { Now = Noon });
+        Assert.Contains(plan.Stops(StopKind.Market), s => s.World == "Odin");
+        Assert.Equal(2, plan.Count);
+    }
+
+    [Fact]
     public void AStackBoughtForOneLineCoversTheNextLineOfTheSameNeed()
     {
         // 1.0.2: one need of 10 in two lines (a vendor's 4, out of reach, so on the board; and the board's 6):
