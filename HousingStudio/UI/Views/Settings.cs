@@ -613,7 +613,8 @@ public sealed partial class MainWindow
         // and Record replaced a way already kept without saying so).
         var home = ErrandGame.HomeHere(session.Context);
         if (home != null) lastHomeInside = home;
-        else if (session.Context.Kind == PlaceKind.Ward) home = lastHomeInside;
+        // (Your own, and only in its own district: not a friend's house, nor another district's ward.)
+        else if (session.Context.Kind == PlaceKind.Ward && lastHomeInside is { Owned: true } last && last.WardTerritory == session.Context.TerritoryId) home = last;
         var way = errands.WayFor(home);
         var note = errands.WayNote
                    ?? (home is null ? "Learnt on the errands' first walk home"

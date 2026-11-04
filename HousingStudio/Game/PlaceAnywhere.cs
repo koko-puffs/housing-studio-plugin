@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices;
 
 namespace HousingStudio.Game;
@@ -22,6 +23,9 @@ public sealed class PlaceAnywhere : IDisposable
     };
 
     private readonly List<(string Name, nint Address, byte Original)> applied = new();
+
+    /// <summary>Switches a restore couldn't put back (tried again by the next Disable).</summary>
+    private readonly List<(string Name, nint Address, byte Original)> stuck = new();
     private List<(string Name, nint Address)>? found;
     private string? notFound;
 
@@ -69,10 +73,17 @@ public sealed class PlaceAnywhere : IDisposable
         if (Active) return true;
         Error = null;
         if (!Find()) return false;
-        // The switches as found, read before any is changed.
+        // The switches as found, read before any is changed (one still stuck from a restore that failed keeps
+        // the value it had before this plugin changed it).
         var originals = new List<byte>(found!.Count);
         foreach (var (name, address) in found!)
         {
+            var was = stuck.FindIndex(x => x.Address == address);
+            if (was >= 0)
+            {
+                originals.Add(stuck[was].Original);
+                continue;
+            }
             var current = Marshal.ReadByte(address);
             if (current is not (0 or 1))
             {
@@ -88,10 +99,11 @@ public sealed class PlaceAnywhere : IDisposable
             if (!Write(address, 1))
             {
                 Disable();
-                Error = $"Couldn't switch on \"{name}\"; nothing was left changed.";
+                Error = stuck.Count == 0 ? $"Couldn't switch on \"{name}\"; nothing was left changed." : $"Couldn't switch on \"{name}\", nor put every switch back (restarting the game clears them).";
                 return false;
             }
             applied.Add((name, address, original));
+            stuck.RemoveAll(x => x.Address == address);
         }
         Services.Log.Information("Place anywhere on.");
         return true;
@@ -99,19 +111,20 @@ public sealed class PlaceAnywhere : IDisposable
 
     public void Disable()
     {
-        if (applied.Count == 0) return;
-        // 1.0.2: one that couldn't be put back is kept, so the next Disable (the run's end, the plugin's)
-        // tries again, and Active still says it's on.
-        var stuck = new List<(string Name, nint Address, byte Original)>();
-        foreach (var (name, address, original) in applied)
+        if (applied.Count == 0 && stuck.Count == 0) return;
+        // 1.0.2: one that couldn't be put back is kept aside, so the next Disable (the run's end, the plugin's)
+        // tries again; Active is off, so the next Enable switches them all on again.
+        var still = new List<(string Name, nint Address, byte Original)>();
+        foreach (var (name, address, original) in applied.Concat(stuck))
             if (!Write(address, original))
             {
                 Services.Log.Error($"Couldn't put \"{name}\" back. Restarting the game clears it.");
-                stuck.Add((name, address, original));
+                still.Add((name, address, original));
             }
         applied.Clear();
-        applied.AddRange(stuck);
-        Services.Log.Information(stuck.Count == 0 ? "Place anywhere put back." : $"Place anywhere put back, but {stuck.Count} switch(es) not yet.");
+        stuck.Clear();
+        stuck.AddRange(still);
+        Services.Log.Information(still.Count == 0 ? "Place anywhere put back." : $"Place anywhere put back, but {still.Count} switch(es) not yet.");
     }
 
     private static bool Write(nint address, byte value)

@@ -91,10 +91,10 @@ public sealed partial class MainWindow
         }
     }
 
-    /// <summary>A thing from the site, written to the plugin's folder: loaded as choosing that file does (on the framework thread, after a tick).</summary>
     /// <summary>The design loaded when Open was pressed (one opened since isn't replaced by what comes).</summary>
     private string? openedOver;
 
+    /// <summary>A thing from the site, written to the plugin's folder: loaded as choosing that file does (on the framework thread, after a tick).</summary>
     private void OpenFromSite(string path)
     {
         if (runner.Active || Plugin.FixtureRun.Active || Plugin.Errands.Active)

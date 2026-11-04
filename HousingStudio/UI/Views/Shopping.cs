@@ -367,8 +367,9 @@ public sealed partial class MainWindow
         var gw = offered ? MathF.Min(w, Kit.ButtonWidth(ShopGetAll, BtnSize.Lg, Icon.Package, Btn.Primary)) : 0;
         // Side by side when both fit; else Copy list goes under it.
         var beside = !offered || gw + S(10) + cw <= w;
-        if (offered && Kit.Button("##shop-errands", at, ShopGetAll, Btn.Primary, BtnSize.Lg, Icon.Package, gw, false,
-                "Fetches what's missing from your retainers, vendors and the market board, and places it. You see the gil first."))
+        var fixturing = Plugin.FixtureRun.Active;
+        if (offered && Kit.Button("##shop-errands", at, ShopGetAll, Btn.Primary, BtnSize.Lg, Icon.Package, gw, fixturing,
+                fixturing ? "Wait until the fixtures are set." : "Fetches what's missing from your retainers, vendors and the market board, and places it. You see the gil first."))
         {
             errandsRehearse = false;
             errandsOpen = true;

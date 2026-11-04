@@ -520,11 +520,12 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     {
                         if (InventoryReader.StoreroomLoaded(side)) return StepOutcome.Done;
                         // 0.9.9: an empty storeroom never comes in (the game sends no pages for it): the
-                        // furnishing window open 5 s with nothing from the storeroom means it's empty.
-                        if (queue.Elapsed < TimeSpan.FromSeconds(5) || !GameUi.IsOpen(UiTable.FurnishingList)
+                        // furnishing window open 8 s (1.0.2: 5 s could beat a slow server) with nothing from the
+                        // storeroom means it's empty.
+                        if (queue.Elapsed < TimeSpan.FromSeconds(8) || !GameUi.IsOpen(UiTable.FurnishingList)
                             || InventoryReader.StoreroomPagesLoaded(side) > 0) return StepOutcome.Waiting;
                         InventoryReader.MarkStoreroomEmpty(side);
-                        log.Info("  Nothing came from the storeroom with the furnishing window open for 5 s: it's empty.");
+                        log.Info("  Nothing came from the storeroom with the furnishing window open for 8 s: it's empty.");
                         return StepOutcome.Done;
                     },
                     Timeout = TimeSpan.FromSeconds(15),

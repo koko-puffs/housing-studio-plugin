@@ -199,7 +199,8 @@ public static class FixtureJobs
         var old = new List<KnownSlot>();
         foreach (var (key, slot) in kept)
         {
-            var mine = sized != null && key.StartsWith(sized, StringComparison.Ordinal);
+            // (A home whose size isn't known keeps its slots without one: those are its own.)
+            var mine = sized != null ? key.StartsWith(sized, StringComparison.Ordinal) : key.StartsWith(bare, StringComparison.Ordinal);
             if (!mine && !key.StartsWith(bare, StringComparison.Ordinal)) continue;
             var parts = key.Split('|');
             if (parts.Length != 3) continue;

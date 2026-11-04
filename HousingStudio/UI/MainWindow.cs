@@ -143,7 +143,8 @@ public sealed partial class MainWindow : Window
         {
             // (Setting the fixtures keeps the other screens: its Continue and Stop are in Ready's Finish stage and
             // on Done, and 1.0.2's Settings, Pieces and the shopping list did nothing when pressed during it.)
-            if (runner.Active || Plugin.Errands.Active) sub = Sub.None;
+            // (Back to Ready whenever it waits on you: its Continue and Stop are there.)
+            if (runner.Active || Plugin.Errands.Active || Plugin.FixtureRun.AwaitingContinue || Plugin.FixtureRun.WaitingForYou) sub = Sub.None;
             // With a question up, nothing under it reacts (its own window takes the clicks too).
             Kit.Blocked = confirm != null;
             try
