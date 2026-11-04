@@ -1,33 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <!-- Housing Studio's plugin icon: the site's mark (kokos-tools StudioMark.vue and
-       public/favicon-housing.svg), two polaroids of the Sketcher's blueprint, the front one with a
-       house in its pencil yellow and its caption, on the studio's warm ink with a lamp's brass glow
-       (the site's studio.css ink, walnut and brass). Keep the polaroids in step with the site's.
-       Rendered to HousingStudio/images/icon.png by tools/make-icon.mjs. -->
-  <defs>
-    <linearGradient id="room" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#1c1814"/>
-      <stop offset="1" stop-color="#0e0c0b"/>
-    </linearGradient>
-    <radialGradient id="lamp" cx="0.5" cy="0.18" r="0.7">
-      <stop offset="0" stop-color="#d6b06c" stop-opacity="0.22"/>
-      <stop offset="1" stop-color="#d6b06c" stop-opacity="0"/>
-    </radialGradient>
-  </defs>
-  <rect x="8" y="8" width="496" height="496" rx="112" fill="url(#room)"/>
-  <rect x="8" y="8" width="496" height="496" rx="112" fill="url(#lamp)"/>
-  <rect x="9.5" y="9.5" width="493" height="493" rx="110.5" fill="none" stroke="#efe6d6" stroke-opacity="0.16" stroke-width="3"/>
-  <!-- the mark -->
-  <svg x="40" y="40" width="432" height="432" viewBox="3 3 42 42">
-    <g transform="rotate(11 26 24)">
-      <rect x="13" y="6" width="26" height="33" rx="1.2" fill="#cfc5b3"/>
-      <rect x="15.8" y="8.8" width="20.4" height="19.5" fill="#0c2742"/>
-    </g>
-    <g transform="rotate(-7 22 25)">
-      <rect x="8" y="8" width="26" height="33" rx="1.2" fill="#f3eee4" stroke="#14100c" stroke-width="1.4" paint-order="stroke"/>
-      <rect x="10.8" y="10.8" width="20.4" height="19.5" fill="#0c2742"/>
-      <path d="M13.5 30.3v-6.5l7.5-6.5 7.5 6.5v6.5z" fill="#ffcf7a"/>
-      <path d="M13 36h10" stroke="#574634" stroke-width="1.8" stroke-linecap="round"/>
-    </g>
-  </svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 30 30">
+  <!-- a house with its door and a lit window on its rounded tile (kokos-tools: src/features/marks.ts, every tool's mark the same shape; npm run marks -- --icons draws icon.png) -->
+  <defs><radialGradient id="shine" cx="50%" cy="58%" r="62%"><stop offset="0" stop-color="#ffffff" stop-opacity=".26"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient></defs>
+  <rect width="30" height="30" rx="8" fill="#a87a2c"/>
+  <rect width="30" height="30" rx="8" fill="url(#shine)"/>
+  <g fill="none" stroke="#ffffff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7.2 14.3 15 7.8l7.8 6.5"/><path d="M9.4 12.6v8.6a1 1 0 0 0 1 1h9.2a1 1 0 0 0 1-1v-8.6"/><path d="M13.3 22.2v-3.6a.8.8 0 0 1 .8-.8h1.8a.8.8 0 0 1 .8.8v3.6"/></g><rect x="17.3" y="13.6" width="2.2" height="2.2" rx=".5" fill="#ffffff"/>
 </svg>
