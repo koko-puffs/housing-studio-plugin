@@ -202,7 +202,8 @@ fixtures entry ("Remodel Interior", recorded as [i:2]) is fired as `HousingMenu 
 place among the menu's text values (less the menu's title when it's read first, 0.9.1), only when the
 first two entries read as Indoor Furnishings and Furnishing Color (the recorded [i:0] and [i:1]); a
 fixture is put in its slot with `InventoryManager.MoveItemSlot` (bag → edit container), only when every
-fixture's slot is known: seen holding what's set, kept from a fixture put in by hand earlier, or given
+fixture's slot is known: seen holding what's set, kept from a fixture put in by hand earlier (in a
+house of the same size, 1.0.2), or given
 by the one likely order that fits those (`FixtureJobs.SlotFor`, 0.9.1). The game's own way, recorded,
 is a slot clicked (`HousingEditInterior ← [i:2, u:0, empty, empty, u:1]`) and a fixture chosen from
 its icons (`ContextIconMenu ← [i:0, i:0, u:51218, u:0, empty]`), not decoded yet. The apply is
@@ -352,6 +353,12 @@ The dye confirmation's Yes waits for the whole click gap after Dye and for the q
 open for four frames and 0.2 s (0.9.3): in 0.9.1 and 0.9.2 Yes went in the frame the question came up,
 and the game crashed twice answering it (the dye window's text filled from a bad pointer, in
 `AgentColorant`'s refresh).
+
+1.0.2: the question is watched every frame from the moment Dye is pressed (`WatchDyeQuestion`), so one
+ReMakePlace answers inside the 0.2 s gap counts as answered. A dye window or question the game has
+made but not finished loading (`GameUi.Loading`, for its first 3 s) is never closed or clicked into,
+and the clean-up doesn't close the dye window within 3 s of Dye until the question has been seen. The
+row is read again by name just before the pick.
 
 ## The menus' words in other languages
 

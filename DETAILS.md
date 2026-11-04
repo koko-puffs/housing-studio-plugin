@@ -8,9 +8,47 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 1.0.1.** Placing, dyeing, taking dyes off, clearing out and the errands have all run in the
+> **Status: 1.0.2.** Placing, dyeing, taking dyes off, clearing out and the errands have all run in the
 > game; every click the plugin sends was recorded by hand, but for a garden fixture's apply and a vendor's
 > item exchange (both still wait for Continue).
+> 1.0.2: **another full review for bugs, stability and speed.**
+> *Dyes.* The dye question is watched every frame from the moment Dye is pressed, so one ReMakePlace answers
+> within the 0.2 s gap counts as answered (it counted as "dye missing", and two of those skipped the dye for
+> the rest of the run); a dye window or question still loading is never closed or clicked into, and the dye
+> window isn't closed within 3 s of Dye until its question has been seen; a window that closes with no
+> question is a failed dye, not a missing one; the row is read again just before it's picked (a palette
+> switched in between picked another dye); taking a dye off waits for the first palette's list to change;
+> the pick checks the editor is still in Furnishing Color; a Furnishing Color menu without "Paint" skips
+> that piece, not the run.
+> *Placing.* A bag piece's menu closing skips that piece, not the run; a swap whose backup can't be saved
+> puts the last run back as it was; a scrolled list read while it's still blank is read again, and blank
+> rows no longer spoil lining it up (scrolling was given up for the run); a piece that looks placed but
+> can't be told apart keeps the learnt rows; a failed read of the list's names is tried again; a piece
+> the game picks up late isn't picked again (which let go of it); a store whose question was still up is
+> said no to before the bag's way (its late yes stored the piece untracked); a refused piece going to your
+> bags is put off like one going to the storeroom. Rows are saved only when one was learnt (the settings
+> were written every 10 s), and by-hand pieces are looked for four times a second, not every frame.
+> *Errands.* Yes is said only to the question checked (one that changed meanwhile is said no to); an item
+> that would go past the agreed gil is left, not the run stopped; Stop always stops, whatever a clean-up
+> does; placing's two hours count only while it runs; a walk no closer for 12 s is asked again; a bell
+> put in counts on the next trip; the vendor's district follows the home you chose; a retainer's whole
+> stack counts only what was needed.
+> *Shopping.* A stack bought on the board for one line covers the next line of the same need (it bought
+> two stacks' worth); old Universalis listings only make up what the fresh ones leave short; 50 listings
+> are asked for each item (20 often held none on your own world); a listing bought is taken out of the
+> prices kept, so the next trip doesn't plan it; a learnt shop price is kept for that NPC's shop only;
+> Allagan Tools counts only what's in a retainer's bags (not what it's selling); Terebinth is in the
+> copied list of dyes to buy.
+> *The rest.* Fixture slots are kept per house size (an empty slot kept from before 1.0.2 is put in by
+> you); off every plot there's no plot; the storeroom counts as empty after 8 s with the list open (5 s
+> could beat a slow server); place anywhere tries again to put back a switch it couldn't. Take a shot
+> says why the home couldn't be looked for; a design opened while one from the site came isn't replaced;
+> names cut to 80 characters never split one. On screen: "Home is" saves the option already lit; the
+> errands route follows a new market city; Way to your door knows the way from outside; Done says where a
+> clear out put things; the Move card leaves put-aways out; at home, Ready and Pieces say what's in the
+> way instead of "Go to your home"; Settings, Pieces and the shopping list open during a fixture run;
+> Ready's estimate counts the pieces to clear out; the last floor can't be unpicked; the market ceiling
+> takes a decimal point.
 > 1.0.1: **several characters on one account.** What Allagan Tools and AutoRetainer say about your
 > retainers is kept for the character it was asked for, and asked again the moment you switch (for up to
 > a minute after a switch, the last character's retainers were counted, and the errands could plan a
@@ -782,7 +820,9 @@ says: before each action it holds, shows it, and waits for **Continue** (in Read
    two the same), each is put in by the plugin, with the game's item move from your bag (what dragging
    it there does); if it doesn't go in 3 s, or the slots can't be worked out, you're asked to put it in,
    and the window is watched for it. The slot a fixture you put in went to is kept for that part
-   (`Configuration.FixtureSlots`), and once the rest follow from what's known, the plugin puts them in.
+   (`Configuration.FixtureSlots`, per house size since 1.0.2: "in@Medium|Ground Floor|Wall"; one kept
+   without a size, from before, is used only for a slot that holds the part now), and once the rest
+   follow from what's known, the plugin puts them in.
 3. The window's apply (`HousingEditInterior` [i:0, empty, empty, empty, empty], as recorded; the
    outside's taken to be the same), then yes to "Proceed with fixture changes?" (only to that
    question); the window closes. The run waits up to 5 minutes for the game's tables
