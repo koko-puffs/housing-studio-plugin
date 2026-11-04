@@ -24,6 +24,12 @@ public sealed class MarketPrices : IDisposable
 
     private static readonly TimeSpan RetryAfter = TimeSpan.FromMinutes(2);
 
+    /// <summary>
+    /// Listings asked for each item (1.0.2: 20, across the whole data centre, often held none on your own
+    /// world when other worlds were off, and ran out for a big count bought one at a time).
+    /// </summary>
+    private const int Listings = 50;
+
     private readonly HttpClient http;
     private readonly CancellationTokenSource stop = new();
     private readonly ConcurrentDictionary<(string Scope, uint Item), MarketQuote> quotes = new();
@@ -36,6 +42,29 @@ public sealed class MarketPrices : IDisposable
         http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
         var v = typeof(MarketPrices).Assembly.GetName().Version;
         http.DefaultRequestHeaders.UserAgent.ParseAdd($"HousingStudio/{v?.ToString(3) ?? "0"} (+https://github.com/koko-puffs/housing-studio-plugin)");
+    }
+
+    /// <summary>
+    /// A listing bought on the board, taken out of the prices kept (1.0.2: a replan within the 15 minutes
+    /// planned the listings the run had just bought, and came out low): the first of the item's listings on
+    /// that world at that price and quantity, in every scope's answer.
+    /// </summary>
+    public void Bought(uint item, string world, uint unitPrice, int quantity)
+    {
+        foreach (var key in quotes.Keys.Where(k => k.Item == item).ToList())
+        {
+            if (!quotes.TryGetValue(key, out var q)) continue;
+            var i = -1;
+            for (var n = 0; n < q.Listings.Count && i < 0; n++)
+            {
+                var l = q.Listings[n];
+                if (l.PricePerUnit == unitPrice && l.Quantity == quantity && string.Equals(l.World, world, StringComparison.OrdinalIgnoreCase)) i = n;
+            }
+            if (i < 0) continue;
+            var left = q.Listings.Where((_, n) => n != i).ToList();
+            quotes.TryUpdate(key, q with { Listings = left }, q);
+        }
+        Interlocked.Increment(ref version);
     }
 
     /// <summary>Goes up whenever answers come in (or a request fails), so a list built from them is built again.</summary>
@@ -84,7 +113,7 @@ public sealed class MarketPrices : IDisposable
     {
         try
         {
-            var url = Universalis.Url(scope, batch);
+            var url = Universalis.Url(scope, batch, Listings);
             using var response = await http.GetAsync(url, stop.Token).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
             {

@@ -55,12 +55,13 @@ public static class ShoppingList
     private static void AppendDyesToBuy(StringBuilder sb, Plan plan, Func<byte, string> dyeName, Func<byte, int>? dyesOwned)
     {
         if (dyesOwned == null) return;
-        var stains = plan.Entries.Select(e => e.Target.Stain).Where(s => s != 0).Distinct();
+        // (Terebinth too, 1.0.2, for the dyes to take off: the list said how many, and never to buy it.)
+        var stains = plan.Entries.Select(e => e.Target.Stain).Distinct();
         var owned = stains.ToDictionary(s => s, dyesOwned);
-        var buy = DyePlanner.ToBuy(plan, owned);
+        var buy = DyePlanner.ToBuy(plan, owned, undye: true);
         if (buy.Count == 0) return;
         sb.AppendLine().AppendLine("Dyes to buy (beyond what's in your bags)");
-        foreach (var (stain, count) in buy) sb.Append(count).Append(" × ").AppendLine(dyeName(stain));
+        foreach (var (stain, count) in buy) sb.Append(count).Append(" × ").AppendLine(stain == 0 ? "Terebinth" : dyeName(stain));
     }
 
     /// <summary>

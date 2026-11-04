@@ -240,7 +240,13 @@ public sealed class AllaganTools
             {
                 var items = characterItems.InvokeFunc(id);
                 if (items == null) continue;
-                var counts = RetainerStocks.Count(items.Where(a => a is { Length: >= 2 }).Select(a => ((uint)Math.Min(a[0], uint.MaxValue), (long)Math.Min(a[1], long.MaxValue))));
+                var rows = items.Where(a => a is { Length: >= 2 }).ToList();
+                // 1.0.2: only what's in the retainer's bags (pages 1 to 7) when Allagan Tools says where each thing
+                // is (its fourth number): a piece the retainer is selling, or wearing, can't be taken from the bell.
+                // Its numbers are the game's own when any of them is a bag page; else all are counted, as before.
+                static bool InBags(ulong[] a) => a.Length >= 4 && a[3] >= (ulong)InventoryType.RetainerPage1 && a[3] <= (ulong)InventoryType.RetainerPage7;
+                if (rows.Any(InBags)) rows = rows.Where(InBags).ToList();
+                var counts = RetainerStocks.Count(rows.Select(a => ((uint)Math.Min(a[0], uint.MaxValue), (long)Math.Min(a[1], long.MaxValue))));
                 if (counts.Count > 0) stocks.Add(new RetainerStock(id, "a retainer", null, counts, HoldingOrigin.AllaganTools));
             }
         }

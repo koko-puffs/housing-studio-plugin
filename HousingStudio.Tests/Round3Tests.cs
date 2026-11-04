@@ -64,6 +64,15 @@ public class NamesBeyondTheReadableRowsTests
         Assert.Null(ListWindows.Align(known, new[] { "Same", "Same", "Same", "Same", "Same", "Same", "Same", "Same" }, 4));
         Assert.Null(ListWindows.Align(known, new[] { "Other" }, 1));
     }
+
+    [Fact]
+    public void BlankRowsDontSpoilTheAlignment()
+    {
+        // 1.0.2: a row read blank (mid-redraw) ruled the right offset out, and scrolling was given up on.
+        var known = Enumerable.Range(0, 12).ToDictionary(i => i, i => $"Piece {i}");
+        var window = Enumerable.Range(6, 10).Select(i => i == 8 ? string.Empty : $"Piece {i}").ToList();
+        Assert.Equal(6, ListWindows.Align(known, window, minOverlap: 4));
+    }
 }
 
 public class NewPieceTests

@@ -83,9 +83,19 @@ public sealed class Shopping : IDisposable
     /// </summary>
     private (DateTime Until, Dictionary<uint, long> Have, string Key) currenciesNow = (DateTime.MinValue, new(), string.Empty);
 
+    /// <summary>The currencies read are the ones allowed (no new set made each frame, 1.0.2).</summary>
+    private bool SameCurrencies()
+    {
+        var allowed = config.ErrandsCurrencies;
+        if (allowed.Count != currenciesNow.Have.Count) return false;
+        foreach (var c in allowed)
+            if (!currenciesNow.Have.ContainsKey(c)) return false;
+        return true;
+    }
+
     private (Dictionary<uint, long> Have, string Key) Currencies()
     {
-        if (DateTime.UtcNow < currenciesNow.Until && currenciesNow.Have.Keys.ToHashSet().SetEquals(config.ErrandsCurrencies)) return (currenciesNow.Have, currenciesNow.Key);
+        if (DateTime.UtcNow < currenciesNow.Until && SameCurrencies()) return (currenciesNow.Have, currenciesNow.Key);
         var have = new Dictionary<uint, long>();
         foreach (var c in config.ErrandsCurrencies.OrderBy(c => c))
         {
@@ -142,19 +152,36 @@ public sealed class Shopping : IDisposable
     public IReadOnlyList<VendorOffer> Offers(uint itemId)
     {
         var offers = Vendors.Offers(itemId);
-        return offers.Count > 0 && config.ErrandsVendorPrices.TryGetValue(itemId, out var price) && price > 0 && offers[0].Price != price
-            ? offers.Select(o => o with { Price = price }).ToList()
+        if (offers.Count == 0) return offers;
+        // Worked out once per item while nothing new is learnt (1.0.2: a new list every call, for every need).
+        if (offersSeen.TryGetValue(itemId, out var seen) && ReferenceEquals(seen.From, offers) && seen.Learnt == learnt) return seen.Offers;
+        var byShop = offers.Select(o => config.ErrandsShopPrices.TryGetValue(ShopKey(itemId, o), out var p) && p > 0 ? p : 0u).ToList();
+        // The old price for the whole item, only while none of its shops has one of its own.
+        var old = byShop.All(p => p == 0) && config.ErrandsVendorPrices.TryGetValue(itemId, out var legacy) && legacy > 0 ? legacy : 0u;
+        IReadOnlyList<VendorOffer> result = byShop.Any(p => p != 0) || old != 0
+            ? offers.Select((o, i) => byShop[i] != 0 ? o with { Price = byShop[i] } : old != 0 ? o with { Price = old } : o).ToList()
             : offers;
+        offersSeen[itemId] = (offers, learnt, result);
+        return result;
     }
 
+    private readonly Dictionary<uint, (IReadOnlyList<VendorOffer> From, int Learnt, IReadOnlyList<VendorOffer> Offers)> offersSeen = new();
+
+    private static string ShopKey(uint itemId, VendorOffer o) => $"{itemId}:{o.NpcId}:{o.ShopId}";
+
     /// <summary>
-    /// A shop asked <paramref name="unitPrice"/> for one of an item: kept, when it's not what the plan
-    /// had, for every estimate after. True when it was new.
+    /// A shop (<paramref name="at"/>) asked <paramref name="unitPrice"/> for one of an item: kept for that NPC's
+    /// shop, when it's not what the game's data has, for every estimate after. True when it was new.
     /// </summary>
-    public bool LearnPrice(uint itemId, uint unitPrice)
+    public bool LearnPrice(uint itemId, uint unitPrice, VendorOffer at)
     {
-        if (unitPrice == 0 || Offers(itemId) is not { Count: > 0 } offers || offers[0].Price == unitPrice) return false;
-        config.ErrandsVendorPrices[itemId] = unitPrice;
+        if (unitPrice == 0) return false;
+        var key = ShopKey(itemId, at);
+        var data = Vendors.Offers(itemId).FirstOrDefault(o => o.NpcId == at.NpcId && o.ShopId == at.ShopId);
+        var known = config.ErrandsShopPrices.TryGetValue(key, out var kept) ? kept : data?.Price ?? 0;
+        if (known == unitPrice) return false;
+        if (data != null && data.Price == unitPrice) config.ErrandsShopPrices.Remove(key);
+        else config.ErrandsShopPrices[key] = unitPrice;
         config.Save();
         learnt++;
         return true;

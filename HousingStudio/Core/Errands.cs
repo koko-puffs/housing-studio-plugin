@@ -406,6 +406,17 @@ public static class ErrandPlanner
     /// </summary>
     private static long MarketUnits(ShoppingLine line, ErrandOptions o, int stack, List<Unit> units, List<ErrandLeft> left, long soFar, HashSet<MarketListing> used)
     {
+        // 1.0.2: a whole stack planned on the board for an earlier line of the same need, beyond that line's
+        // count, covers this one first (one need split over two lines bought two stacks' worth).
+        for (var i = 0; i < units.Count && line.Count > 0; i++)
+        {
+            var u = units[i];
+            if (u.Kind != StopKind.Market || !ReferenceEquals(u.Need, line.Need) || u.Bought <= u.Count) continue;
+            var covered = Math.Min(u.Bought - u.Count, line.Count);
+            units[i] = u with { Count = u.Count + covered };
+            line = line with { Count = line.Count - covered, MarketCost = null };
+        }
+        if (line.Count <= 0) return soFar;
         // The listings no other line planned already.
         var quote = line.Market!;
         var taken = quote.Listings.Any(used.Contains);
@@ -423,11 +434,19 @@ public static class ErrandPlanner
         {
             bool Allowed(MarketListing l) => (o.WorldAllowed == null || o.WorldAllowed(l.World)) && (o.ListingAllowed == null || o.ListingAllowed(line.ItemId, l.World));
             var allowed = fresh.Where(Allowed).ToList();
-            // Enough of the fresh ones, else every allowed listing (old ones too) rather than none.
-            if (allowed.Sum(l => l.Quantity) < line.Count) allowed = quote.Listings.Where(Allowed).ToList();
             var cost = (quote with { Listings = allowed }).CostFor(line.Count);
             chosen = cost.Listings;
             shortBy = cost.Short;
+            // Not enough of the fresh ones: only what they leave short from the older ones (1.0.2: every
+            // allowed listing was taken then, and the cheapest old ones, often gone, set the price to pay).
+            if (shortBy > 0 && stale)
+            {
+                var isFresh = new HashSet<MarketListing>(fresh, ReferenceEqualityComparer.Instance);
+                var older = quote.Listings.Where(l => Allowed(l) && !isFresh.Contains(l)).ToList();
+                var rest = (quote with { Listings = older }).CostFor(shortBy);
+                chosen = chosen.Concat(rest.Listings).ToList();
+                shortBy = rest.Short;
+            }
         }
         if (shortBy > 0) left.Add(new ErrandLeft(line.Need, shortBy, LeftReason.NotListedHere));
 

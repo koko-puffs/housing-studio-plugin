@@ -64,6 +64,13 @@ public sealed partial class Configuration
     public Dictionary<uint, uint> ErrandsVendorPrices { get; set; } = new();
 
     /// <summary>
+    /// 1.0.2: the same, kept for the NPC and shop that asked it ("item:npc:shop" → gil each): one NPC's price
+    /// no longer stands for every NPC selling the item. <see cref="ErrandsVendorPrices"/> is only read for an
+    /// item none of whose shops has a price here.
+    /// </summary>
+    public Dictionary<string, uint> ErrandsShopPrices { get; set; } = new();
+
+    /// <summary>
     /// The currencies the errands may spend at currency vendors (their Item rows; 29 is MGP), 0.7.14.
     /// Only what you have of one is planned; gil vendors come first. MGP is allowed by default.
     /// </summary>

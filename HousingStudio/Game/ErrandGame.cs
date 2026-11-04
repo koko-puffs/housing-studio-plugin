@@ -496,7 +496,8 @@ public static unsafe class ErrandGame
     {
         var wanted = ItemName(itemId);
         if (wanted.Length == 0) return -1;
-        var names = new HashSet<string>(ShopItemNames(shopId));
+        // (Not an empty name, 1.0.2: an unnamed item counted every empty text the window has.)
+        var names = new HashSet<string>(ShopItemNames(shopId).Where(n => n.Length > 0));
         var row = 0;
         foreach (var (_, text) in GameUi.TextValues(ErrandTable.Shop).OrderBy(kv => kv.Key))
         {

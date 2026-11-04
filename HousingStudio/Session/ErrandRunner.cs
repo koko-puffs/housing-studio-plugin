@@ -1792,7 +1792,7 @@ public sealed partial class ErrandRunner : IDisposable
                             // Only a question about this item (a row miscounted would buy another one).
                             var aboutIt = MarketRule.NamesItem(question, Name(item.ItemId));
                             if (!aboutIt) log.Info($"  The shop's question doesn't name {Name(item.ItemId)}: \"{question}\".");
-                            if (aboutIt && askedNow is { } askedSum && askedSum > 0 && askedSum % n == 0) LearnPrice(item.ItemId, (uint)(askedSum / n), v.Price);
+                            if (aboutIt && askedNow is { } askedSum && askedSum > 0 && askedSum % n == 0) LearnPrice(item.ItemId, (uint)(askedSum / n), v.Price, v);
                             if (aboutIt && askedNow is { } asked && Spent + asked <= agreedGil && ErrandGame.Gil() >= asked)
                             {
                                 log.Info($"  The shop asks {asked:N0} gil for {n} × {Name(item.ItemId)}, not the {(long)v.Price * n:N0} planned: still within the {agreedGil:N0} gil you agreed to, so yes.");
@@ -2115,6 +2115,8 @@ public sealed partial class ErrandRunner : IDisposable
         // Listings bought (or tried): the board's list may still show one for a moment after.
         var tried = new HashSet<ulong>();
         ulong listing = 0;
+        var listingPrice = 0u;
+        var listingQty = 0;
         var gone = false;
         var retryPending = false;
         var misses = 0;
@@ -2219,6 +2221,8 @@ public sealed partial class ErrandRunner : IDisposable
                         quantity = l.Quantity;
                         tried.Add(l.ListingId);
                         listing = l.ListingId;
+                        listingPrice = l.UnitPrice;
+                        listingQty = l.Quantity;
                         before = ErrandGame.BagCount(item.ItemId);
                         gilBefore = gil;
                         log.Info($"  Buying {l.Quantity} × {name} at {l.UnitPrice:N0} gil each ({cost:N0} with tax), row {l.Row}"
@@ -2309,6 +2313,7 @@ public sealed partial class ErrandRunner : IDisposable
                     boardArrived = null;
                     var now = ErrandGame.BagCount(item.ItemId);
                     BoardListings.Gone(listing);
+                    if (now > before && ErrandGame.CurrentWorld() is { Length: > 0 } boughtOn) shop.Market.Bought(item.ItemId, boughtOn, listingPrice, listingQty);
                     var spent = Math.Max(0, gilBefore - ErrandGame.Gil());
                     MarketSpent += spent;
                     itemSpent += spent;

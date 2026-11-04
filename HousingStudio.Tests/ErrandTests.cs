@@ -344,6 +344,44 @@ public class ErrandPlannerTests
     }
 
     [Fact]
+    public void OldListingsOnlyMakeUpWhatTheFreshOnesLeaveShort()
+    {
+        // 1.0.2: three wanted, one fresh listing: it and the two cheapest old ones (every listing was taken
+        // before, and the three cheap old ones chosen, the fresh one left out).
+        var old = Noon - TimeSpan.FromDays(3);
+        var quote = new MarketQuote(300, "Light", Noon, new List<MarketListing>
+        {
+            new(2000, 1, "Odin", false, 0, Noon - TimeSpan.FromHours(1)),
+            new(500, 1, "Lich", false, 0, old),
+            new(600, 1, "Lich", false, 0, old),
+            new(700, 1, "Lich", false, 0, old),
+        });
+        var shop = Shop(new[] { new Need(300, 3, NeedKind.Piece) }, quotes: new[] { quote });
+        var plan = ErrandPlanner.Build(shop, Options() with { Now = Noon });
+        Assert.Contains(plan.Stops(StopKind.Market), s => s.World == "Odin");
+        Assert.Equal(2100 + 525 + 630, plan.MarketGil);
+        Assert.Equal(3, plan.Count);
+    }
+
+    [Fact]
+    public void AStackBoughtForOneLineCoversTheNextLineOfTheSameNeed()
+    {
+        // 1.0.2: one need of 10 in two lines (a vendor's 4, out of reach, so on the board; and the board's 6):
+        // the stack of 10 bought for the first covers the second (it planned 6 more before).
+        var need = new Need(300, 10, NeedKind.Piece);
+        var quote = Quote(300, (100, 10, "Lich"), (300, 3, "Lich"), (400, 3, "Lich"));
+        var shop = new ShoppingPlan(new List<ShoppingLine>
+        {
+            new(need, SourceKind.Vendor, 4) { Vendor = Offer(300, 50, located: false), Board = quote },
+            new(need, SourceKind.Market, 6) { Market = quote },
+        });
+        var plan = ErrandPlanner.Build(shop, Options());
+        Assert.Equal(1050, plan.MarketGil);
+        Assert.Equal(10, plan.Count);
+        Assert.Empty(plan.Left);
+    }
+
+    [Fact]
     public void AWorldWhoseBoardHadNoneIsLeftOut()
     {
         var shop = Shop(new[] { new Need(300, 1, NeedKind.Piece) }, quotes: new[] { Quote(300, (1000, 1, "Lich"), (2000, 1, "Odin")) });
