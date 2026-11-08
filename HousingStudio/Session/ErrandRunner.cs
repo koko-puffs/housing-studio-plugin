@@ -726,6 +726,9 @@ public sealed partial class ErrandRunner : IDisposable
                      StopKind.Exchange => $"{s.Vendor?.Where() ?? "a vendor"} (for {string.Join(" + ", s.Items.Where(i => i.Exchange != null).GroupBy(i => i.Exchange!.CurrencyName).Select(g => $"{g.Sum(i => i.CurrencyCost):N0} {g.Key}"))})",
                      _ => $"the market board on {s.World}",
                  })) + ".");
+        // 1.0.3: out of the furnishing editor (and the Housing menu) first: placing leaves it open, nothing
+        // teleports from it, and the trip's first travel waited there as if it had gone.
+        Add("Leaving the furnishing editor", LeaveEditorSteps, NoCleanup, ErrandLeg.Home);
         // Each stop's segments know which stop they are (the window's journey follows the trip's own order).
         for (var stopAt = 0; stopAt < next.Stops.Count; stopAt++)
         {
@@ -899,6 +902,7 @@ public sealed partial class ErrandRunner : IDisposable
                 Run = () =>
                 {
                     if (ErrandGame.Territory == territory) return StepOutcome.Done;
+                    if (EditorInTheWay()) return StepOutcome.Waiting;
                     if (aetheryte == 0) return StepOutcome.Halt($"No aetheryte for {where} is known.");
                     var now = DateTime.UtcNow;
                     if (firstTry == DateTime.MinValue) firstTry = now;
@@ -962,6 +966,7 @@ public sealed partial class ErrandRunner : IDisposable
                 Run = () =>
                 {
                     if (There()) return StepOutcome.Done;
+                    if (EditorInTheWay()) return StepOutcome.Waiting;
                     if (city == 0) return StepOutcome.Halt($"No way to {name} is known.");
                     var now = DateTime.UtcNow;
                     if (firstTry == DateTime.MinValue) firstTry = now;
@@ -2534,15 +2539,23 @@ public sealed partial class ErrandRunner : IDisposable
         var went = false;
         var skipped = false;
         var explained = false;
-        steps.Add(Step.Act(leave ? "Go out to your ward (Lifestream, your home's teleport)" : "Go home (Lifestream)", () =>
+        steps.Add(new Step
         {
-            skipped = leave ? ErrandGame.InHomeWard(home!) : Inside();
-            if (skipped) return StepOutcome.Done;
-            travelling = true;
-            went = false;
-            asked = DateTime.UtcNow;
-            return Travel.GoHome(homeKind) ? StepOutcome.Done : StepOutcome.Halt("Lifestream wouldn't take you home (is it installed and up to date?).");
-        }));
+            Label = leave ? "Go out to your ward (Lifestream, your home's teleport)" : "Go home (Lifestream)",
+            IsAction = true,
+            // (Long enough to close the furnishing editor first, 1.0.3.)
+            Timeout = TimeSpan.FromSeconds(15),
+            Run = () =>
+            {
+                skipped = leave ? ErrandGame.InHomeWard(home!) : Inside();
+                if (skipped) return StepOutcome.Done;
+                if (EditorInTheWay()) return StepOutcome.Waiting;
+                travelling = true;
+                went = false;
+                asked = DateTime.UtcNow;
+                return Travel.GoHome(homeKind) ? StepOutcome.Done : StepOutcome.Halt("Lifestream wouldn't take you home (is it installed and up to date?).");
+            },
+        });
         steps.Add(new Step
         {
             Label = leave ? "Arrive outside your home" : "Arrive home",
@@ -3131,6 +3144,103 @@ public sealed partial class ErrandRunner : IDisposable
             Timeout = TimeSpan.FromDays(1),
         },
     };
+
+    private DateTime editorCloseAt;
+
+    /// <summary>
+    /// Before a teleport: the furnishing editor or the Housing menu still open (nothing teleports from them;
+    /// 1.0.3: Lifestream took the ask and the errands waited to arrive) is closed, a click every 1.5 s at
+    /// most; true while one is in the way.
+    /// </summary>
+    private bool EditorInTheWay()
+    {
+        var mode = HousingEditor.Mode;
+        var bar = GameUi.IsOpen(UiTable.LayoutBar);
+        var menu = GameUi.IsOpen(UiTable.HousingMenu);
+        if (mode == EditorMode.None && !bar && !menu) return false;
+        if (mode == EditorMode.Place) return true; // a piece still being set down: it's let finish
+        var now = DateTime.UtcNow;
+        if (now - editorCloseAt < TimeSpan.FromSeconds(1.5)) return true;
+        editorCloseAt = now;
+        if (mode != EditorMode.None || bar)
+        {
+            log.Info("  The furnishing editor is still open: closing it before travelling.");
+            var close = mode == EditorMode.Dye ? UiTable.DyeListClose : UiTable.LayoutClose;
+            if (!GameUi.Fire(close)) GameUi.Close(close.Addon);
+        }
+        else if (!GameUi.Fire(UiTable.MenuClose)) GameUi.Close(UiTable.HousingMenu);
+        return true;
+    }
+
+    /// <summary>
+    /// Closes the furnishing editor and the Housing menu when either is open (as the placing leaves them):
+    /// a piece being set down is let finish, then the editor's own close (the dye list's in Furnishing Color),
+    /// then its list and bar outright if it stays, then the Housing menu. Nothing when neither is open.
+    /// </summary>
+    private List<Step> LeaveEditorSteps()
+    {
+        var since = DateTime.MinValue;
+        var forced = false;
+        return new List<Step>
+        {
+            new Step
+            {
+                Label = "A piece being set down is finished",
+                Timeout = TimeSpan.FromSeconds(30),
+                TimeoutMessage = "The furnishing editor is still placing a piece: set it down or press Esc, then start the errands again.",
+                Run = () => HousingEditor.Mode == EditorMode.Place ? StepOutcome.Waiting : StepOutcome.Done,
+            },
+            new Step
+            {
+                Label = "Close the furnishing editor",
+                Run = () =>
+                {
+                    var mode = HousingEditor.Mode;
+                    if (mode == EditorMode.None && !GameUi.IsOpen(UiTable.LayoutBar) && !GameUi.IsOpen(UiTable.FurnishingList)) return StepOutcome.Done;
+                    var close = mode == EditorMode.Dye ? UiTable.DyeListClose : UiTable.LayoutClose;
+                    log.Info($"  Closing the furnishing editor ({(mode == EditorMode.Dye ? "Furnishing Color" : mode.ToString())}): {close.Describe()}");
+                    if (!GameUi.Fire(close))
+                    {
+                        if (GameUi.IsOpen(UiTable.FurnishingList)) GameUi.Close(UiTable.FurnishingList);
+                        GameUi.Close(close.Addon);
+                    }
+                    since = DateTime.UtcNow;
+                    return StepOutcome.Done;
+                },
+            },
+            new Step
+            {
+                Label = "The furnishing editor closes",
+                Timeout = TimeSpan.FromSeconds(8),
+                TimeoutMessage = "The furnishing editor didn't close: close it (its × or Esc), then start the errands again.",
+                Run = () =>
+                {
+                    if (HousingEditor.Mode == EditorMode.None && !GameUi.IsOpen(UiTable.LayoutBar)) return StepOutcome.Done;
+                    // As closing it by hand does, once: its list, then its bar outright.
+                    if (!forced && since != DateTime.MinValue && DateTime.UtcNow - since > TimeSpan.FromSeconds(2))
+                    {
+                        forced = true;
+                        log.Info("  The editor didn't close: closing its list and its bar outright.");
+                        if (GameUi.IsOpen(UiTable.FurnishingList)) GameUi.Close(UiTable.FurnishingList);
+                        if (GameUi.IsOpen(UiTable.DyeList)) GameUi.Close(UiTable.DyeList);
+                        GameUi.Close(UiTable.LayoutBar);
+                    }
+                    return StepOutcome.Waiting;
+                },
+            },
+            new Step
+            {
+                Label = "Close the Housing menu",
+                Run = () =>
+                {
+                    if (!GameUi.IsOpen(UiTable.HousingMenu)) return StepOutcome.Done;
+                    if (!GameUi.Fire(UiTable.MenuClose)) GameUi.Close(UiTable.HousingMenu);
+                    return StepOutcome.Done;
+                },
+            },
+            Step.Wait("The Housing menu closes", () => !GameUi.IsOpen(UiTable.HousingMenu), TimeSpan.FromSeconds(3), StepStatus.Done),
+        };
+    }
 
     private List<Step> ReplanSteps()
     {
