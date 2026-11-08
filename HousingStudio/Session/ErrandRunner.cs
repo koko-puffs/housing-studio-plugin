@@ -40,6 +40,16 @@ public sealed partial class ErrandRunner : IDisposable
     /// <summary>How near an NPC the errands walk before talking to them.</summary>
     private const float NpcReach = 2f;
 
+    /// <summary>
+    /// How near is near enough to talk to someone or use something when vnavmesh can't get closer (an NPC
+    /// behind a counter): yalms across, centre to centre (1.0.3).
+    /// </summary>
+    private const float TalkFrom = 4.5f;
+
+    /// <summary>Within <paramref name="across"/> yalms across and 2.5 up or down.</summary>
+    private static bool CloseEnough(Vector3 a, Vector3 b, float across) =>
+        Vector2.Distance(new Vector2(a.X, a.Z), new Vector2(b.X, b.Z)) <= across && MathF.Abs(a.Y - b.Y) <= 2.5f;
+
     /// <summary>A gil shop sells at most this many in one purchase.</summary>
     private const int MaxPerPurchase = 99;
 
@@ -1063,7 +1073,12 @@ public sealed partial class ErrandRunner : IDisposable
     }
 
     /// <summary>Walks (vnavmesh) to within <paramref name="within"/> yalms of a spot, found when the walk starts.</summary>
-    private List<Step> WalkSteps(string what, Func<Vector3?> where, float within = Reach)
+    /// <param name="within">How close to walk.</param>
+    /// <param name="talkFrom">
+    /// 1.0.3: when vnavmesh can't get that close (an NPC behind a counter, a board behind a rail), stopping
+    /// within this many yalms across (and 2.5 up or down) is close enough to talk to it or use it from.
+    /// </param>
+    private List<Step> WalkSteps(string what, Func<Vector3?> where, float within = Reach, float talkFrom = TalkFrom)
     {
         var started = DateTime.MinValue;
         var tries = 0;
@@ -1109,7 +1124,8 @@ public sealed partial class ErrandRunner : IDisposable
                 to = where();
                 if (to == null) return StepOutcome.Halt($"Couldn't find {what} here. Near you: {ErrandGame.NamesNear(40)}.");
                 if (ErrandGame.DistanceTo(to.Value) <= within) return StepOutcome.Done;
-                if (!Nav.MoveTo(to.Value)) return StepOutcome.Halt($"vnavmesh wouldn't walk to {what}.");
+                // (Up to within reach, 1.0.3: the path ends there, in front of a counter rather than round it.)
+                if (!Nav.MoveCloseTo(to.Value, within * 0.8f)) return StepOutcome.Halt($"vnavmesh wouldn't walk to {what}.");
                 walkTarget = to;
                 started = DateTime.UtcNow;
                 closerAt = started;
@@ -1136,15 +1152,14 @@ public sealed partial class ErrandRunner : IDisposable
                         sprintTried = DateTime.UtcNow;
                         Movement.TrySprint(log.Info);
                     }
-                    // 1.0.2: still "walking" but no closer by half a yalm for 12 s (caught on a wall or a rail,
-                    // or a path that never finishes): stopped and asked again, the same as stopping short.
                     // 1.0.2: walking (a path found, not still being worked out) but not moved half a yalm in 12 s
                     // (caught on a wall or a rail): stopped, and asked again a moment later, as stopping short is.
                     // Moved, not closer: a detour round a building gets no closer for a while.
                     var now = DateTime.UtcNow;
                     if (restartAt is { } again)
                     {
-                        if (now < again) return StepOutcome.Waiting;
+                        // (And the zone's map ready again, should the stop have had vnavmesh reload it.)
+                        if (now < again || !Nav.Ready) return StepOutcome.Waiting;
                         restartAt = null;
                     }
                     else
@@ -1164,7 +1179,17 @@ public sealed partial class ErrandRunner : IDisposable
                         }
                         if (Nav.Busy || now - started < TimeSpan.FromSeconds(2)) return StepOutcome.Waiting;
                     }
-                    // vnavmesh stopped short: once more, then it's no way through.
+                    // Stopped short, but near enough to talk to it from (1.0.3: an NPC behind a counter, whose
+                    // own spot the floor doesn't reach: it was walked at twice, then the errands stopped).
+                    if (ErrandGame.Me is { } here && CloseEnough(here, to.Value, talkFrom))
+                    {
+                        log.Info($"  vnavmesh can't get closer to {what} than {d:0.0} yalms (behind a counter?): close enough, from here.");
+                        Nav.Stop();
+                        walkTarget = null;
+                        return StepOutcome.Done;
+                    }
+                    // vnavmesh stopped short: once more, to the nearest floor it can reach by it (the front of
+                    // a counter, 1.0.3), then it's no way through.
                     if (tries >= 2)
                     {
                         walkTarget = null;
@@ -1173,7 +1198,13 @@ public sealed partial class ErrandRunner : IDisposable
                     tries++;
                     started = now;
                     closerAt = now;
-                    return Nav.MoveTo(to.Value) ? StepOutcome.Waiting : StepOutcome.Halt($"vnavmesh wouldn't walk to {what}.");
+                    var front = Nav.NearestReachable(to.Value, talkFrom, 2.5f);
+                    if (front is { } f && CloseEnough(f, to.Value, talkFrom))
+                    {
+                        log.Info($"  Stopped {d:0} yalms from {what}: walking to the nearest floor that reaches it, {Vector3.Distance(f, to.Value):0.0} yalms from it.");
+                        return Nav.MoveCloseTo(f, 0.5f) ? StepOutcome.Waiting : StepOutcome.Halt($"vnavmesh wouldn't walk to {what}.");
+                    }
+                    return Nav.MoveCloseTo(to.Value, within * 0.8f) ? StepOutcome.Waiting : StepOutcome.Halt($"vnavmesh wouldn't walk to {what}.");
                 },
                 Timeout = WalkWait,
                 TimeoutMessage = $"Didn't get to {what} within {WalkWait.TotalMinutes:0} minutes.",
