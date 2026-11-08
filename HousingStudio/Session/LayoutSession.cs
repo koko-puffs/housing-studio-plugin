@@ -320,7 +320,8 @@ public sealed class LayoutSession
         if (Plan == null) return new List<(byte, string, int)>();
         // Stain 0 is Terebinth, for the dyes taken off (0.9.12).
         var owned = Plan.Entries.Select(e => e.Target.Stain).Where(s => s != 0 || data.CanUndye).Distinct().ToDictionary(s => s, s => HousingActions.DyesOwned(data, s));
-        return DyePlanner.ToBuy(Plan, owned, data.CanUndye).Select(b => (b.Stain, data.DyeToUse(b.Stain), b.Count)).ToList();
+        // (Colours sharing a pot counted together, 1.0.2.)
+        return DyePlanner.ToBuy(Plan, owned, data.CanUndye, data.DyeItem).Select(b => (b.Stain, data.DyeToUse(b.Stain), b.Count)).ToList();
     }
 
     /// <summary>"a medium house", "an apartment".</summary>

@@ -222,19 +222,53 @@ public static class DyePlanner
     /// Dyes to buy for the whole design: every piece that will need dyeing (missing ones, ones from
     /// your bags, wrongly dyed ones) less the dyes you have.
     /// </summary>
-    public static List<(byte Stain, int Count)> ToBuy(Plan plan, IReadOnlyDictionary<byte, int> owned, bool undye = false)
+    /// <param name="itemOf">
+    /// The item each dye takes (1.0.2: since patch 7.5 most colours share one pot, "Standard Spectrum Dye", and
+    /// the rest "Wide Spectrum #1/#2"). Colours sharing an item are counted together against what you have
+    /// of it (<paramref name="owned"/> is by colour, so each of them holds that item's whole count): 5 Snow
+    /// White and 5 Soot Black with 6 pots is 4 to buy, not none. Null: every colour its own.
+    /// </param>
+    public static List<(byte Stain, int Count)> ToBuy(Plan plan, IReadOnlyDictionary<byte, int> owned, bool undye = false, Func<byte, uint>? itemOf = null)
     {
-        var needed = plan.Entries
+        var wanted = plan.Entries
             .Where(e => e.Target.Stain != 0
                 ? e.State is PieceState.Missing or PieceState.FromInventory || e.CurrentStain != e.Target.Stain
                 // Terebinth (stain 0, 0.9.12): a piece you have, dyed, that the design has undyed.
                 : undye && e.State is not (PieceState.Missing or PieceState.FromInventory) && e.CurrentStain != 0)
             .GroupBy(e => e.Target.Stain)
-            .Select(g => (Stain: g.Key, Count: g.Count() - owned.GetValueOrDefault(g.Key)))
-            .Where(x => x.Count > 0)
+            .Select(g => (Stain: g.Key, Count: g.Count()))
             .OrderBy(x => x.Stain)
             .ToList();
-        return needed;
+        var buy = new List<(byte Stain, int Count)>();
+        // Each item's colours together (a colour with no item known is its own).
+        foreach (var group in wanted.GroupBy(w => itemOf?.Invoke(w.Stain) is { } i and not 0 ? (long)i : -1 - w.Stain))
+        {
+            var have = owned.GetValueOrDefault(group.First().Stain);
+            foreach (var (stain, count) in group)
+            {
+                var used = Math.Min(have, count);
+                have -= used;
+                if (count - used > 0) buy.Add((stain, count - used));
+            }
+        }
+        return buy.OrderBy(b => b.Stain).ToList();
+    }
+
+    /// <summary>
+    /// The dyes short for a run's dye jobs, by the item they take (<see cref="ToBuy"/>'s <c>itemOf</c>):
+    /// each item's colours, how many pieces want it, and how many you have.
+    /// </summary>
+    public static List<(uint Item, byte[] Stains, int Need, int Have)> ShortByItem(IEnumerable<byte> jobStains, Func<byte, uint> itemOf, Func<byte, int> owned)
+    {
+        var list = new List<(uint, byte[], int, int)>();
+        foreach (var group in jobStains.GroupBy(s => itemOf(s) is var i and not 0 ? (long)i : -1 - s))
+        {
+            var stains = group.Distinct().OrderBy(s => s).ToArray();
+            var need = group.Count();
+            var have = owned(stains[0]);
+            if (have < need) list.Add((group.Key >= 0 ? (uint)group.Key : 0, stains, need, have));
+        }
+        return list;
     }
 }
 

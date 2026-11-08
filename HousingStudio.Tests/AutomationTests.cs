@@ -305,6 +305,22 @@ public class DyePlannerTests
     }
 
     [Fact]
+    public void ColoursSharingAPotAreCountedTogether()
+    {
+        // 1.0.2: since patch 7.5, Snow White (1) and Soot Black (6) both take a Standard Spectrum Dye (52254).
+        // Three of each wanted and 4 pots held: 2 to buy (each colour was counted against all 4 pots: none).
+        var targets = Enumerable.Range(0, 6).Select(i => new Target(i, 10, Vector3.One * i, 0, (byte)(i < 3 ? 1 : 6), Floor.Ground, false)).ToArray();
+        var plan = Matcher.Build(targets, Array.Empty<PlacedPiece>(), Array.Empty<StockSlot>());
+        var owned = new Dictionary<byte, int> { [1] = 4, [6] = 4 };
+        var buy = DyePlanner.ToBuy(plan, owned, itemOf: _ => 52254);
+        Assert.Equal(2, buy.Sum(b => b.Count));
+        // Without the pot known, each colour on its own (the old count).
+        Assert.Empty(DyePlanner.ToBuy(plan, owned));
+        var lacking = DyePlanner.ShortByItem(new byte[] { 1, 1, 1, 6, 6, 6 }, _ => 52254, _ => 4);
+        Assert.Equal((52254u, 6, 4), (lacking.Single().Item, lacking.Single().Need, lacking.Single().Have));
+    }
+
+    [Fact]
     public void TakesADyeOffWithTerebinth()
     {
         // 0.9.12: a dyed piece the design has undyed is a job for stain 0 (No Color, Terebinth).

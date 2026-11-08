@@ -148,6 +148,12 @@ public sealed class GameData
     public string DyeName(byte stainId) =>
         stainId == 0 ? "Undyed" : dyesById.TryGetValue(stainId, out var d) && d.Name.Length > 0 ? d.Name : $"Dye {stainId}";
 
+    /// <summary>
+    /// The item a dye takes, for counting (1.0.2: since patch 7.5 most colours share one, "Standard Spectrum
+    /// Dye"; Terebinth for none), or 0.
+    /// </summary>
+    public uint DyeItem(byte stainId) => DyeItems(stainId) is { Count: > 0 } items ? items[0] : 0;
+
     /// <summary>The items that apply a dye (from the Stain sheet).</summary>
     public IReadOnlyList<uint> DyeItems(byte stainId) =>
         stainId == 0 ? (Terebinth != 0 ? new[] { Terebinth } : System.Array.Empty<uint>())

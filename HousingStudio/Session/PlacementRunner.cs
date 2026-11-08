@@ -3792,28 +3792,27 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         foreach (var j in plan.Jobs.Where(j => j.Key == DyeCounts.NotPlacedYet)) j.Key = null;
         jobs.AddRange(plan.Jobs);
         log.Info($"Dyes: {plan.Jobs.Count} piece{(plan.Jobs.Count == 1 ? "" : "s")} to dye{(DryRun || Rehearsal ? " (once placed)" : string.Empty)}{(dyesExpected != plan.Jobs.Count ? $"; {dyesExpected} were expected at the start{(DryRun || Rehearsal ? string.Empty : " (pieces that didn't get placed can't be dyed)")}" : string.Empty)}.");
-        var shortfall = new List<(byte, string, int, int)>();
-        foreach (var stain in plan.Jobs.Select(j => j.Target.Stain).Distinct())
-        {
-            var need = plan.Jobs.Count(j => j.Target.Stain == stain);
-            var have = HousingActions.DyesOwned(data, stain);
-            if (have >= need) continue;
-            shortfall.Add((stain, data.DyeToUse(stain), need, have));
-        }
+        // By the item each colour takes (1.0.2: since 7.5 most share "Standard Spectrum Dye", and each colour
+        // was counted against all of its pots: 6 pots read as enough for 6 white and 6 black).
+        var lacking = DyePlanner.ShortByItem(plan.Jobs.Select(j => j.Target.Stain), data.DyeItem, s => HousingActions.DyesOwned(data, s));
+        string ItemWords(uint item, byte[] stains) => stains.Length == 1 ? data.DyeToUse(stains[0]) : item != 0 ? data.ItemName(item) : data.DyeToUse(stains[0]);
+        var shortfall = lacking.Select(x => (x.Stains[0], ItemWords(x.Item, x.Stains), x.Need, x.Have)).ToList();
         DyeShortfall = shortfall;
         // 0.9.3: the dyes you have none of (or too few of) aren't tried. Each was opened in the dye window,
         // looked for and skipped (and the game crashed after them, twice): the pieces beyond what your bags
         // hold are marked not dyed now, and the run passes over them.
         if (!DryRun)
         {
-            var left = shortfall.ToDictionary(x => x.Item1, x => x.Item4);
+            long PotOf(byte stain) => data.DyeItem(stain) is var i and not 0 ? i : -1 - stain;
+            var left = lacking.ToDictionary(x => x.Item != 0 ? (long)x.Item : -1 - x.Stains[0], x => x.Have);
             var now = DateTime.UtcNow;
             foreach (var j in plan.Jobs)
             {
-                if (!left.TryGetValue(j.Target.Stain, out var have)) continue;
+                var pot = PotOf(j.Target.Stain);
+                if (!left.TryGetValue(pot, out var have)) continue;
                 if (have > 0)
                 {
-                    left[j.Target.Stain] = have - 1;
+                    left[pot] = have - 1;
                     continue;
                 }
                 var dye = data.DyeToUse(j.Target.Stain);
