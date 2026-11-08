@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 30 30">
-  <!-- a house with its door and a lit window on its rounded tile (kokos-tools: src/features/marks.ts, every tool's mark the same shape; npm run marks -- --icons draws icon.png) -->
+  <!-- a house, its door and a lit window on its tile (src/features/marks.ts: npm run marks writes this) -->
   <defs><radialGradient id="shine" cx="50%" cy="58%" r="62%"><stop offset="0" stop-color="#ffffff" stop-opacity=".26"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient></defs>
-  <rect width="30" height="30" rx="8" fill="#a87a2c"/>
-  <rect width="30" height="30" rx="8" fill="url(#shine)"/>
-  <g fill="none" stroke="#ffffff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7.2 14.3 15 7.8l7.8 6.5"/><path d="M9.4 12.6v8.6a1 1 0 0 0 1 1h9.2a1 1 0 0 0 1-1v-8.6"/><path d="M13.3 22.2v-3.6a.8.8 0 0 1 .8-.8h1.8a.8.8 0 0 1 .8.8v3.6"/></g><rect x="17.3" y="13.6" width="2.2" height="2.2" rx=".5" fill="#ffffff"/>
+  <path d="M13.16 2.74Q15 1.2 16.84 2.74L26.76 11.06Q28.6 12.6 28.6 15L28.6 26.2Q28.6 28.6 26.2 28.6L3.8 28.6Q1.4 28.6 1.4 26.2L1.4 15Q1.4 12.6 3.24 11.06Z" fill="#a87a2c"/>
+  <path d="M13.16 2.74Q15 1.2 16.84 2.74L26.76 11.06Q28.6 12.6 28.6 15L28.6 26.2Q28.6 28.6 26.2 28.6L3.8 28.6Q1.4 28.6 1.4 26.2L1.4 15Q1.4 12.6 3.24 11.06Z" fill="url(#shine)"/>
+  <g fill="none" stroke="#ffffff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8.4 28.6v-6.4a2.9 2.9 0 0 1 5.8 0v6.4"/></g><rect x="17.2" y="16.4" width="5.4" height="5.4" rx="1" fill="#ffe7ad"/><path d="M17.2 19.1h5.4M19.9 16.4v5.4" stroke="#000000" stroke-opacity=".3" stroke-width=".9"/>
 </svg>
