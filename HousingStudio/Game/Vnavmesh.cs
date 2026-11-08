@@ -49,9 +49,9 @@ public static class Plugins
 /// <item><c>vnavmesh.Nav.PathfindCancelAll</c>: cancels a path being worked out; it reloads the zone's mesh
 /// (<c>navmeshManager.Reload(true)</c>), so it's only called while one is.</item>
 /// <item><c>vnavmesh.SimpleMove.PathfindAndMoveCloseTo</c> (Vector3, bool fly, float range) → bool: as
-/// PathfindAndMoveTo, the path ending once within range (1.0.3).</item>
+/// PathfindAndMoveTo, the path ending once within range (1.0.4).</item>
 /// <item><c>vnavmesh.Query.Mesh.NearestPointReachable</c> (Vector3, float halfExtentXZ, float halfExtentY)
-/// → Vector3?: the nearest point of the floor you can reach (1.0.3).</item>
+/// → Vector3?: the nearest point of the floor you can reach (1.0.4).</item>
 /// </list>
 /// Checked against vnavmesh's <c>IPCProvider.cs</c> (awgil/ffxiv_navmesh, master, November 2026).
 /// </remarks>
@@ -100,7 +100,7 @@ public sealed class Vnavmesh
 
     /// <summary>
     /// Starts walking until within <paramref name="range"/> yalms of a spot (vnavmesh's
-    /// <c>SimpleMove.PathfindAndMoveCloseTo</c>, 1.0.3: the path ends as soon as it's that close, so a spot
+    /// <c>SimpleMove.PathfindAndMoveCloseTo</c>, 1.0.4: the path ends as soon as it's that close, so a spot
     /// behind a counter is walked up to from the front). An older vnavmesh without it: walked to the spot.
     /// False when it couldn't start.
     /// </summary>

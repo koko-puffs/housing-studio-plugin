@@ -42,7 +42,7 @@ public sealed partial class ErrandRunner : IDisposable
 
     /// <summary>
     /// How near is near enough to talk to someone or use something when vnavmesh can't get closer (an NPC
-    /// behind a counter): yalms across, centre to centre (1.0.3).
+    /// behind a counter): yalms across, centre to centre (1.0.4).
     /// </summary>
     private const float TalkFrom = 4.5f;
 
@@ -736,7 +736,7 @@ public sealed partial class ErrandRunner : IDisposable
                      StopKind.Exchange => $"{s.Vendor?.Where() ?? "a vendor"} (for {string.Join(" + ", s.Items.Where(i => i.Exchange != null).GroupBy(i => i.Exchange!.CurrencyName).Select(g => $"{g.Sum(i => i.CurrencyCost):N0} {g.Key}"))})",
                      _ => $"the market board on {s.World}",
                  })) + ".");
-        // 1.0.3: out of the furnishing editor (and the Housing menu) first: placing leaves it open, nothing
+        // 1.0.4: out of the furnishing editor (and the Housing menu) first: placing leaves it open, nothing
         // teleports from it, and the trip's first travel waited there as if it had gone.
         Add("Leaving the furnishing editor", LeaveEditorSteps, NoCleanup, ErrandLeg.Home);
         // Each stop's segments know which stop they are (the window's journey follows the trip's own order).
@@ -1075,7 +1075,7 @@ public sealed partial class ErrandRunner : IDisposable
     /// <summary>Walks (vnavmesh) to within <paramref name="within"/> yalms of a spot, found when the walk starts.</summary>
     /// <param name="within">How close to walk.</param>
     /// <param name="talkFrom">
-    /// 1.0.3: when vnavmesh can't get that close (an NPC behind a counter, a board behind a rail), stopping
+    /// 1.0.4: when vnavmesh can't get that close (an NPC behind a counter, a board behind a rail), stopping
     /// within this many yalms across (and 2.5 up or down) is close enough to talk to it or use it from.
     /// </param>
     private List<Step> WalkSteps(string what, Func<Vector3?> where, float within = Reach, float talkFrom = TalkFrom)
@@ -1124,7 +1124,7 @@ public sealed partial class ErrandRunner : IDisposable
                 to = where();
                 if (to == null) return StepOutcome.Halt($"Couldn't find {what} here. Near you: {ErrandGame.NamesNear(40)}.");
                 if (ErrandGame.DistanceTo(to.Value) <= within) return StepOutcome.Done;
-                // (Up to within reach, 1.0.3: the path ends there, in front of a counter rather than round it.)
+                // (Up to within reach, 1.0.4: the path ends there, in front of a counter rather than round it.)
                 if (!Nav.MoveCloseTo(to.Value, within * 0.8f)) return StepOutcome.Halt($"vnavmesh wouldn't walk to {what}.");
                 walkTarget = to;
                 started = DateTime.UtcNow;
@@ -1179,7 +1179,7 @@ public sealed partial class ErrandRunner : IDisposable
                         }
                         if (Nav.Busy || now - started < TimeSpan.FromSeconds(2)) return StepOutcome.Waiting;
                     }
-                    // Stopped short, but near enough to talk to it from (1.0.3: an NPC behind a counter, whose
+                    // Stopped short, but near enough to talk to it from (1.0.4: an NPC behind a counter, whose
                     // own spot the floor doesn't reach: it was walked at twice, then the errands stopped).
                     if (ErrandGame.Me is { } here && CloseEnough(here, to.Value, talkFrom))
                     {
@@ -1189,7 +1189,7 @@ public sealed partial class ErrandRunner : IDisposable
                         return StepOutcome.Done;
                     }
                     // vnavmesh stopped short: once more, to the nearest floor it can reach by it (the front of
-                    // a counter, 1.0.3), then it's no way through.
+                    // a counter, 1.0.4), then it's no way through.
                     if (tries >= 2)
                     {
                         walkTarget = null;
@@ -2574,7 +2574,7 @@ public sealed partial class ErrandRunner : IDisposable
         {
             Label = leave ? "Go out to your ward (Lifestream, your home's teleport)" : "Go home (Lifestream)",
             IsAction = true,
-            // (Long enough to close the furnishing editor first, 1.0.3.)
+            // (Long enough to close the furnishing editor first, 1.0.4.)
             Timeout = TimeSpan.FromSeconds(15),
             Run = () =>
             {
@@ -3180,7 +3180,7 @@ public sealed partial class ErrandRunner : IDisposable
 
     /// <summary>
     /// Before a teleport: the furnishing editor or the Housing menu still open (nothing teleports from them;
-    /// 1.0.3: Lifestream took the ask and the errands waited to arrive) is closed, a click every 1.5 s at
+    /// 1.0.4: Lifestream took the ask and the errands waited to arrive) is closed, a click every 1.5 s at
     /// most; true while one is in the way.
     /// </summary>
     private bool EditorInTheWay()

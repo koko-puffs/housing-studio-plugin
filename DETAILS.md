@@ -8,9 +8,23 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 1.0.2.** Placing, dyeing, taking dyes off, clearing out and the errands have all run in the
+> **Status: 1.0.4.** Placing, dyeing, taking dyes off, clearing out and the errands have all run in the
 > game; every click the plugin sends was recorded by hand, but for a garden fixture's apply and a vendor's
 > item exchange (both still wait for Continue).
+> 1.0.4: **the 7.5 dyes, the editor on the way out, and NPCs behind counters.**
+> *Dyes.* Since patch 7.5 most colours take the same pot (Standard Spectrum Dye; the rest Wide Spectrum #1
+> and #2: the game's Stain sheet says which, and the plugin reads it). Colours sharing a pot are now
+> counted together against the pots you have, in the shopping list, the errands and the run's own check:
+> each colour was counted against all of them, so 6 pots read as enough for 6 white and 6 black, and the
+> errands bought none.
+> *The errands.* Every trip first closes the furnishing editor and the Housing menu (placing leaves them
+> open; nothing teleports from them, and the errands waited at home as if they had gone), and any teleport
+> closes them too if they're still open. An NPC, bell or board vnavmesh can't get right up to (behind a
+> counter) is walked up to from the front and talked to from within 4.5 yalms, where the errands used to
+> try twice and stop; the walk ends within reach (vnavmesh's PathfindAndMoveCloseTo) and, stopped short,
+> goes to the nearest floor that reaches the NPC. vnavmesh's mesh is no longer reloaded at every stop (its
+> "cancel all pathfinds" reloads it, so it's only asked while a path is being worked out).
+> 1.0.3: the Start screen's title.
 > 1.0.2: **another full review for bugs, stability and speed.**
 > *Dyes.* The dye question is watched every frame from the moment Dye is pressed, so one ReMakePlace answers
 > within the 0.2 s gap counts as answered (it counted as "dye missing", and two of those skipped the dye for
