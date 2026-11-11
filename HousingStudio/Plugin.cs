@@ -111,7 +111,7 @@ public sealed class Plugin : IDalamudPlugin
 
             Services.Commands.AddHandler(Command, new CommandInfo(OnCommand)
             {
-                HelpMessage = "Open Housing Studio. /hstudio pause, resume, stop, or continue (step-by-step mode) control a run; /hstudio shot takes a shot of your verified home for its page on the site.",
+                HelpMessage = "Open Housing Studio. /hstudio pause, resume, stop, or continue (step-by-step mode) control a run; /hstudio shot takes a shot of your verified home for its page on the site; /hstudio lights writes the lights the game is drawing here to a file, for matching the site's 3D light.",
             });
 
             Services.PluginInterface.UiBuilder.Draw += Draw;
@@ -333,6 +333,15 @@ public sealed class Plugin : IDalamudPlugin
             case "settings":
             case "config":
                 OpenSettings();
+                break;
+            case "lights":
+                // (On the framework thread: the game's lights are read as they stand this frame.)
+                Safely(() =>
+                {
+                    var file = Game.LightCapture.Write(out var why);
+                    if (file == null) Services.Chat.PrintError($"No lights written: {why}", "Housing Studio");
+                    else Services.Chat.Print($"The lights here are written to {file}", "Housing Studio");
+                });
                 break;
             case "shot":
                 // On the framework thread already (commands are run there): the camera is read now.

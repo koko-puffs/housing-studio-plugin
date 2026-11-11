@@ -1350,6 +1350,25 @@ pause between pieces: Careful (1.5 s) becomes Steady, the rest Quick.
 If you'd rather put pieces down yourself, switch off **Place pieces for me** in Settings → Placing: the run
 then waits for you to put each piece down anywhere and sets it at its spot.
 
+## The lights, for the site
+
+`/hstudio lights` writes the lights the game is drawing where you stand to a file
+(`lights/lights-<date>-<time>.json` in the plugin's folder; chat says where), to hand over when the
+site's 3D light is being matched to the game's. Nothing in the game is changed. The site reads each
+light as its file states it (colour, intensity, attenuation, range rate); how the engine turns those
+into what it draws with is in the game's code, so it's read from the lights themselves
+(`Game/LightCapture.cs`):
+
+- every light of the layouts loaded (the house's own, its fixtures', its furniture's, down through
+  their groups, each with the groups it's in: the piece's or fixture's .sgb), as its render light
+  has it: shape, flags, colour and intensity, falloff type and factor, range and the box it's clipped
+  to, its cone, shadow planes, fade, the texture it throws, its place, and its bytes in hex;
+- each place's ambient (its EnvLocation: the ambient set it's lit by and the cube it reflects);
+- the room's brightness (its five steps, and where its transition stands), the time of day, the
+  weather, and the environment's state as bytes.
+
+Take it with the same view and lighting level as a shot, and send the file with the shot.
+
 ## Sending diagnostics
 
 If a run stops at a step, or does something unexpected:
