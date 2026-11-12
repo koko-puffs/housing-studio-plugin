@@ -8,9 +8,13 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 1.0.4.** Placing, dyeing, taking dyes off, clearing out and the errands have all run in the
+> **Status: 1.0.5.** Placing, dyeing, taking dyes off, clearing out and the errands have all run in the
 > game; every click the plugin sends was recorded by hand, but for a garden fixture's apply and a vendor's
 > item exchange (both still wait for Continue).
+> 1.0.5: **`/hstudio lights`.** Writes the lights the game is drawing where you stand to a file, as its
+> engine holds them (range, falloff, colour, the texture each throws, the furniture or fixture it's in),
+> with the room's brightness, the time of day and the environment, for matching the site's 3D light to
+> the game's ([The lights, for the site](#the-lights-for-the-site)). Read only: nothing in the game changes.
 > 1.0.4: **the 7.5 dyes, the editor on the way out, and NPCs behind counters.**
 > *Dyes.* Since patch 7.5 most colours take the same pot (Standard Spectrum Dye; the rest Wide Spectrum #1
 > and #2: the game's Stain sheet says which, and the plugin reads it). Colours sharing a pot are now
