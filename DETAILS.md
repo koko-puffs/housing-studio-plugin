@@ -8,9 +8,12 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 1.0.5.** Placing, dyeing, taking dyes off, clearing out and the errands have all run in the
+> **Status: 1.0.6.** Placing, dyeing, taking dyes off, clearing out and the errands have all run in the
 > game; every click the plugin sends was recorded by hand, but for a garden fixture's apply and a vendor's
 > item exchange (both still wait for Continue).
+> 1.0.6: **the camera in `/hstudio lights`.** The file says where the game's camera is (its place, where
+> it looks, its field of view, as a shot's is read; its matrices and the screen's size), so the site's 3D
+> view can be put at the same spot and the two pictures compared region by region.
 > 1.0.5: **`/hstudio lights`.** Writes the lights the game is drawing where you stand to a file, as its
 > engine holds them (range, falloff, colour, the texture each throws, the furniture or fixture it's in),
 > with the room's brightness, the time of day and the environment, for matching the site's 3D light to
@@ -1369,9 +1372,12 @@ into what it draws with is in the game's code, so it's read from the lights them
   to, its cone, shadow planes, fade, the texture it throws, its place, and its bytes in hex;
 - each place's ambient (its EnvLocation: the ambient set it's lit by and the cube it reflects);
 - the room's brightness (its five steps, and where its transition stands), the time of day, the
-  weather, and the environment's state as bytes.
+  weather, and the environment's state as bytes;
+- the camera (1.0.6): its place, where it looks and its vertical field of view, read as a shot's is
+  (`HomeReader.Camera`, in the interior's own frame), with its view and projection matrices and the
+  screen's size.
 
-Take it with the same view and lighting level as a shot, and send the file with the shot.
+Take it with a screenshot from the same view (nothing moved between them), and send both.
 
 ## Sending diagnostics
 

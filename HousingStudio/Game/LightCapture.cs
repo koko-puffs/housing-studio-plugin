@@ -95,6 +95,7 @@ public static unsafe class LightCapture
             ["taken"] = DateTime.UtcNow.ToString("o"),
             ["territory"] = Services.ClientState.TerritoryType,
             ["player"] = player != null ? Vec(player.Position) : null,
+            ["camera"] = CameraNow(),
             ["room"] = Room(),
             ["environment"] = Environment(),
             ["places"] = places,
@@ -165,6 +166,41 @@ public static unsafe class LightCapture
         o["hex"] = Hex((byte*)loc + 0x90, 0x30);
         return o;
     }
+
+    /// <summary>
+    /// Where the game's camera is, as a shot's is read (HomeReader.Camera, inside: the interior's
+    /// own frame, the site's), with the screen's size and the camera's matrices, so the site's 3D
+    /// view can be put at the same spot and the two pictures compared region by region.
+    /// </summary>
+    private static object? CameraNow()
+    {
+        var o = new Dictionary<string, object?>();
+        var pose = HomeReader.Camera(Core.Side.Interior, null, out var why, out var detail);
+        if (pose is { } p)
+        {
+            o["pos"] = Vec(p.Pos);
+            o["target"] = Vec(p.Target);
+            o["fov"] = p.Fov;
+        }
+        else o["why"] = why;
+        o["detail"] = detail;
+        var dev = FFXIVClientStructs.FFXIV.Client.Graphics.Kernel.Device.Instance();
+        if (dev != null) o["screen"] = new[] { dev->Width, dev->Height };
+        var cm = FFXIVClientStructs.FFXIV.Client.Graphics.Scene.CameraManager.Instance();
+        if (cm != null && cm->CameraIndex >= 0 && cm->CameraIndex < cm->Cameras.Length)
+        {
+            FFXIVClientStructs.FFXIV.Client.Graphics.Scene.Camera* cam = cm->Cameras[cm->CameraIndex];
+            if (cam != null)
+            {
+                o["view"] = Mat(cam->ViewMatrix);
+                if (cam->RenderCamera != null) o["projection"] = Mat(cam->RenderCamera->ProjectionMatrix);
+            }
+        }
+        return o;
+    }
+
+    private static float[] Mat(Matrix4x4 m) =>
+        [m.M11, m.M12, m.M13, m.M14, m.M21, m.M22, m.M23, m.M24, m.M31, m.M32, m.M33, m.M34, m.M41, m.M42, m.M43, m.M44];
 
     private static object? Room()
     {
