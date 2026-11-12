@@ -8,9 +8,13 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 1.0.6.** Placing, dyeing, taking dyes off, clearing out and the errands have all run in the
+> **Status: 1.0.7.** Placing, dyeing, taking dyes off, clearing out and the errands have all run in the
 > game; every click the plugin sends was recorded by hand, but for a garden fixture's apply and a vendor's
 > item exchange (both still wait for Continue).
+> 1.0.7: **the models' glow in `/hstudio lights`.** The file also lists every model of the house's
+> pieces and fixtures as the engine draws it: its file, and the glow power and colour the engine gives
+> it (its BgObject's ColorIntensity and Color), which aren't in the game's files: the site's 3D view
+> needs them to draw the furniture's glows as the game does.
 > 1.0.6: **the camera in `/hstudio lights`.** The file says where the game's camera is (its place, where
 > it looks, its field of view, as a shot's is read; its matrices and the screen's size), so the site's 3D
 > view can be put at the same spot and the two pictures compared region by region.
@@ -1375,7 +1379,13 @@ into what it draws with is in the game's code, so it's read from the lights them
   weather, and the environment's state as bytes;
 - the camera (1.0.6): its place, where it looks and its vertical field of view, read as a shot's is
   (`HomeReader.Camera`, in the interior's own frame), with its view and projection matrices and the
-  screen's size.
+  screen's size;
+- every model of the house's pieces and fixtures (1.0.7, `models`: its BgPart instances inside a
+  group), as the engine draws it: its model file, the groups it's in, its BgObject's `ColorIntensity`
+  (a byte at 0xCE) and `Color` (at 0xD0), and the bytes from 0xC0 to 0xE0 in hex. The furniture's
+  shader (bg.shpk) multiplies a model's glow by its instance's glow power and can take its colour
+  from the instance instead: neither is in the files, so the site reads them from here. Read by
+  offset, as FFXIVClientStructs has them.
 
 Take it with a screenshot from the same view (nothing moved between them), and send both.
 

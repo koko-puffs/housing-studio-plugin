@@ -28,12 +28,17 @@ namespace HousingStudio.Game;
 /// factor, range, the box it's clipped to, its cone, its shadow planes, its fade, the texture it
 /// throws) and its bytes in hex (what isn't named yet); each place's ambient (its EnvLocation: the
 /// ambient set and the cube it reflects); the room's brightness (the five steps), the time of day and
-/// weather, and the environment's state as bytes.
+/// weather, and the environment's state as bytes. And every model of the house's pieces and fixtures
+/// as the engine draws it: its file, and the glow power and colour the engine gives it (its BgObject's
+/// ColorIntensity and Color), which aren't in the files either.
 /// </summary>
 public static unsafe class LightCapture
 {
     /// <summary>The most lights written (a house holds a few hundred at most).</summary>
     private const int MaxLights = 4000;
+
+    /// <summary>The most models written (every model of the house's pieces and fixtures).</summary>
+    private const int MaxModels = 12000;
 
     public static string Folder => Path.Combine(Services.PluginInterface.ConfigDirectory.FullName, "lights");
 
@@ -49,6 +54,7 @@ public static unsafe class LightCapture
         }
         var lights = new List<object>();
         var places = new List<object>();
+        var models = new List<object>();
         var seen = new HashSet<nint>();
         void Layout(LayoutManager* layout, string which)
         {
@@ -80,6 +86,14 @@ public static unsafe class LightCapture
                 case InstanceType.EnvLocation:
                     places.Add(PlaceOf((EnvLocationLayoutInstance*)inst, which, groups));
                     break;
+                case InstanceType.BgPart:
+                    // (A piece's or a fixture's models: those in a group.)
+                    if (groups.Count > 0 && models.Count < MaxModels)
+                    {
+                        var model = ModelOf(inst, which, groups);
+                        if (model != null) models.Add(model);
+                    }
+                    break;
             }
         }
         Layout(world->ActiveLayout, "active");
@@ -100,11 +114,38 @@ public static unsafe class LightCapture
             ["environment"] = Environment(),
             ["places"] = places,
             ["lights"] = lights,
+            ["models"] = models,
         };
         Directory.CreateDirectory(Folder);
         var file = Path.Combine(Folder, $"lights-{DateTime.Now:yyyyMMdd-HHmmss}.json");
         File.WriteAllText(file, JsonSerializer.Serialize(doc, new JsonSerializerOptions { WriteIndented = true }));
         return file;
+    }
+
+    /// <summary>
+    /// A model as the engine draws it (its BgObject): its file, and what it glows with that isn't in
+    /// its files: its ColorIntensity (a byte, 0xCE) and Color (0xD0), which bg.shpk takes as the
+    /// instance's glow power and colour (g_InstancingData's m_EmissivePower, m_EmissiveColor and
+    /// m_EmissiveBlend), with the bytes round them in hex (0xC0 to 0xE0) for what isn't named. Read
+    /// by offset (FFXIVClientStructs' BgObject), so an older ClientStructs reads it as well.
+    /// </summary>
+    private static object? ModelOf(ILayoutInstance* inst, string which, List<string> groups)
+    {
+        // (BgPartsLayoutInstance's GraphicsObject, at 0x30.)
+        var bg = *(byte**)((byte*)inst + 0x30);
+        if (bg == null) return null;
+        // (BgObject's ModelResourceHandle, at 0x90.)
+        var handle = *(FFXIVClientStructs.FFXIV.Client.System.Resource.Handle.ResourceHandle**)(bg + 0x90);
+        var file = handle != null ? handle->FileName.ToString() : "";
+        return new Dictionary<string, object?>
+        {
+            ["layout"] = which,
+            ["groups"] = groups,
+            ["model"] = file,
+            ["colorIntensity"] = bg[0xCE],
+            ["color"] = new[] { (int)bg[0xD0], bg[0xD1], bg[0xD2], bg[0xD3] },
+            ["bytes"] = Hex(bg + 0xC0, 0x20),
+        };
     }
 
     private static object LightOf(LightLayoutInstance* inst, string which, List<string> groups)
