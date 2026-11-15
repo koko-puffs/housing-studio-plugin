@@ -8,9 +8,12 @@ load its `.build` (or any MakePlace `.json` layout), see every piece matched to 
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
-> **Status: 1.0.7.** Placing, dyeing, taking dyes off, clearing out and the errands have all run in the
+> **Status: 1.0.8.** Placing, dyeing, taking dyes off, clearing out and the errands have all run in the
 > game; every click the plugin sends was recorded by hand, but for a garden fixture's apply and a vendor's
 > item exchange (both still wait for Continue).
+> 1.0.8: **the sun in `/hstudio lights`.** The file also holds the sun's shadow camera (which way the
+> sun shines at that hour: no file holds it, and the windows' daylight and their light shafts follow
+> it) and the environment simulator's bytes beside it.
 > 1.0.7: **the models' glow in `/hstudio lights`.** The file also lists every model of the house's
 > pieces and fixtures as the engine draws it: its file, and the glow power and colour the engine gives
 > it (its BgObject's ColorIntensity and Color), which aren't in the game's files: the site's 3D view
@@ -1385,7 +1388,12 @@ into what it draws with is in the game's code, so it's read from the lights them
   (a byte at 0xCE) and `Color` (at 0xD0), and the bytes from 0xC0 to 0xE0 in hex. The furniture's
   shader (bg.shpk) multiplies a model's glow by its instance's glow power and can take its colour
   from the instance instead: neither is in the files, so the site reads them from here. Read by
-  offset, as FFXIVClientStructs has them.
+  offset, as FFXIVClientStructs has them;
+- the sun (1.0.8, in `environment`): the environment's shadow camera (`EnvManager.ShadowCamera`, at
+  0x8E0: `shadowCamera` as floats, its view matrix from the fifth, `shadowCameraHex` as bytes), which
+  looks the way the sun shines, and the environment simulator's bytes before it (`simulatorHex`). No
+  file says which way the sun shines at an hour; the windows' daylight (plane lights that follow the
+  sun) and their light shafts (lightshaft.shpk bends each shaft towards it) follow it.
 
 Take it with a screenshot from the same view (nothing moved between them), and send both.
 

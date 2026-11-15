@@ -270,6 +270,15 @@ public static unsafe class LightCapture
             ["transition"] = env->TransitionProgress,
             // (EnvState: most of it isn't named yet; its bytes, to read against the .envb.)
             ["stateHex"] = Hex((byte*)&env->EnvState, sizeof(EnvState)),
+            // The sun's shadow camera (EnvManager + 0x8E0: a Render.Camera, its view matrix at
+            // +0x10, its place at +0x90): it looks the way the sun shines, so its view matrix gives
+            // the sun's direction at this hour, which no file holds (the windows' daylight and
+            // their light shafts follow it). As floats, then as bytes.
+            ["shadowCamera"] = Floats((byte*)&env->ShadowCamera, 0x210),
+            ["shadowCameraHex"] = Hex((byte*)&env->ShadowCamera, 0x210),
+            // The simulator between them (+0x4E0 to the camera), as bytes: where the engine may
+            // keep the sun's angles.
+            ["simulatorHex"] = Hex((byte*)&env->EnvSimulator, 0x8E0 - 0x4E0),
         };
     }
 
@@ -277,6 +286,14 @@ public static unsafe class LightCapture
     private static float[] Vec(Vector3 v) => [v.X, v.Y, v.Z];
     private static float[] Vec(Vector4 v) => [v.X, v.Y, v.Z, v.W];
     private static float[] Vec(FFXIVClientStructs.FFXIV.Common.Math.Vector3 v) => [v.X, v.Y, v.Z];
+
+    private static float[] Floats(byte* p, int n)
+    {
+        if (p == null) return [];
+        var o = new float[n / 4];
+        for (var i = 0; i < o.Length; i++) o[i] = ((float*)p)[i];
+        return o;
+    }
 
     private static string Hex(byte* p, int n) => p == null ? "" : Convert.ToHexString(new ReadOnlySpan<byte>(p, n));
 }
