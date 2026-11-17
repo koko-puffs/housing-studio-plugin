@@ -3,8 +3,8 @@
     "Author": "koko",
     "Name": "Decorium",
     "InternalName": "HousingStudio",
-    "AssemblyVersion": "1.0.8.0",
-    "TestingAssemblyVersion": "1.0.8.0",
+    "AssemblyVersion": "1.0.9.0",
+    "TestingAssemblyVersion": "1.0.9.0",
     "Punchline": "Furnish your house from a Decorium build or a MakePlace layout.",
     "Description": "Place a Decorium build or a MakePlace layout in your home: every piece is matched to what you have, moved or placed at its exact spot, and dyed to match. It can also fetch what's missing, save your home as a build, and send shots of it to its page on the site.\n\nOpen it with /decorium in a home you're allowed to decorate. (It was Housing Studio until 17 November 2026; /hstudio still works.)",
     "ApplicableVersion": "any",
@@ -27,9 +27,9 @@
     "AcceptsFeedback": true,
     "IsHide": false,
     "IsTestingExclusive": false,
-    "LastUpdate": 1794822830,
-    "DownloadLinkInstall": "https://github.com/koko-puffs/housing-studio-plugin/releases/download/v1.0.8/HousingStudio.zip",
-    "DownloadLinkUpdate": "https://github.com/koko-puffs/housing-studio-plugin/releases/download/v1.0.8/HousingStudio.zip",
-    "DownloadLinkTesting": "https://github.com/koko-puffs/housing-studio-plugin/releases/download/v1.0.8/HousingStudio.zip"
+    "LastUpdate": 1794933828,
+    "DownloadLinkInstall": "https://github.com/koko-puffs/housing-studio-plugin/releases/download/v1.0.9/HousingStudio.zip",
+    "DownloadLinkUpdate": "https://github.com/koko-puffs/housing-studio-plugin/releases/download/v1.0.9/HousingStudio.zip",
+    "DownloadLinkTesting": "https://github.com/koko-puffs/housing-studio-plugin/releases/download/v1.0.9/HousingStudio.zip"
   }
 ]
