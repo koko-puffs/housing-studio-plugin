@@ -1,4 +1,4 @@
-# Publishing Housing Studio's plugin
+# Publishing Decorium's plugin
 
 How to turn this folder into its own repository, release it, and let players install it from a
 custom plugin repository.
@@ -73,8 +73,8 @@ Players (and you, for testing):
    `https://www.kokos-tools.com/dalamud/repo.json` → press **+**
    → make sure it's ticked (enabled) → **Save and Close**. (If you added this plugin's own
    `raw.githubusercontent.com/…/repo.json` earlier, remove that one, or Dalamud lists the plugin twice.)
-3. `/xlplugins` → **All Plugins** → search **Housing Studio** → **Install**.
-4. `/hstudio` opens it.
+3. `/xlplugins` → **All Plugins** → search **Decorium** → **Install**.
+4. `/decorium` opens it.
 
 For testing a build before releasing: Dalamud Settings → Experimental → **Dev Plugin Locations**, add
 the full path to `HousingStudio/bin/x64/Debug/HousingStudio.dll`, then enable it under Dev Tools →

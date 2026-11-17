@@ -95,7 +95,7 @@ public class TransformTests
     {
         // MakePlace's own table holds Empyreum's plot 4 at (101, -28.5, 78) turned -1.570796 (its
         // sign); it places a garden piece at Transform(local, about +y by -its turn) + the plot, and
-        // turns it by (yaw - its turn). Housing Studio's table has the same plot turned +1.5708.
+        // turns it by (yaw - its turn). Decorium's table has the same plot turned +1.5708.
         const float makePlaceTurn = -1.570796f;
         var plot = new PlotSpot(4, "s", 101, -28.5f, 78, 1.5708f);
         var local = new Vector3(5, 0.25f, -3);

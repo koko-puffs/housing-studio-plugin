@@ -14,7 +14,11 @@ namespace HousingStudio;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string Command = "/hstudio";
+    private const string Command = "/decorium";
+
+    /// <summary>The command before the plugin was Decorium (until 17 November 2026): still works, the same handler, kept out of /xlhelp.</summary>
+    private const string OldCommand = "/hstudio";
+
     private static readonly TimeSpan RefreshEvery = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan RefreshWhileRunning = TimeSpan.FromSeconds(2);
 
@@ -111,7 +115,12 @@ public sealed class Plugin : IDalamudPlugin
 
             Services.Commands.AddHandler(Command, new CommandInfo(OnCommand)
             {
-                HelpMessage = "Open Housing Studio. /hstudio pause, resume, stop, or continue (step-by-step mode) control a run; /hstudio shot takes a shot of your verified home for its page on the site; /hstudio lights writes the lights the game is drawing here to a file, for matching the site's 3D light.",
+                HelpMessage = "Open Decorium. /decorium pause, resume, stop, or continue (step-by-step mode) control a run; /decorium shot takes a shot of your verified home for its page on the site; /decorium lights writes the lights the game is drawing here to a file, for matching the site's 3D light. /hstudio works too.",
+            });
+            Services.Commands.AddHandler(OldCommand, new CommandInfo(OnCommand)
+            {
+                HelpMessage = "The same as /decorium (Decorium was Housing Studio).",
+                ShowInHelp = false,
             });
 
             Services.PluginInterface.UiBuilder.Draw += Draw;
@@ -152,6 +161,7 @@ public sealed class Plugin : IDalamudPlugin
         Services.PluginInterface.UiBuilder.OpenMainUi -= OpenMain;
         Services.PluginInterface.UiBuilder.OpenConfigUi -= OpenSettings;
         Safely(() => Services.Commands.RemoveHandler(Command));
+        Safely(() => Services.Commands.RemoveHandler(OldCommand));
         Safely(anywhere.Dispose);
         Safely(() => Errands?.Dispose());
         Safely(BoardListings.Unhook);
@@ -180,13 +190,13 @@ public sealed class Plugin : IDalamudPlugin
             // frame was logged once and never again).
             if (DateTime.UtcNow - drawFailedAt > TimeSpan.FromSeconds(10))
             {
-                Services.Log.Error(ex, "Housing Studio couldn't draw its window");
+                Services.Log.Error(ex, "Decorium couldn't draw its window");
                 drawFailedAt = DateTime.UtcNow;
             }
-            Safely(() => runner.Pause("The window couldn't be drawn (see /xllog); /hstudio resume or stop."));
+            Safely(() => runner.Pause("The window couldn't be drawn (see /xllog); /decorium resume or stop."));
             // Setting fixtures waits for Continue in the window: without it, it stops.
             Safely(() => FixtureRun.Stop("The window couldn't be drawn (see /xllog)."));
-            Safely(() => Errands.Pause("The window couldn't be drawn (see /xllog); /hstudio resume or stop."));
+            Safely(() => Errands.Pause("The window couldn't be drawn (see /xllog); /decorium resume or stop."));
             Safely(runner.CancelPending);
             Safely(care.Cancel);
         }
@@ -201,7 +211,7 @@ public sealed class Plugin : IDalamudPlugin
         }
         catch (Exception ex)
         {
-            Services.Log.Error(ex, "Housing Studio clean-up step failed");
+            Services.Log.Error(ex, "Decorium clean-up step failed");
         }
     }
 
@@ -219,7 +229,7 @@ public sealed class Plugin : IDalamudPlugin
         catch (Exception ex)
         {
             // Where you are couldn't be read: the runs stop, to be safe, and the rest still ticks (as elsewhere).
-            Throttled(ex, "Housing Studio: reading where you are failed");
+            Throttled(ex, "Decorium: reading where you are failed");
             ctx = HousingContext.None;
             StopEverything("Something went wrong reading where you are; stopped to be safe.");
         }
@@ -233,7 +243,7 @@ public sealed class Plugin : IDalamudPlugin
         catch (Exception ex)
         {
             // The runs themselves (or reading where you are): stopped, to be safe.
-            Throttled(ex, "Housing Studio update failed");
+            Throttled(ex, "Decorium update failed");
             StopEverything("Something went wrong reading the game; stopped to be safe.");
         }
         // The rest each on its own: one failing (every frame, say) no longer stops every run, and its
@@ -268,7 +278,7 @@ public sealed class Plugin : IDalamudPlugin
         }
         catch (Exception ex)
         {
-            Throttled(ex, $"Housing Studio: {what} update failed");
+            Throttled(ex, $"Decorium: {what} update failed");
         }
     }
 
@@ -309,16 +319,16 @@ public sealed class Plugin : IDalamudPlugin
         {
             case "stop":
                 // Each on its own (1.0.0): one that throws doesn't leave the others going, nor place anywhere on.
-                Safely(() => Errands.Stop("Stopped by you (/hstudio stop)."));
-                Safely(() => runner.Stop("Stopped by you (/hstudio stop)."));
-                Safely(() => FixtureRun.Stop("Stopped by you (/hstudio stop)."));
+                Safely(() => Errands.Stop("Stopped by you (/decorium stop)."));
+                Safely(() => runner.Stop("Stopped by you (/decorium stop)."));
+                Safely(() => FixtureRun.Stop("Stopped by you (/decorium stop)."));
                 Safely(runner.CancelPending);
                 Safely(care.Cancel);
                 Safely(anywhere.Disable);
                 break;
             case "pause":
-                Safely(() => runner.Pause("Paused by you (/hstudio pause)."));
-                Safely(() => Errands.Pause("Paused by you (/hstudio pause)."));
+                Safely(() => runner.Pause("Paused by you (/decorium pause)."));
+                Safely(() => Errands.Pause("Paused by you (/decorium pause)."));
                 break;
             case "resume":
                 Safely(runner.Resume);
@@ -339,13 +349,13 @@ public sealed class Plugin : IDalamudPlugin
                 Safely(() =>
                 {
                     var file = Game.LightCapture.Write(out var why);
-                    if (file == null) Services.Chat.PrintError($"No lights written: {why}", "Housing Studio");
-                    else Services.Chat.Print($"The lights here are written to {file}", "Housing Studio");
+                    if (file == null) Services.Chat.PrintError($"No lights written: {why}", "Decorium");
+                    else Services.Chat.Print($"The lights here are written to {file}", "Decorium");
                 });
                 break;
             case "shot":
                 // On the framework thread already (commands are run there): the camera is read now.
-                if (!link.TakeShot(HousingContext.Read(Plots), out var why)) Services.Chat.PrintError($"No shot: {why}", "Housing Studio");
+                if (!link.TakeShot(HousingContext.Read(Plots), out var why)) Services.Chat.PrintError($"No shot: {why}", "Decorium");
                 break;
             default:
                 window.Toggle();
@@ -369,6 +379,7 @@ public sealed class Plugin : IDalamudPlugin
         Services.PluginInterface.UiBuilder.OpenMainUi -= OpenMain;
         Services.PluginInterface.UiBuilder.OpenConfigUi -= OpenSettings;
         Safely(() => Services.Commands.RemoveHandler(Command));
+        Safely(() => Services.Commands.RemoveHandler(OldCommand));
         Safely(windows.RemoveAllWindows);
         // After the windows: nothing draws its textures once they're let go of.
         Safely(link.Dispose);

@@ -1,9 +1,9 @@
-# Housing Studio (FFXIV plugin)
+# Decorium (FFXIV plugin)
 
 A Dalamud plugin that furnishes your house for you from a design on
-[Housing Studio](https://kokos-tools.com/housing-studio).
+[Decorium](https://kokos-tools.com/decorium). (It was called Housing Studio until 17 November 2026.)
 
-Load a design (a `.build` from Housing Studio, or a MakePlace `.json`) and the plugin shows
+Load a design (a `.build` from Decorium, or a MakePlace `.json`) and the plugin shows
 what you already have: placed, in your bags, in your storeroom, or still to buy. Press
 **Start placing** and it moves what's placed, places the rest at their exact spots, and dyes
 everything to match. It saves a backup first, so **Put them back** can undo a run.
@@ -13,7 +13,7 @@ dyes, fixtures, the outside and wallpapers) as a file you can upload to the site
 
 Linked to your account on the site, it opens builds and designs you **send to the game**, can
 **verify** your home as your design and send **shots** of it to its page, and shows when a home
-you visit is a design on Housing Studio (like, save or stamp it from there).
+you visit is a design on Decorium (like, save or stamp it from there).
 
 Ready can also **clear out** what isn't in the design first, or **swap** designs and swap back
 later. The **shopping list** says where each missing piece comes from (your retainers, a vendor,
@@ -25,8 +25,8 @@ and Lifestream plugins.
 
 1. In the game, open `/xlsettings` → **Experimental** → **Custom Plugin Repositories**.
 2. Add `https://www.kokos-tools.com/dalamud/repo.json`, tick it, and **Save and Close**.
-3. Open `/xlplugins`, search for **Housing Studio** and install it.
-4. Type `/hstudio` to open it.
+3. Open `/xlplugins`, search for **Decorium** and install it.
+4. Type `/decorium` to open it (`/hstudio` works too).
 
 ## Using it
 

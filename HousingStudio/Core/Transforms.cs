@@ -5,7 +5,7 @@ using System.Numerics;
 namespace HousingStudio.Core;
 
 /// <summary>
-/// The file's axes and turns, and the game's. These mirror Housing Studio's own reader
+/// The file's axes and turns, and the game's. These mirror Decorium's own reader
 /// (src/features/housing-studio/makeplace.ts, <c>placement</c>, and build/model.ts, <c>entry</c>):
 /// <list type="bullet">
 /// <item>MakePlace stores a location as [x, z, y] of the game's (its z is up), divided by the
@@ -32,7 +32,7 @@ public static class Transforms
         return (new Vector3((float)(x / scale), (float)(y / scale), (float)(z / scale)), yaw);
     }
 
-    /// <summary>The game's position and yaw as a file writes them (Housing Studio's build/model.ts <c>entry</c>).</summary>
+    /// <summary>The game's position and yaw as a file writes them (Decorium's build/model.ts <c>entry</c>).</summary>
     public static (double[] Location, double[] Rotation) ToFile(Vector3 position, float yaw)
     {
         var half = -yaw / 2.0;
@@ -83,7 +83,7 @@ public static class Transforms
     }
 
     /// <summary>
-    /// A place in the ward in the plot's own coordinates: Housing Studio's <c>intoPlot</c>
+    /// A place in the ward in the plot's own coordinates: Decorium's <c>intoPlot</c>
     /// (viewer/exteriors.ts), and MakePlace's (which turns by its own plot angle, the opposite sign).
     /// </summary>
     public static (Vector3 Position, float Yaw) WardToPlot(Vector3 world, float yaw, PlotSpot plot)

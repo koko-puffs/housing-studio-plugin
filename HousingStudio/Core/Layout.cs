@@ -39,7 +39,7 @@ public sealed record LayoutPiece(
 /// <summary>A wall, floor, light, roof, door… the file picks. The plugin lists these; it doesn't set them.</summary>
 public sealed record LayoutFixture(string Level, string Type, uint ItemId, string Name, string? DyeHex);
 
-/// <summary>A MakePlace layout (.json) or a Housing Studio build (.build), which is the same JSON.</summary>
+/// <summary>A MakePlace layout (.json) or a Decorium build (.build), which is the same JSON.</summary>
 public sealed class Layout
 {
     /// <summary>"Small", "Medium", "Large", "Apartment", or null when the file doesn't say.</summary>
@@ -48,10 +48,10 @@ public sealed class Layout
     /// <summary>The district (or "Minimalist" style) the file's District line names, or null.</summary>
     public string? DistrictName { get; init; }
 
-    /// <summary>Housing Studio's own district key (mist, lavender-beds…), when it can tell.</summary>
+    /// <summary>Decorium's own district key (mist, lavender-beds…), when it can tell.</summary>
     public string? District { get; init; }
 
-    /// <summary>A Housing Studio build's name (properties.build), or null for a MakePlace file.</summary>
+    /// <summary>A Decorium build's name (properties.build), or null for a MakePlace file.</summary>
     public string? BuildName { get; init; }
 
     /// <summary>The plot a build's garden was laid out on (properties.plot, 1–60), or null.</summary>
@@ -70,7 +70,7 @@ public sealed class Layout
 
     /// <summary>
     /// Some files hold the garden in the ward's own coordinates rather than the plot's (the pieces
-    /// sit far from the origin). Housing Studio's 3D view tells the two apart the same way.
+    /// sit far from the origin). Decorium's 3D view tells the two apart the same way.
     /// </summary>
     public bool GardenInWardCoordinates { get; init; }
 

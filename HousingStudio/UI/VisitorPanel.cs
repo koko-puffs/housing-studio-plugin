@@ -151,9 +151,9 @@ public abstract class SmallPanel : Window
 }
 
 /// <summary>
-/// The visitor panel (Settings → Getting, "Show homes on Housing Studio when I visit"): in a home's
+/// The visitor panel (Settings → Getting, "Show homes on Decorium when I visit"): in a home's
 /// interior that's a published design verified there (Session/GameLink.Homes.cs), "This home is on
-/// Housing Studio", the design's cover, name, "by" its maker, Verified in game; Like, Save and Stamp
+/// Decorium", the design's cover, name, "by" its maker, Verified in game; Like, Save and Stamp
 /// (stamps only while the site has them on; "Your design" for your own; not linked, a line to
 /// Settings instead); Open its page; ‹ › between several; ×, gone for this visit. It goes when you
 /// leave.
@@ -165,7 +165,7 @@ public sealed class VisitorPanel : SmallPanel
     private readonly Action<SettingsTab> openSettings;
 
     public VisitorPanel(Configuration config, GameLink link, Fonts fonts, Action<SettingsTab> openSettings)
-        : base("Housing Studio · this home###HousingStudioVisitor", fonts, new Vector2(0.97f, 0.22f))
+        : base("Decorium · this home###HousingStudioVisitor", fonts, new Vector2(0.97f, 0.22f))
     {
         this.config = config;
         this.link = link;
@@ -178,7 +178,7 @@ public sealed class VisitorPanel : SmallPanel
     protected override void Body()
     {
         if (link.Here is not { Current: { } d } v) return;
-        if (Head("This home is on Housing Studio", "Hide it for this visit")) link.Dismiss();
+        if (Head("This home is on Decorium", "Hide it for this visit")) link.Dismiss();
         Kit.Gap(12);
         if (v.Cover is { } cover && v.CoverFor == d.Id)
         {
@@ -207,7 +207,7 @@ public sealed class VisitorPanel : SmallPanel
         }
         else if (!link.Usable)
         {
-            var words = link.TokenRefused ? "Housing Studio didn't accept your token: link again to like, save or stamp" : "Link your account to like, save or stamp";
+            var words = link.TokenRefused ? "Decorium didn't accept your token: link again to like, save or stamp" : "Link your account to like, save or stamp";
             if (Line(Run.Note(words, Palette.BrassSoft) with { Link = "settings" }) == "settings") openSettings(SettingsTab.Help);
             Kit.Gap(10);
         }
@@ -216,9 +216,9 @@ public sealed class VisitorPanel : SmallPanel
             var row = new Kit.Wrap(8);
             var bh = Kit.ButtonHeight(BtnSize.Tiny);
             ActButton(ref row, bh, v, d, "like", Icon.Heart, d.Social.Liked ? "Liked" : "Like", d.Social.Likes,
-                d.Social.Liked ? "Take your like back" : "Like it on Housing Studio");
+                d.Social.Liked ? "Take your like back" : "Like it on Decorium");
             ActButton(ref row, bh, v, d, "save", Icon.Bookmark, d.Social.IsFavourite ? "Saved" : "Save", d.Social.Favourites,
-                d.Social.IsFavourite ? "Take it out of your favourites" : "Keep it in your favourites on Housing Studio");
+                d.Social.IsFavourite ? "Take it out of your favourites" : "Keep it in your favourites on Decorium");
             if (d.Stamps.On)
                 ActButton(ref row, bh, v, d, "stamp", Icon.Stamp, d.Stamps.MineToday ? "Stamped" : "Stamp", d.Stamps.Total,
                     d.Stamps.MineToday ? "Take today's stamp back" : "Stamp its postcard, from inside the home (one a day)");
@@ -235,7 +235,7 @@ public sealed class VisitorPanel : SmallPanel
         var tiny = Kit.ButtonHeight(BtnSize.Tiny);
         const string open = "Open its page";
         if (Kit.Button("##visit-open", bottom.Next(Kit.ButtonWidth(open, BtnSize.Tiny, Icon.ExternalLink), tiny), open, Btn.Glass, BtnSize.Tiny, Icon.ExternalLink, 0, false,
-                "Its page on Housing Studio, in your browser"))
+                "Its page on Decorium, in your browser"))
             Dalamud.Utility.Util.OpenLink(SiteLink.DesignUrl(d.Id));
         if (v.Designs is { Count: > 1 } all)
         {

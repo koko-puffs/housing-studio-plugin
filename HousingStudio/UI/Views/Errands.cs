@@ -955,7 +955,7 @@ public sealed partial class MainWindow
                 Run.Note(!placing && e.HoldingAGuess
                     ? "Press Continue and it makes this click itself. It hasn't been seen working yet, so watch what it does and send the log if it's wrong. If you do it by hand instead, the errands carry on by themselves. "
                     : "Nothing is clicked until you continue. "),
-                Run.Note("/hstudio continue", Palette.Dim),
+                Run.Note("/decorium continue", Palette.Dim),
                 Run.Note(" works too."),
             });
             Kit.Gap(14);

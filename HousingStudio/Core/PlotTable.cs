@@ -11,7 +11,7 @@ namespace HousingStudio.Core;
 public readonly record struct PlotSpot(int Number, string Size, float X, float Y, float Z, float Turn);
 
 /// <summary>
-/// Every district's plots (Data/plots.json, made by tools/make-plots.mjs from Housing Studio's own
+/// Every district's plots (Data/plots.json, made by tools/make-plots.mjs from Decorium's own
 /// extraction of the game's ward layouts), to turn a garden's plot-local coordinates into the
 /// ward's and back.
 /// </summary>

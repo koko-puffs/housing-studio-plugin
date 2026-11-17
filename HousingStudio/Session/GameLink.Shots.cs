@@ -58,7 +58,7 @@ public sealed class Shot
 
 /// <summary>
 /// Shots from the game: in your own home verified as one of your designs (inside, or its garden),
-/// This house's Take a shot or <c>/hstudio shot</c> reads the camera (HomeReader.Camera) and grabs
+/// This house's Take a shot or <c>/decorium shot</c> reads the camera (HomeReader.Camera) and grabs
 /// the game's frame before Dalamud's windows are drawn over it; once the picture is in, the camera is
 /// read again and must not have moved. On a worker the picture is made at most 2560 on its long side,
 /// written as a JPEG at about 0.9 (lower until it's at most 3.8 MB), and a small preview made; the
@@ -92,13 +92,13 @@ public sealed partial class GameLink
     /// <summary>Why Take a shot can't go now, or null.</summary>
     public string? CantShoot(HousingContext ctx)
     {
-        if (!Usable) return "Link your Housing Studio account in Settings → Help first";
+        if (!Usable) return "Link your Decorium account in Settings → Help first";
         if (runActive()) return "Not while a run is going";
         if (Home is not { } h || ctx.Side != h.Side) return "Go to your own home first";
         // 1.0.2: why it couldn't be looked for, rather than "Still looking" for ever.
         if (h.Verified == null && h.Designs == null && h.AddressWhy != null && h.AddressTries >= AddressTriesMost) return h.AddressWhy;
         if (h.Verified == null && h.Designs == null && h.Why != null) return $"Couldn't ask the site about this home: {h.Why}";
-        if (h.Verified == null) return h.Designs == null ? "Still looking for this home on Housing Studio" : "Verify this home as one of your designs first";
+        if (h.Verified == null) return h.Designs == null ? "Still looking for this home on Decorium" : "Verify this home as one of your designs first";
         if (Capturing || grab != null) return "Taking one…";
         if (Taken is { Sent: false }) return "Send or discard the last shot first";
         if (ctx.Busy) return "Not now";
@@ -168,7 +168,7 @@ public sealed partial class GameLink
         if (pose is not { } p)
         {
             // (What the camera held, for /xllog: what to look at when it can't be read.)
-            Services.Log.Warning($"Housing Studio: couldn't read the camera for a shot ({why}): {detail}");
+            Services.Log.Warning($"Decorium: couldn't read the camera for a shot ({why}): {detail}");
             return false;
         }
         // (Inside: the house's lighting level, so the site's comparison is lit as the picture is.)
@@ -177,11 +177,11 @@ public sealed partial class GameLink
         {
             grab = Services.Textures.CreateFromImGuiViewportAsync(
                 new ImGuiViewportTextureArgs { ViewportId = ImGui.GetMainViewport().ID, TakeBeforeImGuiRender = true },
-                "Housing Studio shot", stop.Token);
+                "Decorium shot", stop.Token);
         }
         catch (Exception ex)
         {
-            Services.Log.Error(ex, "Housing Studio couldn't grab the game's picture");
+            Services.Log.Error(ex, "Decorium couldn't grab the game's picture");
             why = "Couldn't take the picture (see /xllog).";
             return false;
         }
@@ -190,7 +190,7 @@ public sealed partial class GameLink
         Capturing = true;
         ShotNote = null;
         grabFor = (p, design.Id, design.Name, h.Side, spot, ++shotGeneration);
-        Services.Log.Information($"Housing Studio: taking a shot for “{design.Name}”: {p}; {detail}");
+        Services.Log.Information($"Decorium: taking a shot for “{design.Name}”: {p}; {detail}");
         return true;
     }
 
@@ -226,7 +226,7 @@ public sealed partial class GameLink
         if (!t.IsCompletedSuccessfully)
         {
             Capturing = false;
-            if (t.Exception != null) Services.Log.Error(t.Exception, "Housing Studio couldn't grab the game's picture");
+            if (t.Exception != null) Services.Log.Error(t.Exception, "Decorium couldn't grab the game's picture");
             ShotFailed("Couldn't take the picture (see /xllog).");
             return;
         }
@@ -275,7 +275,7 @@ public sealed partial class GameLink
                 Release(sized);
                 sized = Own(await Services.Textures.CreateFromExistingTextureAsync(grabbed,
                     new TextureModificationArgs { NewWidth = fit.Width, NewHeight = fit.Height, MakeOpaque = true, DxgiFormat = format },
-                    leaveWrapOpen: true, "Housing Studio shot (sized)", cancel).ConfigureAwait(false));
+                    leaveWrapOpen: true, "Decorium shot (sized)", cancel).ConfigureAwait(false));
                 foreach (var q in ShotSize.Qualities)
                 {
                     using var stream = new MemoryStream();
@@ -292,7 +292,7 @@ public sealed partial class GameLink
             var (tw, th) = ShotSize.Thumb(sized.Width, sized.Height);
             var thumb = Own(await Services.Textures.CreateFromExistingTextureAsync(sized,
                 new TextureModificationArgs { NewWidth = tw, NewHeight = th, DxgiFormat = format },
-                leaveWrapOpen: true, "Housing Studio shot (preview)", cancel).ConfigureAwait(false));
+                leaveWrapOpen: true, "Decorium shot (preview)", cancel).ConfigureAwait(false));
             return new MadeShot(jpeg, sized.Width, sized.Height, quality, thumb, null);
         }
         finally
@@ -325,7 +325,7 @@ public sealed partial class GameLink
 
     /// <summary>
     /// A shot that didn't come out, after it was asked for: This house says why, and chat does too (it
-    /// may have been asked for with /hstudio shot, the HUD and so the plugin's windows hidden).
+    /// may have been asked for with /decorium shot, the HUD and so the plugin's windows hidden).
     /// </summary>
     private void ShotFailed(string why)
     {
@@ -339,7 +339,7 @@ public sealed partial class GameLink
         Taken is not { } s ? "No shot"
         : s.Sent ? "Sent"
         : s.Sending ? "Sending…"
-        : !Usable ? "Link your Housing Studio account first"
+        : !Usable ? "Link your Decorium account first"
         : s.Jpeg == null ? "No picture"
         : null;
 
@@ -359,7 +359,7 @@ public sealed partial class GameLink
                 s.Sent = true;
                 s.Jpeg = null;
                 s.Note = ($"Sent: it's on “{s.DesignName}”'s page.", false);
-                log.Done($"Sent a shot to “{s.DesignName}” on Housing Studio.");
+                log.Done($"Sent a shot to “{s.DesignName}” on Decorium.");
                 return;
             }
             if (r.TokenRefused) Refused(token, r.Why);

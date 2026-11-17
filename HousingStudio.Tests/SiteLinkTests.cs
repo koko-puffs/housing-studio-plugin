@@ -90,7 +90,7 @@ public class SiteLinkTests
 
     [Fact]
     public void LinksToTheBuild() =>
-        Assert.Equal($"https://www.kokos-tools.com/housing-studio/build/{Id}", SiteLink.BuildUrl(Id));
+        Assert.Equal($"https://www.kokos-tools.com/decorium/build/{Id}", SiteLink.BuildUrl(Id));
 
     private sealed class Fake(Func<HttpRequestMessage, Task<HttpResponseMessage>> answer) : HttpMessageHandler
     {

@@ -495,7 +495,7 @@ public sealed partial class ErrandRunner : IDisposable
         StatusText = why;
         Nav.Stop();
         log.Warn($"Errands paused: {why}");
-        if (config.ChatMessages) Services.Chat.Print($"Errands paused: {why}", "Housing Studio");
+        if (config.ChatMessages) Services.Chat.Print($"Errands paused: {why}", "Decorium");
     }
 
     public void Resume()
@@ -546,7 +546,7 @@ public sealed partial class ErrandRunner : IDisposable
         Safely("let AutoRetainer be", shop.AutoRetainer.LetBe);
         if (Rehearsal && !reason.StartsWith("Stopped by you", StringComparison.Ordinal)) Rehearsals.Report.Issue("The errands", $"Stopped: {reason}");
         log.Warn($"Errands {(Rehearsal ? "rehearsal " : string.Empty)}stopped: {reason} ({Summary()})");
-        if (config.ChatMessages) Services.Chat.PrintError($"Errands stopped: {reason}", "Housing Studio");
+        if (config.ChatMessages) Services.Chat.PrintError($"Errands stopped: {reason}", "Decorium");
     }
 
     private void Safely(string what, Action act)
@@ -569,7 +569,7 @@ public sealed partial class ErrandRunner : IDisposable
         StatusText = why;
         ResultWaiting = true;
         log.Done($"Errands {(Rehearsal ? "rehearsal " : string.Empty)}finished: {why} ({Summary()})");
-        if (config.ChatMessages) Services.Chat.Print($"Errands {(Rehearsal ? "rehearsal " : string.Empty)}finished: {why}", "Housing Studio");
+        if (config.ChatMessages) Services.Chat.Print($"Errands {(Rehearsal ? "rehearsal " : string.Empty)}finished: {why}", "Decorium");
     }
 
     private string Summary() => Rehearsal
@@ -3112,7 +3112,7 @@ public sealed partial class ErrandRunner : IDisposable
 
     private List<Step> PlaceSteps() => new()
     {
-        Step.Act("Start placing (Housing Studio's own run)", () =>
+        Step.Act("Start placing (Decorium's own run)", () =>
         {
             placingSeen = null;
             placingFor = TimeSpan.Zero;

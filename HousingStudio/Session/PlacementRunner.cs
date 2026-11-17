@@ -684,7 +684,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         pausedAt = DateTime.UtcNow;
         StatusText = why;
         log.Warn($"Paused: {why} (a step that's waiting carries on waiting when you resume)");
-        if (config.ChatMessages) Services.Chat.Print($"Paused: {why}", "Housing Studio");
+        if (config.ChatMessages) Services.Chat.Print($"Paused: {why}", "Decorium");
     }
 
     public void Resume()
@@ -731,7 +731,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         log.Warn($"{(Rehearsal ? "Rehearsal stopped" : "Stopped")}: {reason}");
         if (clearOutLater.Count > 0)
             log.Warn($"{clearOutLater.Count} piece{(clearOutLater.Count == 1 ? " was" : "s were")} to be cleared out once the design was placed (the storeroom had no room at the start): still placed. Clear out again from Ready to put them away.");
-        if (config.ChatMessages) Services.Chat.PrintError($"{(Rehearsal ? "Rehearsal stopped" : "Stopped")}: {reason}", "Housing Studio");
+        if (config.ChatMessages) Services.Chat.PrintError($"{(Rehearsal ? "Rehearsal stopped" : "Stopped")}: {reason}", "Decorium");
     }
 
     /// <summary>Skips the piece being worked on (closing whatever it opened).</summary>
@@ -1118,7 +1118,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 else if (mode == EditorMode.Place)
                 {
                     log.Warn("  The editor is still holding a piece to place: press Esc to put it back.");
-                    if (config.ChatMessages) Services.Chat.Print("The editor is still holding a piece: press Esc to put it back.", "Housing Studio");
+                    if (config.ChatMessages) Services.Chat.Print("The editor is still holding a piece: press Esc to put it back.", "Decorium");
                 }
                 return StepOutcome.Done;
             },
@@ -2645,7 +2645,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                     if (!announced)
                     {
                         announced = true;
-                        if (config.ChatMessages) Services.Chat.Print($"Put {name} down anywhere (from {where}); Housing Studio sets it at its spot.", "Housing Studio");
+                        if (config.ChatMessages) Services.Chat.Print($"Put {name} down anywhere (from {where}); Decorium sets it at its spot.", "Decorium");
                     }
                     // Looked for four times a second (1.0.2: every frame, for up to five minutes).
                     if (DateTime.UtcNow < nextLook) return StepOutcome.Waiting;
@@ -3616,7 +3616,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
                 if (!asked)
                 {
                     asked = true;
-                    if (config.ChatMessages) Services.Chat.Print($"Put the furnishing editor in {ModeWord(mode)} to carry on.", "Housing Studio");
+                    if (config.ChatMessages) Services.Chat.Print($"Put the furnishing editor in {ModeWord(mode)} to carry on.", "Decorium");
                 }
                 return StepOutcome.Waiting;
             },
@@ -4313,7 +4313,7 @@ public sealed unsafe partial class PlacementRunner : IDisposable
         var summary = $"{(DryRun ? "Dry run finished" : Rehearsal ? "Rehearsal finished (nothing committed)" : "Finished")}: {string.Join(", ", parts)}.";
         StatusText = summary;
         log.Done(summary);
-        if (config.ChatMessages) Services.Chat.Print(summary, "Housing Studio");
+        if (config.ChatMessages) Services.Chat.Print(summary, "Decorium");
     }
 
     public string Name(RunJob job) => data.ItemName(job.Target.ItemId);

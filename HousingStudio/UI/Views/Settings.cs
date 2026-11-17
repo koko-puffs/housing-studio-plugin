@@ -25,7 +25,7 @@ public enum SettingsTab
 /// three tabs as small pills under it. Placing (what Start does, the pace, markers, and More options,
 /// its own screen whose header goes back to Placing, in three groups: where and how it places,
 /// markers, other), Getting in three groups (market board, shops with Currencies folded into one
-/// row, travel and bags) and Help in three (the Housing Studio account and what it brings from the
+/// row, travel and bags) and Help in three (the Decorium account and what it brings from the
 /// site, how a run behaves, making a report). Each setting is one row: its name, one line, the
 /// control on the right; the longer words are its tooltip. The version and What's new at the foot.
 /// </summary>
@@ -53,7 +53,7 @@ public sealed partial class MainWindow
 
     private static readonly string[] SettingsBodies = { "##settings-placing", "##settings-getting", "##settings-help" };
 
-    /// <summary>Opens Settings on Placing (Dalamud's cog, /hstudio settings); during a run, the run.</summary>
+    /// <summary>Opens Settings on Placing (Dalamud's cog, /decorium settings); during a run, the run.</summary>
     public void ShowSettings() => ShowSettings(SettingsTab.Placing);
 
     /// <summary>Opens Settings on a tab (the errands' "Limits · Change" opens Getting); during a run, the run.</summary>
@@ -125,7 +125,7 @@ public sealed partial class MainWindow
             var v = typeof(MainWindow).Assembly.GetName().Version;
             versionRuns = new[]
             {
-                new Run(v == null ? "Housing Studio · " : $"Housing Studio {v.Major}.{v.Minor}.{v.Build} · ", Face.Sans, 13, Palette.Dim),
+                new Run(v == null ? "Decorium · " : $"Decorium {v.Major}.{v.Minor}.{v.Build} · ", Face.Sans, 13, Palette.Dim),
                 new Run("What's new", Face.Sans, 13, Palette.Ivory, Link: "news"),
             };
         }
@@ -424,7 +424,7 @@ public sealed partial class MainWindow
         var cant = session.Context.Side == null ? "Go to your home first"
             : !session.Context.HasPermission ? "You can save a home you're allowed to decorate" : null;
         if (ButtonRow(i++, "##save-build", "Save what's placed as a build", "As Start's Save as a build", "Save a build", Btn.Glass, cant != null, cant,
-                "A .build you can load here, open in MakePlace, or upload to Housing Studio."))
+                "A .build you can load here, open in MakePlace, or upload to Decorium."))
             SaveDialog();
 
         // Good to know: not a setting, but it belongs with them.
@@ -641,15 +641,15 @@ public sealed partial class MainWindow
     private int unverifiedCalls;
 
     /// <summary>
-    /// Help (0.9.0: in three labelled groups): the Housing Studio account and the site's two switches
+    /// Help (0.9.0: in three labelled groups): the Decorium account and the site's two switches
     /// (from Getting), how a run behaves (step by step, trusting the new clicks, the "Place" words, the
     /// old preview method), and making a report (the recorder, copying it with the log, the windows'
     /// values while recording, the windows and clicks used).
     /// </summary>
     private void DrawHelpTab()
     {
-        // The Housing Studio account, and what it brings from the site.
-        SettingsGroup("Housing Studio account", "##set-help-account", true);
+        // The Decorium account, and what it brings from the site.
+        SettingsGroup("Decorium account", "##set-help-account", true);
         DrawAccountRow(0);
         DrawGameLinkRows(1);
         Kit.EndPanel();
@@ -658,7 +658,7 @@ public sealed partial class MainWindow
         SettingsGroup("How a run behaves", "##set-help-run");
         var i = 0;
         if (SwitchRow(i++, "##step", "Step by step", "Hold before every click", config.StepByStep,
-                "Holds before every click and shows what it's about to do, with the window and values, until you press Continue (or /hstudio continue). Use it for your first run."))
+                "Holds before every click and shows what it's about to do, with the window and values, until you press Continue (or /decorium continue). Use it for your first run."))
         {
             config.StepByStep = !config.StepByStep;
             config.Save();
@@ -754,7 +754,7 @@ public sealed partial class MainWindow
     private string Diagnostics()
     {
         var sb = new StringBuilder();
-        sb.AppendLine($"Housing Studio {typeof(MainWindow).Assembly.GetName().Version} · client {Services.ClientState.ClientLanguage}");
+        sb.AppendLine($"Decorium {typeof(MainWindow).Assembly.GetName().Version} · client {Services.ClientState.ClientLanguage}");
         sb.AppendLine($"Where: {session.Context}");
         sb.AppendLine($"Now: {UiRecorder.DescribeState()}");
         sb.AppendLine($"Settings: storeroom auto {config.StoreroomAutomatic}, bags auto {config.BagsAutomatic}, dyes {config.DyeAfterPlacing}, step by step {config.StepByStep}, " +

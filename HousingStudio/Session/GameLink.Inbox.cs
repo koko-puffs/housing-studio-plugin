@@ -45,7 +45,7 @@ public sealed partial class GameLink
 
     /// <summary>Why Open can't go now, or null.</summary>
     public string? CantOpen() =>
-        !Usable ? "Link your Housing Studio account in Settings → Help first"
+        !Usable ? "Link your Decorium account in Settings → Help first"
         : runActive() ? "Not while a run is going"
         : Opening != null ? "Opening one already"
         : null;
@@ -89,8 +89,8 @@ public sealed partial class GameLink
         pollFailures++;
         var wait = TimeSpan.FromTicks(Math.Min(PollAtMost.Ticks, PollEvery.Ticks << Math.Min(pollFailures, 4)));
         nextPoll = DateTime.UtcNow + wait;
-        if (pollFailures == 3) log.Warn($"Couldn't check what's sent from Housing Studio: {r.Why} Trying again every few minutes.");
-        else Services.Log.Debug($"Housing Studio: checking the inbox failed ({r.Hint}): {r.Why}");
+        if (pollFailures == 3) log.Warn($"Couldn't check what's sent from Decorium: {r.Why} Trying again every few minutes.");
+        else Services.Log.Debug($"Decorium: checking the inbox failed ({r.Hint}): {r.Why}");
     }
 
     /// <summary>
@@ -157,7 +157,7 @@ public sealed partial class GameLink
         {
             inbox = inbox.Select(i => i.Id == item.Id ? i with { FetchedAt = DateTimeOffset.UtcNow } : i).ToList();
             inboxNote = null;
-            log.Done($"Opened “{entry.Name}” from Housing Studio ({path}).");
+            log.Done($"Opened “{entry.Name}” from Decorium ({path}).");
             if (runActive())
             {
                 // A run started while it came: it waits in Recent.

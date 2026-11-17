@@ -103,10 +103,10 @@ public static partial class SiteLink
     public static readonly TimeSpan ShotTimeout = TimeSpan.FromSeconds(90);
 
     /// <summary>A design's page on the site.</summary>
-    public static string DesignUrl(string id) => $"https://www.kokos-tools.com/housing-studio/d/{Uri.EscapeDataString(id)}";
+    public static string DesignUrl(string id) => $"https://www.kokos-tools.com/decorium/d/{Uri.EscapeDataString(id)}";
 
     /// <summary>Where a new design is posted.</summary>
-    public const string NewDesignUrl = "https://www.kokos-tools.com/housing-studio/new";
+    public const string NewDesignUrl = "https://www.kokos-tools.com/decorium/new";
 
     /// <summary>
     /// A photo in the public bucket (the site's <c>photoUrl</c>): each part of its path escaped; the
@@ -218,7 +218,7 @@ public static partial class SiteLink
         };
     }
 
-    private static SiteReply<T> NoToken<T>() => new(default, "That isn't a Housing Studio token. Link again in Settings.", "token");
+    private static SiteReply<T> NoToken<T>() => new(default, "That isn't a Decorium token. Link again in Settings.", "token");
 
     private static SiteReply<T> Unreadable<T>() => new(default, "The site answered with something the plugin can't read.", "answer");
 
@@ -358,7 +358,7 @@ public static partial class SiteLink
         }
         stem = stem.Trim().Trim('.').Trim();
         if (stem.Length == 0) stem = CleanName(name).Trim('.').Trim();
-        if (stem.Length == 0) stem = "From Housing Studio";
+        if (stem.Length == 0) stem = "From Decorium";
         if (stem.Length > 80) stem = Core.Text.Cut(stem, 80).TrimEnd(' ', '.');
         if (Reserved.IsMatch(stem)) stem = "_" + stem;
         return stem + ext;
@@ -379,16 +379,16 @@ public static partial class SiteLink
     }
 
     /// <summary>
-    /// What's said in chat and the notification when things arrive: "“Cozy Café” arrived from Housing
-    /// Studio. /hstudio to open it.", or "… and 2 more arrived … to open them."; null for none.
+    /// What's said in chat and the notification when things arrive: "“Cozy Café” arrived from
+    /// Decorium. /decorium to open it.", or "… and 2 more arrived … to open them."; null for none.
     /// </summary>
     public static string? Arrived(IReadOnlyList<InboxItem> fresh)
     {
         if (fresh.Count == 0) return null;
         var first = fresh[0].Name;
         return fresh.Count == 1
-            ? $"“{first}” arrived from Housing Studio. /hstudio to open it."
-            : $"“{first}” and {fresh.Count - 1} more arrived from Housing Studio. /hstudio to open them.";
+            ? $"“{first}” arrived from Decorium. /decorium to open it."
+            : $"“{first}” and {fresh.Count - 1} more arrived from Decorium. /decorium to open them.";
     }
 
     // ---------------------------------------------------------------------------------------------

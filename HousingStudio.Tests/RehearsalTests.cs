@@ -98,7 +98,7 @@ public class RehearsalReportTests
         r.Issue("Riviera Table", "The game didn't show the piece's preview.");
         r.Issue("Buying 2 × Lumber", "Not enough gil. A real run would stop here.", RehearsalTrouble.WouldStop);
         var text = r.Text("12:05 Rehearsal started");
-        Assert.Contains("Housing Studio rehearsal of Winter Lodge, 2026-10-31 12:05", text);
+        Assert.Contains("Decorium rehearsal of Winter Lodge, 2026-10-31 12:05", text);
         Assert.Contains("Nothing was committed", text);
         Assert.Contains("Would place 2.", text);
         Assert.Contains("1 teleport (its fee is the only gil spent).", text);

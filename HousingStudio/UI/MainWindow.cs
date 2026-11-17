@@ -46,7 +46,7 @@ public sealed partial class MainWindow : Window
 
     public MainWindow(Configuration config, LayoutSession session, PlacementRunner runner, GameData data, ActivityLog log, Fonts fonts,
         Automation.UiRecorder recorder, Overlay overlay)
-        : base("Housing Studio###HousingStudioMain")
+        : base("Decorium###HousingStudioMain")
     {
         this.config = config;
         this.session = session;
@@ -129,7 +129,7 @@ public sealed partial class MainWindow : Window
                 }
                 catch (Exception ex)
                 {
-                    Services.Log.Error(ex, "Housing Studio action failed");
+                    Services.Log.Error(ex, "Decorium action failed");
                     Notify("Something went wrong (see /xllog)");
                 }
             }
@@ -220,7 +220,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Services.Log.Error(ex, "Housing Studio action failed");
+            Services.Log.Error(ex, "Decorium action failed");
             Notify("Something went wrong (see /xllog)");
         }
     });

@@ -57,7 +57,7 @@ public sealed partial class Configuration : IPluginConfiguration
     /// <summary>
     /// Temporarily switch off the game's "floating / sunk / overlapping" placement check while
     /// placing (the MakePlace plugin's "place anywhere"). On by default since 0.3.4 (designs from
-    /// Housing Studio often float or overlap on purpose); always switched back when a run ends.
+    /// Decorium often float or overlap on purpose); always switched back when a run ends.
     /// </summary>
     public bool PlaceAnywhere { get; set; } = true;
 
@@ -90,7 +90,7 @@ public sealed partial class Configuration : IPluginConfiguration
     public bool LookUpMarketPrices { get; set; } = true;
 
     /// <summary>
-    /// Settings → Help, Housing Studio account: the token made on the site that lets Send to my builds put
+    /// Settings → Help, Decorium account: the token made on the site that lets Send to my builds put
     /// a house in your builds there (Core/SiteLink.cs); empty when not linked. Never logged.
     /// </summary>
     public string SiteToken { get; set; } = string.Empty;
@@ -106,7 +106,7 @@ public sealed partial class Configuration : IPluginConfiguration
     public DateTime InboxSeenAt { get; set; }
 
     /// <summary>
-    /// Settings → Help, "Show homes on Housing Studio when I visit": in any home's interior, the
+    /// Settings → Help, "Show homes on Decorium when I visit": in any home's interior, the
     /// site is asked whether it's a published design verified there, and a small panel shows it.
     /// </summary>
     public bool ShowHomesWhenVisiting { get; set; } = true;

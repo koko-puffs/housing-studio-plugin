@@ -1,16 +1,24 @@
-# Housing Studio plugin: the details
+# Decorium plugin: the details
 
 The full reference for the plugin (it used to be the README; [README.md](README.md) is the short
 version): what every view and setting does, the pace table, diagnostics, the code's layout.
 
-Furnish your FFXIV house from a design on [Housing Studio](https://github.com/koko-puffs/kokos-tools):
+Furnish your FFXIV house from a design on [Decorium](https://github.com/koko-puffs/kokos-tools):
 load its `.build` (or any MakePlace `.json` layout), see every piece matched to what you have, and
 press **Start placing**: the plugin moves what's placed, places what's in your bags and storeroom at
 its exact spot, then dyes everything to match.
 
+The plugin was called Housing Studio until 17 November 2026, when the site's tool became Decorium; its
+command is `/decorium` (`/hstudio` still works), and its internal name (`HousingStudio`), its files and
+its settings are unchanged, so it updates in place.
+
 > **Status: 1.0.8.** Placing, dyeing, taking dyes off, clearing out and the errands have all run in the
 > game; every click the plugin sends was recorded by hand, but for a garden fixture's apply and a vendor's
 > item exchange (both still wait for Continue).
+> 1.0.9 (not released yet): **the plugin is now Decorium** (17 November 2026, as the site's tool):
+> its name in the plugin installer, its windows, chat and help; `/decorium` is its command (`/hstudio`
+> still works); the links it opens go to the site's new addresses (kokos-tools.com/decorium…; the old
+> ones redirect). The internal name stays HousingStudio, so updates, settings and the site link carry on.
 > 1.0.8: **the sun in `/hstudio lights`.** The file also holds the sun's shadow camera (which way the
 > sun shines at that hour: no file holds it, and the windows' daylight and their light shafts follow
 > it) and the environment simulator's bytes beside it.
@@ -654,7 +662,7 @@ its exact spot, then dyes everything to match.
      window, using dyes from your bags. Pieces whose dye you don't have are skipped and listed.
 
   Floor pieces go first, then what sits on them or hangs on walls. Pause, resume, skip, stop
-  (also `/hstudio pause|resume|stop`), and per-phase progress with the step being done.
+  (also `/decorium pause|resume|stop`), and per-phase progress with the step being done.
 - **The Housing menu, the editor's modes and the Storeroom tab are opened for you** (Rotate to
   place, Furnishing Color to dye, through the Housing menu as you would). Only if it can't find its
   way does the run ask you, in the window and in chat.
@@ -829,7 +837,7 @@ wall, flooring and light; on your plot, the outside's parts) that are in your ba
 the game's own fixtures window (`Session/FixtureRunner`, with `Core/FixtureJobs` for the plan,
 tested). Nothing of it has been tried in the game, so it goes **step by step** whatever Settings
 says: before each action it holds, shows it, and waits for **Continue** (in Ready's Finish stage or at the top of Done, or
-`/hstudio continue`). The steps:
+`/decorium continue`). The steps:
 
 1. The furnishing editor is closed (its own close) or the Housing menu opened (the housing agent),
    and **Remodel Interior** (or Remodel Exterior) chosen by its words, at its place in the menu
@@ -887,13 +895,13 @@ One window, no tabs: what it shows follows what you're doing.
   Furnishings opened once, as the game loads its list only then. The name you type gets `.build`.
   Beside it, **Send to my builds** sends the same home straight to your builds on the site (see
   [Sending a house to the site](#sending-a-house-to-the-site)). Linked, the card has a line about
-  the home on the site ("On Housing Studio: Cozy Café · Verified in game · Open", **Verify as …**, or
-  "Not on Housing Studio yet · Post it"; [Verified homes](#verified-homes)), and, verified, **Take a
+  the home on the site ("On Decorium: Cozy Café · Verified in game · Open", **Verify as …**, or
+  "Not on Decorium yet · Post it"; [Verified homes](#verified-homes)), and, verified, **Take a
   shot** ([Shots from the game](#shots-from-the-game)). Then **From the site**, when anything sent
   from the site is waiting (each with **Open** and ×; [Things sent from the site](#things-sent-from-the-site)),
   then **Recent** (your files, the
   backups runs saved, and what a swap kept, marked KEPT; right-click a file to take it off the list)
-  and "Looking for a design? **Browse designs**" (opens Housing Studio's Browse page).
+  and "Looking for a design? **Browse designs**" (opens Decorium's Browse page).
 - **Ready** (a design loaded): whether it fits your home (the header's pill); a banner when a run
   of it was cut off (**Carry on** / **Forget**); **check chips** for what's worth knowing (the item
   limit as a meter, pieces the game may refuse, dyes short, the storeroom not read, Near me, floors
@@ -941,9 +949,9 @@ One window, no tabs: what it shows follows what you're doing.
   **More options**: place anywhere, pace variation, when to stop, chat, how far Near me reaches,
   storeroom and bags apart, floors to place, marker options, save what's placed as a build),
   **Getting** (market prices from Universalis; the errands' market ceiling, other worlds and spare
-  bag slots; the **Housing Studio account**: the token that lets Send to my builds work, masked once
+  bag slots; the **Decorium account**: the token that lets Send to my builds work, masked once
   linked, with **Unlink** ("Not accepted by the site" when the site has refused it); **Check for
-  things sent from the site** and **Show homes on Housing Studio when I visit**, both on), **Beta** (one switch for the features not yet tried in the game, then
+  things sent from the site** and **Show homes on Decorium when I visit**, both on), **Beta** (one switch for the features not yet tried in the game, then
   each feature's own with its Beta tag: [Get everything for me](#getting-everything-for-you-experimental),
   Get things first from Ready, [Set the fixtures for me](#setting-the-fixtures-experimental), Set
   fixtures after placing, Put back what changed) and **Help** (step by step, the old preview method,
@@ -1121,7 +1129,7 @@ listing's price (with tax, without, or for one; `MarketRule.QuestionMatches`, te
 item's name. Otherwise it's closed, nothing is bought, and the errands stop.
 A trip that got nothing, more trips than planned (+3), or a next trip that would go past the gil
 agreed: it stops. A window that doesn't open, a menu without the expected entry, a path vnavmesh
-can't find, a plugin that stops answering: it stops, saying which. **Stop** (or `/hstudio stop`)
+can't find, a plugin that stops answering: it stops, saying which. **Stop** (or `/decorium stop`)
 stops walking and travel, its placing run if it's going, and closes the windows it opened; AutoRetainer
 is let be again. Placing, fixtures and errands never run at once (the errands start their own placing).
 
@@ -1209,12 +1217,12 @@ Swap back or Try again after a rehearsal (nothing changed).
 ## Sending a house to the site
 
 **Send to my builds** (Start's This house card, beside Save as a build) puts the home you're in straight
-into your builds on Housing Studio, with no file in between: the site's Build opens it as it opens
+into your builds on Decorium, with no file in between: the site's Build opens it as it opens
 one saved there.
 
-- **Linking.** On the site, Settings → Housing Studio → _Send houses from the game_ makes a token
+- **Linking.** On the site, Settings → Decorium → _Send houses from the game_ makes a token
   (`hsp_` and 43 letters; shown there once, as the site keeps only its hash). Paste it in the
-  plugin's Settings → Getting → **Housing Studio account** and press **Link** (it's checked for its shape
+  plugin's Settings → Getting → **Decorium account** and press **Link** (it's checked for its shape
   first). It's kept in the plugin's config (`SiteToken`), shown masked (`hsp_••••••••3xQz`), and
   **Unlink** forgets it. Revoking it on the site stops it at once. It's never written to the log, the
   activity log or the diagnostics.
@@ -1235,7 +1243,7 @@ one saved there.
 
 ## Things sent from the site
 
-On Housing Studio, **Send to game** on a build or a design puts it in your plugin's inbox (the site's
+On Decorium, **Send to game** on a build or a design puts it in your plugin's inbox (the site's
 `hs_send_to_game`: only what you could download yourself; sending again brings it back to the top;
 30 at most). With the account linked and **Check for things sent from the site** on (Settings →
 Getting, on by default), the plugin asks what's waiting (`hs_plugin_inbox_list`, a light read)
@@ -1244,7 +1252,7 @@ loads; never during a run, in combat, a cutscene or between zones. After a failu
 often (2, 4, 8 minutes, at most every 15), back to once a minute on the next answer; a token the
 site refuses stops it until you link again. Something newer than the newest already told of
 (`InboxSeenAt` in the config) is said in chat and as a Dalamud notification: "“Cozy Café” arrived
-from Housing Studio. /hstudio to open it." (several: "… and 2 more arrived …").
+from Decorium. /decorium to open it." (several: "… and 2 more arrived …").
 
 Start lists the newest five under **From the site**, above Recent: a badge (a file for a build, a
 house for a design), the name, "Design · sent today 21:04" (· opened, once it has been). **Open**
@@ -1276,22 +1284,22 @@ says so for as long as its address stays the same.
   its plot.
 - **This house** (Start, in a home you may decorate, linked): once a visit (and again after
   verifying), the site is asked which of your designs have this address (`hs_plugin_home`, a light
-  read; in a garden, once you've stayed on the plot two seconds). The card then says "On Housing
-  Studio: Cozy Café · Verified in game · Open" (Open goes to its page), or, with designs at this
+  read; in a garden, once you've stayed on the plot two seconds). The card then says "On
+  Decorium: Cozy Café · Verified in game · Open" (Open goes to its page), or, with designs at this
   address not yet verified, **Verify as Cozy Café** (one button each, three at most; inside only:
-  a garden says to verify from inside), or "Not on Housing Studio yet · Post it" (opens the site's
+  a garden says to verify from inside), or "Not on Decorium yet · Post it" (opens the site's
   new design page). An address the site says isn't the design's (`address`), and anything else that
   went wrong, is said in the site's words with **Try again**. Not linked: "Link your account to
   verify this home · Settings".
 
 ## Visitors
 
-In any home's interior, yours or anyone's, with **Show homes on Housing Studio when I visit** on
+In any home's interior, yours or anyone's, with **Show homes on Decorium when I visit** on
 (Settings → Getting, on by default), the plugin asks the site once a visit, two seconds after you're
 in, whether a published design is verified as this home (`hs_plugin_here`, with your token when
 linked, else as anyone: these addresses are on their postcards). If one is, a line in chat says
-"This home is on Housing Studio: Cozy Café by Koko." (not for your own), and the **visitor panel**
-shows it: "This home is on Housing Studio", its cover (the small copy, loaded once; none when the
+"This home is on Decorium: Cozy Café by Koko." (not for your own), and the **visitor panel**
+shows it: "This home is on Decorium", its cover (the small copy, loaded once; none when the
 picture can't be read), its name, "by" its maker, ✓ Verified in game; **Like**, **Save** (a
 favourite) and **Stamp** (its postcard, stamped from inside the home; only while the site has stamps
 on), each with its count, pressed again to take it back (`hs_plugin_act`, as your account, keeping
@@ -1303,10 +1311,10 @@ home. Off: nothing is asked. When the site can't be asked, nothing shows (the re
 ## Shots from the game
 
 In your own home verified as one of your designs (inside, or its garden, while you may decorate),
-This house has **Take a shot**, and `/hstudio shot` takes one too. With the HUD showing, the shot hides
+This house has **Take a shot**, and `/decorium shot` takes one too. With the HUD showing, the shot hides
 it (as Scroll Lock does, `Game/Hud.cs`), waits a few frames for it to go, takes the picture and shows it
 again (0.9.10: hiding it yourself hid the plugin's button and the chat with it). In Group Pose, which
-hides them as well, type `/hstudio shot`. The picture goes to the design's page, beside its 3D view from
+hides them as well, type `/decorium shot`. The picture goes to the design's page, beside its 3D view from
 the same spot.
 
 - **The camera**: the scene's current camera (Graphics.Scene.CameraManager's, the one drawing the
@@ -1352,21 +1360,21 @@ pause between pieces: Careful (1.5 s) becomes Steady, the rest Quick.
 
 ## Using it
 
-1. `/hstudio`, then load a design (drop it on the window, **Choose a file**, or pick it from Recent).
+1. `/decorium` (or `/hstudio`, from when it was Housing Studio), then load a design (drop it on the window, **Choose a file**, or pick it from Recent).
 2. Go inside your house or apartment (or to your plot for the garden), with permission to decorate.
    The pill under the title turns green: "Fits your house (medium) · you can decorate".
 3. Housing → **Indoor Furnishings** (or Outdoor), which opens the editor and the furnishing list
    (the run can also open the Housing menu for you).
 4. **Preview first** to see it (**Rehearse the run** to try every step without committing), then **Start placing**. The first time, switch on **Step by step**
    (Settings → Help): it holds before every click and shows what it's about to
-   do; press **Continue** (or `/hstudio continue`).
+   do; press **Continue** (or `/decorium continue`).
 
 If you'd rather put pieces down yourself, switch off **Place pieces for me** in Settings → Placing: the run
 then waits for you to put each piece down anywhere and sets it at its spot.
 
 ## The lights, for the site
 
-`/hstudio lights` writes the lights the game is drawing where you stand to a file
+`/decorium lights` writes the lights the game is drawing where you stand to a file
 (`lights/lights-<date>-<time>.json` in the plugin's folder; chat says where), to hand over when the
 site's 3D light is being matched to the game's. Nothing in the game is changed. The site reads each
 light as its file states it (colour, intensity, attenuation, range rate); how the engine turns those

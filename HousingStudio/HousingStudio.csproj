@@ -9,7 +9,7 @@
     <Version>1.0.8.0</Version>
     <AssemblyName>HousingStudio</AssemblyName>
     <RootNamespace>HousingStudio</RootNamespace>
-    <Description>Load a Housing Studio build or a MakePlace layout and furnish your house from it.</Description>
+    <Description>Load a Decorium build or a MakePlace layout and furnish your house from it.</Description>
     <PackageProjectUrl>https://github.com/koko-puffs/housing-studio-plugin</PackageProjectUrl>
     <IsPackable>false</IsPackable>
     <!-- Lets the project build (for checking) on Linux and macOS too; it only runs in the game on Windows. -->

@@ -112,7 +112,7 @@ public sealed class Care
         {
             if (DateTime.UtcNow - failedAt > TimeSpan.FromSeconds(30))
             {
-                Services.Log.Error(ex, "Housing Studio couldn't look after the home this frame");
+                Services.Log.Error(ex, "Decorium couldn't look after the home this frame");
                 failedAt = DateTime.UtcNow;
             }
         }
@@ -411,7 +411,7 @@ public sealed class Care
         return null;
     }
 
-    /// <summary>A put-back still waiting to be matched doesn't start (/hstudio stop, a window that can't be drawn).</summary>
+    /// <summary>A put-back still waiting to be matched doesn't start (/decorium stop, a window that can't be drawn).</summary>
     public void Cancel() => putBack = null;
 
     private void StartPutBack()

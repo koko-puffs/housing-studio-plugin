@@ -4,7 +4,7 @@ using Dalamud.Bindings.ImGui;
 namespace HousingStudio.UI;
 
 /// <summary>
-/// Housing Studio's colours, exactly as the design system's tokens.json (<c>hs-*</c>). Translucent
+/// Decorium's colours, exactly as the design system's tokens.json (<c>hs-*</c>). Translucent
 /// tokens keep their alpha (ImGui blends them over what's beneath, as the browser does), except the
 /// glass of panels, which ImGui can't blur: it's drawn as its colour over ink, solid.
 /// </summary>

@@ -11,7 +11,7 @@ using static HousingStudio.UI.Theme;
 namespace HousingStudio.UI;
 
 /// <summary>
-/// Linking to Housing Studio (Settings → Help): a token from the site, pasted once, kept masked,
+/// Linking to Decorium (Settings → Help): a token from the site, pasted once, kept masked,
 /// Unlink. Then Start's Send to my builds, beside Save as a build on This house: the same layout the save
 /// writes, sent to your builds on the site (Core/SiteLink.cs) off the framework thread, and how
 /// it went under the buttons. The token is never logged, nor put in the activity log.
@@ -33,12 +33,12 @@ public sealed partial class MainWindow
     private (string? Token, bool Refused, string Note) linkedNote = (null, false, string.Empty);
 
     /// <summary>
-    /// Settings → Help, one row: "Housing Studio account · Linked · hsp_••••3f2a" with Unlink, or,
+    /// Settings → Help, one row: "Decorium account · Linked · hsp_••••3f2a" with Unlink, or,
     /// not linked, the token field (masked) with Link and Get a token under its words.
     /// </summary>
     private void DrawAccountRow(int index)
     {
-        const string name = "Housing Studio account";
+        const string name = "Decorium account";
         if (Linked)
         {
             // The site may have refused it since (revoked there): it says so, and Unlink makes room for a new one.
@@ -56,7 +56,7 @@ public sealed partial class MainWindow
                     config.SiteToken = string.Empty;
                     config.Save();
                     sendState = null;
-                    Notify("Unlinked from Housing Studio");
+                    Notify("Unlinked from Decorium");
                 }
             }, tip: "Send to my builds, on Start, puts the house you're in straight into your builds on the site; things sent from the site wait under From the site; This house can be verified as your design, and shots taken of it.", icon: Icon.Link);
             return;
@@ -81,7 +81,7 @@ public sealed partial class MainWindow
             if (Kit.Button("##site-get", new Vector2(x + linkW + S(8), p.Y), get, Btn.Quiet))
                 Dalamud.Utility.Util.OpenLink(SiteLink.TokensUrl);
         }, below: true,
-            tip: "Send houses straight to your builds on the site. Make a token there (Settings → Housing Studio → Send houses from the game) and paste it here.",
+            tip: "Send houses straight to your builds on the site. Make a token there (Settings → Decorium → Send houses from the game) and paste it here.",
             icon: Icon.Link);
     }
 
@@ -98,12 +98,12 @@ public sealed partial class MainWindow
         tokenDraft = string.Empty;
         tokenProblem = null;
         sendState = null;
-        Notify("Linked to Housing Studio");
+        Notify("Linked to Decorium");
     }
 
     /// <summary>Why Send to my builds can't go now, or null.</summary>
     private string? CantSend() =>
-        !Linked ? "Link your Housing Studio account in Settings → Help first"
+        !Linked ? "Link your Decorium account in Settings → Help first"
         : session.Context.Side == null ? "Go to your home first"
         : !session.Context.HasPermission ? "You can send a home you're allowed to decorate"
         : Sending ? "Sending…"
@@ -160,7 +160,7 @@ public sealed partial class MainWindow
                 {
                     OnFramework(() =>
                     {
-                        if (result.Sent) log.Done($"Sent {name} to your builds on Housing Studio.");
+                        if (result.Sent) log.Done($"Sent {name} to your builds on Decorium.");
                         else log.Warn($"Couldn't send {name} to your builds: {result.Why}");
                         Notify(result.Sent ? $"Sent {name}" : "Couldn't send it");
                     });

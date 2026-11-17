@@ -15,8 +15,8 @@ using RenderLight = FFXIVClientStructs.FFXIV.Client.Graphics.Render.Light;
 namespace HousingStudio.Game;
 
 /// <summary>
-/// The lights the game is drawing where you stand, as its engine holds them (/hstudio lights): for
-/// matching Housing Studio's 3D view to the game's light. The site's extractor reads each light as
+/// The lights the game is drawing where you stand, as its engine holds them (/decorium lights): for
+/// matching Decorium's 3D view to the game's light. The site's extractor reads each light as
 /// its file states it (colour, intensity, attenuation, range rate); how the engine turns those into
 /// what it draws with (its reach, its falloff, its colour) is in the game's code, not its files, so
 /// it's read here from the lights themselves. Written to lights/lights-&lt;time&gt;.json in the plugin's

@@ -1,8 +1,8 @@
 // Builds HousingStudio/Data/plots.json: every housing district's 60 plots (number, size, where the
 // plot's centre is in the ward, and which way it faces), for turning a garden's plot-local
-// coordinates (as MakePlace and Housing Studio write them) into the ward's own.
+// coordinates (as MakePlace and Decorium write them) into the ward's own.
 //
-// The numbers come from Housing Studio's own extraction of the game's ward layouts
+// The numbers come from Decorium's own extraction of the game's ward layouts
 // (public/housing/exteriors.json in koko-puffs/kokos-tools, made by scripts/housing-extract).
 // `turn` is the plot's yaw in radians about +y, the way the game turns things; MakePlace's own
 // table (Plots.cs) holds the same plots with the opposite sign.

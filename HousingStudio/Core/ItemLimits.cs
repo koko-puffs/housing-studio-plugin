@@ -15,7 +15,7 @@ public readonly record struct LimitCheck(int Limit, int Design, int Others, int 
 }
 
 /// <summary>
-/// How many furnishings the game lets a home hold, by size, the same numbers Housing Studio's site
+/// How many furnishings the game lets a home hold, by size, the same numbers Decorium's site
 /// uses (sketch/model.ts <c>ITEM_LIMITS</c>, makeplace.ts <c>OUTDOOR_LIMIT</c>): inside, an
 /// apartment 150, a cottage 300, a house 450, a mansion 600; in the garden 40, 60 and 80 (an
 /// apartment has none). Pure, so it's tested.

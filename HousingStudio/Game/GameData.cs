@@ -55,7 +55,7 @@ public sealed class GameData
         }
         HousingDyes = dyes;
         Terebinth = FindTerebinth(sheet);
-        if (Terebinth == 0) Services.Log.Warning("Housing Studio: couldn't find Terebinth in the game's items, so dyes aren't taken off.");
+        if (Terebinth == 0) Services.Log.Warning("Decorium: couldn't find Terebinth in the game's items, so dyes aren't taken off.");
     }
 
     /// <summary>

@@ -9,14 +9,14 @@ namespace HousingStudio.UI;
 /// A shot from the game before it's sent (Session/GameLink.Shots.cs): "Taking the shot…" while the
 /// picture is made, then its preview, "For Cozy Café · 2560×1440 · 1.8 MB", Send to Cozy Café and
 /// Discard; once sent, Open its page and Close. Its own small panel, so it shows with the main window
-/// closed (a shot taken with /hstudio shot).
+/// closed (a shot taken with /decorium shot).
 /// </summary>
 public sealed class ShotPanel : SmallPanel
 {
     private readonly GameLink link;
 
     public ShotPanel(GameLink link, Fonts fonts)
-        : base("Housing Studio · shot###HousingStudioShot", fonts, new Vector2(0.97f, 0.5f))
+        : base("Decorium · shot###HousingStudioShot", fonts, new Vector2(0.97f, 0.5f))
     {
         this.link = link;
     }
@@ -66,7 +66,7 @@ public sealed class ShotPanel : SmallPanel
             var cant = link.CantSendShot();
             var send = s.Sending ? "Sending…" : Txt.Fit($"Send to {s.DesignName}", Face.SansSemibold, 13, room - S(14) * 2 - S(24));
             if (Kit.Button("##shot-send", row.Next(Kit.ButtonWidth(send, BtnSize.Sm, Icon.Send, Btn.Primary), bh), send, Btn.Primary, BtnSize.Sm, Icon.Send, 0,
-                    cant != null, cant ?? "To its page on Housing Studio, with where the camera was, beside its 3D view from the same spot"))
+                    cant != null, cant ?? "To its page on Decorium, with where the camera was, beside its 3D view from the same spot"))
                 link.SendShot();
             if (Kit.Button("##shot-discard", row.Next(discardW, bh), discard, Btn.Quiet, BtnSize.Sm, null, 0, s.Sending))
                 link.Discard();

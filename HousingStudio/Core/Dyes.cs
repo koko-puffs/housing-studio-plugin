@@ -28,7 +28,7 @@ public static class Dyes
 
     /// <summary>
     /// The dye closest to a file's colour (exact when the file was written from a game dye, which
-    /// MakePlace and Housing Studio both do), or null when there are none to choose from.
+    /// MakePlace and Decorium both do), or null when there are none to choose from.
     /// </summary>
     public static DyeColor? Closest(string hex, IReadOnlyList<DyeColor> dyes)
     {

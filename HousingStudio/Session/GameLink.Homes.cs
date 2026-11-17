@@ -188,7 +188,7 @@ public sealed partial class GameLink
 
     /// <summary>Why Verify can't go now, or null.</summary>
     public string? CantVerify() =>
-        !Usable ? "Link your Housing Studio account first"
+        !Usable ? "Link your Decorium account first"
         : runActive() ? "Not while a run is going"
         : Home is not { Side: Side.Interior, Address: not null } ? "Verify a home from inside it"
         : Home.Verifying ? "Verifying…"
@@ -206,7 +206,7 @@ public sealed partial class GameLink
             h.Verifying = false;
             if (r.Ok)
             {
-                log.Done($"Verified this home ({home.Describe()}) as “{design.Name}” on Housing Studio.");
+                log.Done($"Verified this home ({home.Describe()}) as “{design.Name}” on Decorium.");
                 // Asked again, so This house says it from the site.
                 h.Designs = null;
                 h.Why = null;
@@ -245,7 +245,7 @@ public sealed partial class GameLink
             v.AddressWhy = v.Address == null ? why : null;
             if (v.Address == null)
             {
-                if (v.AddressTries == AddressTriesMost) Services.Log.Debug($"Housing Studio: couldn't tell this home's address for the visitor panel: {why}");
+                if (v.AddressTries == AddressTriesMost) Services.Log.Debug($"Decorium: couldn't tell this home's address for the visitor panel: {why}");
                 return;
             }
         }
@@ -273,7 +273,7 @@ public sealed partial class GameLink
             if (!r.Ok)
             {
                 v.Why = r.Why;
-                Services.Log.Warning($"Housing Studio couldn't say whether this home is on the site: {r.Why}");
+                Services.Log.Warning($"Decorium couldn't say whether this home is on the site: {r.Why}");
                 return;
             }
             v.Designs = r.Value ?? new List<HereDesign>();
@@ -283,7 +283,7 @@ public sealed partial class GameLink
                 // Said once a visit, for someone else's design (your own home says so in the window).
                 var other = v.Designs.FirstOrDefault(x => !x.Own);
                 if (other != null && config.ShowHomesWhenVisiting)
-                    Tell($"This home is on Housing Studio: {other.Name} by {other.Maker.Name}.", notification: false);
+                    Tell($"This home is on Decorium: {other.Name} by {other.Maker.Name}.", notification: false);
                 LoadCover(v, d);
             }
         }, Fault<List<HereDesign>>);
@@ -381,12 +381,12 @@ public sealed partial class GameLink
             if (response.StatusCode != HttpStatusCode.OK || response.Content.Headers.ContentLength is > CoverBytes) return null;
             var bytes = await response.Content.ReadAsByteArrayAsync(timeout.Token).ConfigureAwait(false);
             if (bytes.Length is 0 or > CoverBytes) return null;
-            return Own(await Services.Textures.CreateFromImageAsync(bytes, "Housing Studio cover", timeout.Token).ConfigureAwait(false));
+            return Own(await Services.Textures.CreateFromImageAsync(bytes, "Decorium cover", timeout.Token).ConfigureAwait(false));
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !cancel.IsCancellationRequested)
         {
             // A WebP the PC can't read, no connection: no picture, nothing else.
-            Services.Log.Debug(ex, "Housing Studio couldn't load a design's cover");
+            Services.Log.Debug(ex, "Decorium couldn't load a design's cover");
             return null;
         }
     }

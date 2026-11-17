@@ -292,7 +292,7 @@ public sealed partial class MainWindow
             // The click itself, window and values, as the log has it.
             Txt.Para(new[] { new Run(runner.StepLabel ?? string.Empty, Face.Mono, 12, Palette.Dim) }, 12 * 1.6f);
             Kit.Gap(4);
-            Txt.Para(new[] { Run.Note("Nothing is clicked until you continue. "), Run.Note("/hstudio continue", Palette.Dim), Run.Note(" works too.") });
+            Txt.Para(new[] { Run.Note("Nothing is clicked until you continue. "), Run.Note("/decorium continue", Palette.Dim), Run.Note(" works too.") });
             if (runner.HoldingALetGo)
             {
                 // The rehearsal's let-go isn't seen working yet: it waits here until you trust it.
@@ -490,10 +490,10 @@ public sealed partial class MainWindow
         Kit.Reserve(at, w, S(46));
         Kit.Gap(12);
         var runs = paused
-            ? new[] { Run.Note("Resume carries on from the step it held at. "), Run.Note("/hstudio resume", Palette.Dim), Run.Note(" works too.") }
+            ? new[] { Run.Note("Resume carries on from the step it held at. "), Run.Note("/decorium resume", Palette.Dim), Run.Note(" works too.") }
             // The mockup says "Pause finishes the piece in hand first"; the runner holds before its next
             // step instead, so the words say that. TODO(runner): pause between pieces, then use the mockup's line.
-            : new[] { Run.Note("Pause holds before its next step. "), Run.Note("/hstudio pause", Palette.Dim), Run.Note(" works too.") };
+            : new[] { Run.Note("Pause holds before its next step. "), Run.Note("/decorium pause", Palette.Dim), Run.Note(" works too.") };
         Txt.Para(runs, 19.5f, center: true);
         Frame.EndFooter();
     }

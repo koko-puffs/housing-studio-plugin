@@ -88,7 +88,7 @@ public sealed unsafe class UiRecorder : IDisposable
         lastState = string.Empty;
         started = DateTime.UtcNow;
         Recording = true;
-        Add($"Recording started. Housing Studio {typeof(UiRecorder).Assembly.GetName().Version}, client language {Services.ClientState.ClientLanguage}.");
+        Add($"Recording started. Decorium {typeof(UiRecorder).Assembly.GetName().Version}, client language {Services.ClientState.ClientLanguage}.");
         if (SetupError != null) Add(SetupError);
         Add("Do one thing by hand (place one piece from your bags, one from the storeroom, dye one piece), then stop and copy this.");
         hook?.Enable();
@@ -119,7 +119,7 @@ public sealed unsafe class UiRecorder : IDisposable
     public string AsText()
     {
         var sb = new StringBuilder();
-        sb.AppendLine("Housing Studio diagnostics recording");
+        sb.AppendLine("Decorium diagnostics recording");
         for (var i = 0; i < lines.Count; i++)
         {
             if (i == Math.Min(HeaderLines, lines.Count) && dropped > 0) sb.AppendLine($"        ({dropped:N0} earlier lines let go of: a recording keeps the last {MaxLines:N0}.)");

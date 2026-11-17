@@ -15,7 +15,7 @@ namespace HousingStudio.UI;
 /// <summary>Start (mockup 1): nothing loaded. The title and where you are, the drop zone, This house, From the site, Recent, and Browse designs.</summary>
 public sealed partial class MainWindow
 {
-    private const string BrowseUrl = "https://www.kokos-tools.com/housing-studio/browse";
+    private const string BrowseUrl = "https://www.kokos-tools.com/decorium/browse";
 
     /// <summary>The header pill for where you are: green when you can decorate, danger when you can't, neutral away from home.</summary>
     private (string Text, Tone Tone) WherePill()
@@ -37,7 +37,7 @@ public sealed partial class MainWindow
         Frame.BeginHeader(20);
         var at = Kit.At;
         var w = Kit.Width;
-        var titleH = Title(at, "Housing Studio", null, w - S(56));
+        var titleH = Title(at, "Decorium", null, w - S(56));
         SettingsButton(new Vector2(at.X + w - S(40), at.Y));
         var (where, tone) = WherePill();
         var pillY = at.Y + MathF.Max(titleH, S(40)) + S(8);
@@ -172,7 +172,7 @@ public sealed partial class MainWindow
     /// In a home you may decorate: the card for it. Its name, the home and how full it is ("Medium
     /// house · 312 of 450 pieces placed inside · lighting 3 of 5", read every 2 s while Start shows) with a meter; a chip
     /// for what changed since your last run here (with a snapshot), which checks and opens the changes
-    /// under the card; the home on Housing Studio (verified, Verify as …, or Post it); Save as a
+    /// under the card; the home on Decorium (verified, Verify as …, or Post it); Save as a
     /// build, Send to my builds, and Take a shot when it's verified as one of your designs.
     /// </summary>
     private void DrawThisHouse()
@@ -256,7 +256,7 @@ public sealed partial class MainWindow
             Kit.Reserve(m, w, S(6));
         }
 
-        // On Housing Studio: verified, Verify as …, or Post it (Views/GameLink.cs).
+        // On Decorium: verified, Verify as …, or Post it (Views/GameLink.cs).
         DrawSiteHome();
 
         Kit.Gap(12);
@@ -264,12 +264,12 @@ public sealed partial class MainWindow
         var bh = Kit.ButtonHeight(BtnSize.Tiny);
         const string save = "Save as a build";
         if (Kit.Button("##save-home", row.Next(Kit.ButtonWidth(save, BtnSize.Tiny, Icon.Save), bh), save, Btn.Glass, BtnSize.Tiny, Icon.Save, 0, false,
-                "What's placed here, as a .build you can load again, open in MakePlace, or upload to Housing Studio"))
+                "What's placed here, as a .build you can load again, open in MakePlace, or upload to Decorium"))
             SaveDialog();
         const string send = "Send to my builds";
         var cant = CantSend();
         if (Kit.Button("##send-home", row.Next(Kit.ButtonWidth(send, BtnSize.Tiny, Icon.Send), bh), send, Btn.Glass, BtnSize.Tiny, Icon.Send, 0, cant != null,
-                cant ?? "What's placed here, straight into your builds on Housing Studio"))
+                cant ?? "What's placed here, straight into your builds on Decorium"))
             SendHome();
         ShotButton(ref row, bh);
         // 0.9.1: everything placed here put away, whatever design is loaded (or none).
@@ -589,7 +589,7 @@ public sealed partial class MainWindow
         new("Browse designs", Face.Sans, 13, Palette.Ivory, Link: "browse"),
     };
 
-    /// <summary>"Looking for a design? Browse designs", centred at the foot of the body (opens Housing Studio's Browse page).</summary>
+    /// <summary>"Looking for a design? Browse designs", centred at the foot of the body (opens Decorium's Browse page).</summary>
     private void DrawBrowse()
     {
         if (Txt.Para(BrowseRuns, 19.5f, center: true) == "browse") Dalamud.Utility.Util.OpenLink(BrowseUrl);

@@ -87,7 +87,7 @@ public static class HomeAddress
         why = string.Empty;
         if (f.IsWorkshop || f.RoomNumber == Workshop)
         {
-            why = "A workshop isn't a home on Housing Studio.";
+            why = "A workshop isn't a home on Decorium.";
             return null;
         }
         if (Common(f.World, f.District, f.WardIndex, out why) is not { } common) return null;

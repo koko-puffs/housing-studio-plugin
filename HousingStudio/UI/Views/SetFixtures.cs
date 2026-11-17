@@ -143,7 +143,7 @@ public sealed partial class MainWindow
             }
             catch (Exception ex)
             {
-                Services.Log.Warning(ex, "Housing Studio couldn't list the fixtures being set");
+                Services.Log.Warning(ex, "Decorium couldn't list the fixtures being set");
             }
         }
         fixtureRunTicked = fixturesNow;
@@ -154,7 +154,7 @@ public sealed partial class MainWindow
         catch (Exception ex)
         {
             afterPlacing.Disarm();
-            if (DateTime.UtcNow - afterPlacingFailedAt > TimeSpan.FromSeconds(30)) Services.Log.Error(ex, "Housing Studio couldn't follow the run for the fixtures");
+            if (DateTime.UtcNow - afterPlacingFailedAt > TimeSpan.FromSeconds(30)) Services.Log.Error(ex, "Decorium couldn't follow the run for the fixtures");
             afterPlacingFailedAt = DateTime.UtcNow;
         }
     }

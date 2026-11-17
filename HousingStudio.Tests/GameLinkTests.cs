@@ -386,8 +386,8 @@ public class SiteCallsTests
     {
         var a = new InboxItem(Id, "design", Other, "Cozy Café", DateTimeOffset.UtcNow, null);
         Assert.Null(SiteLink.Arrived([]));
-        Assert.Equal("“Cozy Café” arrived from Housing Studio. /hstudio to open it.", SiteLink.Arrived([a]));
-        Assert.Equal("“Cozy Café” and 2 more arrived from Housing Studio. /hstudio to open them.", SiteLink.Arrived([a, a, a]));
+        Assert.Equal("“Cozy Café” arrived from Decorium. /decorium to open it.", SiteLink.Arrived([a]));
+        Assert.Equal("“Cozy Café” and 2 more arrived from Decorium. /decorium to open them.", SiteLink.Arrived([a, a, a]));
     }
 
     [Fact]
@@ -407,8 +407,8 @@ public class SiteCallsTests
     [InlineData("a:b*c?.build", "x", "a b c.build")]
     [InlineData("noext", "x", "noext.json")]
     [InlineData("", "My  Home", "My Home.json")]
-    [InlineData(".build", "", "From Housing Studio.build")]
-    [InlineData(null, null, "From Housing Studio.json")]
+    [InlineData(".build", "", "From Decorium.build")]
+    [InlineData(null, null, "From Decorium.json")]
     [InlineData("CON.build", "x", "_CON.build")]
     [InlineData("   .json", "Named", "Named.json")]
     public void WritesASafeFileName(string? fileName, string? name, string expected) =>
@@ -461,7 +461,7 @@ public class SiteCallsTests
     {
         Assert.Equal($"{SiteLink.SupabaseUrl}/storage/v1/object/public/hs-photos/u/d/cover%20one-s.webp", SiteLink.PhotoUrl("u/d/cover one.webp", small: true));
         Assert.Equal($"{SiteLink.SupabaseUrl}/storage/v1/object/public/hs-photos/u/d/cover%20one.webp", SiteLink.PhotoUrl("u/d/cover one.webp"));
-        Assert.Equal($"https://www.kokos-tools.com/housing-studio/d/{Id}", SiteLink.DesignUrl(Id));
+        Assert.Equal($"https://www.kokos-tools.com/decorium/d/{Id}", SiteLink.DesignUrl(Id));
     }
 
     [Fact]
@@ -494,7 +494,7 @@ public class SiteCallsTests
         Assert.Contains("Delete one", full.Why);
         var verify = SiteLink.ReadShot(HttpStatusCode.Forbidden, "{\"message\":\"Verify this home as “Cozy Café” first.\",\"hint\":\"verify\"}");
         Assert.Equal("verify", verify.Hint);
-        Assert.True(SiteLink.ReadShot(HttpStatusCode.Unauthorized, "{\"message\":\"That isn’t a Housing Studio plugin token.\",\"hint\":\"token\"}").TokenRefused);
+        Assert.True(SiteLink.ReadShot(HttpStatusCode.Unauthorized, "{\"message\":\"That isn’t a Decorium plugin token.\",\"hint\":\"token\"}").TokenRefused);
         Assert.Contains("4 MB", SiteLink.ReadShot(HttpStatusCode.RequestEntityTooLarge, "").Why);
         var down = SiteLink.ReadShot(HttpStatusCode.BadGateway, "{\"message\":\"The picture couldn’t be kept. Try again in a minute.\",\"hint\":\"upload\"}");
         Assert.Equal("The picture couldn’t be kept. Try again in a minute.", down.Why);

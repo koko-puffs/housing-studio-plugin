@@ -230,7 +230,7 @@ public sealed unsafe partial class PlacementRunner
                     {
                         log.Warn($"  The editor still holds {name} after {UiTable.LetGo.Describe()}: you let go (Esc). A rehearsal never sets a piece down.");
                         Rehearsals.Report.Issue(name, $"The editor didn't let go of it after {UiTable.LetGo.Describe()} (pressing Move while holding a piece): you were asked to press Esc.", RehearsalTrouble.NoMatch);
-                        if (config.ChatMessages) Services.Chat.Print($"Press Esc to let go of {name} (a rehearsal never sets it down).", "Housing Studio");
+                        if (config.ChatMessages) Services.Chat.Print($"Press Esc to let go of {name} (a rehearsal never sets it down).", "Decorium");
                         queue.InsertNext(new[]
                         {
                             new Step
@@ -521,7 +521,7 @@ public sealed unsafe partial class PlacementRunner
             : $"The editor still holds {what}: press Esc to let go. A rehearsal never sets a piece down.";
         log.Warn($"  {line}");
         Rehearsals.Report.Issue("The editor", line, RehearsalTrouble.Failed);
-        if (config.ChatMessages) Services.Chat.Print(line, "Housing Studio");
+        if (config.ChatMessages) Services.Chat.Print(line, "Decorium");
     }
 
     /// <summary>The rehearsal finished: if the editor still holds something, you're told (it's never set down).</summary>

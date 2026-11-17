@@ -83,7 +83,7 @@ public sealed unsafe class HousingEditor
             {
                 checkedState = state;
                 stateReadable = Readable(state, ActiveItemOffset + sizeof(nint));
-                if (!stateReadable) Services.Log.Warning($"Housing Studio: the furnishing editor's state at 0x{state:X} can't be read; the editor is taken as closed (the game may have been patched).");
+                if (!stateReadable) Services.Log.Warning($"Decorium: the furnishing editor's state at 0x{state:X} can't be read; the editor is taken as closed (the game may have been patched).");
             }
             return stateReadable ? state : 0;
         }

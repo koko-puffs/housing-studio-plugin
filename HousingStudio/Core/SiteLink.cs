@@ -18,8 +18,8 @@ public sealed record SendResult(string? BuildId, string? Why, bool TokenRefused 
 }
 
 /// <summary>
-/// Sending the house you're in straight to your builds on Housing Studio, with the token made on
-/// the site (Settings → Housing Studio → Send houses from the game). The plugin calls the site's
+/// Sending the house you're in straight to your builds on Decorium, with the token made on
+/// the site (Settings → Decorium → Send houses from the game). The plugin calls the site's
 /// database function <c>hs_plugin_save_build</c> with the site's publishable key, as the site
 /// itself would; the token says whose builds it goes in. It's never logged, nor put in the log.
 /// </summary>
@@ -31,7 +31,7 @@ public static partial class SiteLink
     public const string PublishableKey = "sb_publishable_A-5zpDIk5O6xyKTicipcuA_M3J0sGVP";
 
     /// <summary>Where a token is made, and where a sent build opens.</summary>
-    public const string TokensUrl = "https://www.kokos-tools.com/housing-studio";
+    public const string TokensUrl = "https://www.kokos-tools.com/decorium";
 
     /// <summary>The longest a send waits for the site.</summary>
     public static readonly TimeSpan Timeout = TimeSpan.FromSeconds(20);
@@ -53,7 +53,7 @@ public static partial class SiteLink
         : (token.StartsWith("hsp_", StringComparison.Ordinal) ? "hsp_" : string.Empty) + new string('•', 8) + token[^4..];
 
     /// <summary>A sent build on the site.</summary>
-    public static string BuildUrl(string id) => $"https://www.kokos-tools.com/housing-studio/build/{Uri.EscapeDataString(id)}";
+    public static string BuildUrl(string id) => $"https://www.kokos-tools.com/decorium/build/{Uri.EscapeDataString(id)}";
 
     /// <summary>
     /// The site's code for a home, as its builds keep it ("s1i2": a medium house in Mist): the
@@ -162,7 +162,7 @@ public static partial class SiteLink
     /// </summary>
     public static async Task<SendResult> SendAsync(HttpClient http, string token, string name, string house, string layoutJson, CancellationToken cancel = default)
     {
-        if (!LooksRight(token)) return new SendResult(null, "That isn't a Housing Studio token. Link again in Settings.", true);
+        if (!LooksRight(token)) return new SendResult(null, "That isn't a Decorium token. Link again in Settings.", true);
         string body;
         try
         {

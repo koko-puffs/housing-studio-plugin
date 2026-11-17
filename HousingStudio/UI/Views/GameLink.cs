@@ -117,9 +117,9 @@ public sealed partial class MainWindow
     // This house: the home on the site, and Take a shot.
 
     /// <summary>
-    /// This house's line about the home on Housing Studio: "On Housing Studio: Cozy Café · Verified in
+    /// This house's line about the home on Decorium: "On Decorium: Cozy Café · Verified in
     /// game" with a tick and Open; or Verify as … (several designs at this address: one button each);
-    /// or "Not on Housing Studio yet · Post it"; what went wrong in words with Try again; and, not
+    /// or "Not on Decorium yet · Post it"; what went wrong in words with Try again; and, not
     /// linked, a quiet "Link your account to verify this home".
     /// </summary>
     private void DrawSiteHome()
@@ -135,7 +135,7 @@ public sealed partial class MainWindow
         else if (l.TokenRefused)
         {
             Kit.Gap(12);
-            clicked = IconLine(Icon.Alert, Palette.Danger, Run.Note("Housing Studio didn't accept your token. ", Palette.Danger), Run.Note("Link again", Palette.BrassSoft) with { Link = "settings" });
+            clicked = IconLine(Icon.Alert, Palette.Danger, Run.Note("Decorium didn't accept your token. ", Palette.Danger), Run.Note("Link again", Palette.BrassSoft) with { Link = "settings" });
         }
         else if (l.Home is not { } h)
         {
@@ -150,24 +150,24 @@ public sealed partial class MainWindow
         else if (h.Why != null)
         {
             Kit.Gap(12);
-            clicked = IconLine(Icon.Alert, Palette.Danger, Run.Note($"Couldn't ask Housing Studio about this home. {h.Why} ", Palette.Danger),
+            clicked = IconLine(Icon.Alert, Palette.Danger, Run.Note($"Couldn't ask Decorium about this home. {h.Why} ", Palette.Danger),
                 Run.Note("Try again", Palette.BrassSoft) with { Link = "retry" });
         }
         else if (h.Designs == null)
         {
             Kit.Gap(12);
-            clicked = IconLine(Icon.Refresh, Palette.Dim, Run.Note("Looking for this home on Housing Studio…", Palette.Dim));
+            clicked = IconLine(Icon.Refresh, Palette.Dim, Run.Note("Looking for this home on Decorium…", Palette.Dim));
         }
         else if (h.Verified is { } v)
         {
             Kit.Gap(12);
-            clicked = IconLine(Icon.Check, Palette.Success, Run.Note("On Housing Studio: ", Palette.Ash), new Run(v.Name, Face.SansMedium, 13, Palette.Ivory),
+            clicked = IconLine(Icon.Check, Palette.Success, Run.Note("On Decorium: ", Palette.Ash), new Run(v.Name, Face.SansMedium, 13, Palette.Ivory),
                 Run.Note(" · Verified in game · ", Palette.Success), Run.Note("Open", Palette.BrassSoft) with { Link = "open:" + v.Id });
         }
         else if (h.Designs.Count == 0)
         {
             Kit.Gap(12);
-            clicked = IconLine(Icon.House, Palette.Dim, Run.Note("Not on Housing Studio yet · ", Palette.Dim), Run.Note("Post it", Palette.BrassSoft) with { Link = "post" });
+            clicked = IconLine(Icon.House, Palette.Dim, Run.Note("Not on Decorium yet · ", Palette.Dim), Run.Note("Post it", Palette.BrassSoft) with { Link = "post" });
         }
         else
         {
@@ -206,10 +206,10 @@ public sealed partial class MainWindow
         var first = designs[0];
         var several = designs.Count > 1;
         var words = several
-            ? $"{Words.Count(designs.Count, "design")} of yours have this address on Housing Studio, not yet verified in game."
+            ? $"{Words.Count(designs.Count, "design")} of yours have this address on Decorium, not yet verified in game."
             : h.Side == Side.Interior
-                ? $"“{first.Name}” has this address on Housing Studio, not yet verified in game."
-                : $"“{first.Name}” has this address on Housing Studio. Verify it from inside the house.";
+                ? $"“{first.Name}” has this address on Decorium, not yet verified in game."
+                : $"“{first.Name}” has this address on Decorium. Verify it from inside the house.";
         Act(IconLine(Icon.Info, Palette.Brass, Run.Note(words, Palette.Ash)));
         if (h.Side == Side.Interior)
         {
@@ -223,7 +223,7 @@ public sealed partial class MainWindow
                 var d = designs[i];
                 var label = h.Verifying ? "Verifying…" : Txt.Fit($"Verify as {d.Name}", Face.SansMedium, 13, most - S(10) * 2 - S(24));
                 if (Kit.Button($"##verify{i}", row.Next(Kit.ButtonWidth(label, BtnSize.Tiny, Icon.Check), bh), label, Btn.Glass, BtnSize.Tiny, Icon.Check, 0, cant != null,
-                        cant ?? $"Tell Housing Studio this home is “{d.Name}”: its page then says Verified in game, and visitors with the plugin see it here"))
+                        cant ?? $"Tell Decorium this home is “{d.Name}”: its page then says Verified in game, and visitors with the plugin see it here"))
                     l.Verify(d);
             }
             row.End();
@@ -270,23 +270,23 @@ public sealed partial class MainWindow
         if (gameLink?.ShotDesign(session.Context) == null) return;
         Kit.Gap(8);
         if (gameLink.ShotNote is { } why) AlertNote(why, Palette.Danger);
-        else AlertNote("The HUD is hidden for the moment the picture is taken, and comes back after. In Group Pose, type /hstudio shot.", Palette.Dim, Icon.Info, Palette.Dim);
+        else AlertNote("The HUD is hidden for the moment the picture is taken, and comes back after. In Group Pose, type /decorium shot.", Palette.Dim, Icon.Info, Palette.Dim);
     }
 
     // ---------------------------------------------------------------------------------------------
-    // Settings → Help, under the Housing Studio account.
+    // Settings → Help, under the Decorium account.
 
     /// <summary>The site link's two switches, after the account row.</summary>
     private void DrawGameLinkRows(int i)
     {
         if (SwitchRow(i++, "##check-inbox", "Check for things sent from the site", "About once a minute while linked", config.CheckInbox,
-                "Builds and designs you send to the game from Housing Studio (Send to game) wait under From the site on Start; a new one is said in chat. Needs the account linked."))
+                "Builds and designs you send to the game from Decorium (Send to game) wait under From the site on Start; a new one is said in chat. Needs the account linked."))
         {
             config.CheckInbox = !config.CheckInbox;
             config.Save();
         }
-        if (SwitchRow(i, "##visit-homes", "Show homes on Housing Studio when I visit", "A small panel in a home that's a design", config.ShowHomesWhenVisiting,
-                "In any home's interior, Housing Studio is asked whether it's a published design verified there; if it is, a small panel shows it (like, save and stamp it when linked). Off: nothing is asked."))
+        if (SwitchRow(i, "##visit-homes", "Show homes on Decorium when I visit", "A small panel in a home that's a design", config.ShowHomesWhenVisiting,
+                "In any home's interior, Decorium is asked whether it's a published design verified there; if it is, a small panel shows it (like, save and stamp it when linked). Off: nothing is asked."))
         {
             config.ShowHomesWhenVisiting = !config.ShowHomesWhenVisiting;
             config.Save();

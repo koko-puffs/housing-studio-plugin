@@ -96,7 +96,7 @@ public sealed partial class GameLink : IDisposable
         {
             if (DateTime.UtcNow - failedAt > TimeSpan.FromSeconds(30))
             {
-                Services.Log.Error(ex, "Housing Studio's site link failed this frame");
+                Services.Log.Error(ex, "Decorium's site link failed this frame");
                 failedAt = DateTime.UtcNow;
             }
         }
@@ -112,7 +112,7 @@ public sealed partial class GameLink : IDisposable
             }
             catch (Exception ex)
             {
-                Services.Log.Error(ex, "Housing Studio couldn't take the site's answer");
+                Services.Log.Error(ex, "Decorium couldn't take the site's answer");
             }
         }
         if (config.SiteToken != tokenSeen)
@@ -148,7 +148,7 @@ public sealed partial class GameLink : IDisposable
             {
                 if (cancel.IsCancellationRequested) return;
                 // The exception holds no token: it's only ever in a request's body.
-                Services.Log.Error(ex, $"Housing Studio: {what} failed");
+                Services.Log.Error(ex, $"Decorium: {what} failed");
                 result = fault(ex);
             }
             if (cancel.IsCancellationRequested)
@@ -168,7 +168,7 @@ public sealed partial class GameLink : IDisposable
     {
         if (token != config.SiteToken || refusedToken == token) return;
         refusedToken = token;
-        log.Warn($"Housing Studio didn't accept the plugin's token: {why ?? "it doesn't know it."}");
+        log.Warn($"Decorium didn't accept the plugin's token: {why ?? "it doesn't know it."}");
     }
 
     /// <summary>Linked again, or unlinked: what was asked with the old token is asked again with the new (or as anyone).</summary>
@@ -203,16 +203,16 @@ public sealed partial class GameLink : IDisposable
         Discard();
     }
 
-    /// <summary>"Housing Studio" in chat, and a Dalamud notification.</summary>
+    /// <summary>"Decorium" in chat, and a Dalamud notification.</summary>
     private static void Tell(string text, bool notification)
     {
-        Services.Chat.Print(text, "Housing Studio");
+        Services.Chat.Print(text, "Decorium");
         if (!notification) return;
         try
         {
             Services.Notifications.AddNotification(new Notification
             {
-                Title = "Housing Studio",
+                Title = "Decorium",
                 Content = text,
                 Type = NotificationType.Info,
             });

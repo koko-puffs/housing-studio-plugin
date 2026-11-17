@@ -94,7 +94,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
-          name: Housing Studio ${{ steps.version.outputs.tag }}
+          name: Decorium ${{ steps.version.outputs.tag }}
           target_commitish: ${{ github.sha }}
           files: HousingStudio.zip
           generate_release_notes: true

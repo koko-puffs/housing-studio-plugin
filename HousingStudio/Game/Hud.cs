@@ -26,7 +26,7 @@ public static unsafe class Hud
         }
         catch (Exception ex)
         {
-            Services.Log.Error(ex, $"Housing Studio couldn't {(visible ? "show" : "hide")} the HUD");
+            Services.Log.Error(ex, $"Decorium couldn't {(visible ? "show" : "hide")} the HUD");
             return false;
         }
     }

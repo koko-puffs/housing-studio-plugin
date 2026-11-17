@@ -1,9 +1,9 @@
 {
   "Author": "koko",
-  "Name": "Housing Studio",
+  "Name": "Decorium",
   "InternalName": "HousingStudio",
-  "Punchline": "Furnish your house from a Housing Studio build or a MakePlace layout.",
-  "Description": "Place a Housing Studio build or a MakePlace layout in your home: every piece is matched to what you have, moved or placed at its exact spot, and dyed to match. It can also fetch what's missing, save your home as a build, and send shots of it to its page on the site.\n\nOpen it with /hstudio in a home you're allowed to decorate.",
+  "Punchline": "Furnish your house from a Decorium build or a MakePlace layout.",
+  "Description": "Place a Decorium build or a MakePlace layout in your home: every piece is matched to what you have, moved or placed at its exact spot, and dyed to match. It can also fetch what's missing, save your home as a build, and send shots of it to its page on the site.\n\nOpen it with /decorium in a home you're allowed to decorate. (It was Housing Studio until 17 November 2026; /hstudio still works.)",
   "ApplicableVersion": "any",
   "RepoUrl": "https://github.com/koko-puffs/housing-studio-plugin",
   "IconUrl": "https://raw.githubusercontent.com/koko-puffs/housing-studio-plugin/main/HousingStudio/images/icon.png",
@@ -13,7 +13,8 @@
     "makeplace",
     "layout",
     "decorating",
-    "housing studio"
+    "housing studio",
+    "decorium"
   ],
   "CategoryTags": [
     "utility"

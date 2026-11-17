@@ -7,12 +7,12 @@ using System.Text.Json;
 
 namespace HousingStudio.Core;
 
-/// <summary>A file that isn't a MakePlace layout or a Housing Studio build, said plainly.</summary>
+/// <summary>A file that isn't a MakePlace layout or a Decorium build, said plainly.</summary>
 public sealed class LayoutFormatException(string message) : Exception(message);
 
 /// <summary>
-/// Reads a MakePlace layout (.json) or a Housing Studio build (.build, the same JSON), the way
-/// Housing Studio's site does (src/features/housing-studio/makeplace.ts): pieces inside and in the
+/// Reads a MakePlace layout (.json) or a Decorium build (.build, the same JSON), the way
+/// Decorium's site does (src/features/housing-studio/makeplace.ts): pieces inside and in the
 /// garden, with whatever is placed on them (MakePlace stores those as <c>attachments</c>, each with
 /// its own full transform), their dyes as "RRGGBBAA", and the fixtures.
 /// </summary>
@@ -47,7 +47,7 @@ public static class LayoutReader
             var hasFurniture = root.TryGetProperty("interiorFurniture", out var inF) && inF.ValueKind == JsonValueKind.Array;
             var hasGarden = root.TryGetProperty("exteriorFurniture", out var outF) && outF.ValueKind == JsonValueKind.Array;
             if (!hasFurniture && !hasGarden && !root.TryGetProperty("houseSize", out _))
-                throw new LayoutFormatException("That file has no furniture. Save one from MakePlace (File → Save) or download a build from Housing Studio.");
+                throw new LayoutFormatException("That file has no furniture. Save one from MakePlace (File → Save) or download a build from Decorium.");
 
             var interiorScale = Scale(root, "interiorScale");
             var exteriorScale = Scale(root, "exteriorScale");

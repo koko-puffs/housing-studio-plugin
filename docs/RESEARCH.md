@@ -1,6 +1,6 @@
 # Research notes
 
-What was looked at before building Housing Studio's plugin, and what was taken from where. Written
+What was looked at before building Decorium's plugin, and what was taken from where. Written
 October 2026. Everything about the game's memory is from other plugins' work and the
 FFXIVClientStructs that ships with Dalamud; none of it has been checked in the game by this project
 yet.
@@ -58,7 +58,7 @@ yet.
   name, transform: { location, rotation, scale }, properties: { color: "RRGGBBAA", material },
   attachments: [...] }`, `interiorScale`/`exteriorScale`, `interiorFixture`/`exteriorFixture`.
   Location is `[x, z, y]` of the game's divided by the scale; the turn is
-  `-ComputeZAngle(quaternion)`. Housing Studio's `makeplace.ts` does the same (`yaw = -2·atan2(qz,
+  `-ComputeZAngle(quaternion)`. Decorium's `makeplace.ts` does the same (`yaw = -2·atan2(qz,
   qw)`), and the plugin's `Core/Transforms.cs` is tested against both formulas. Dye: nearest
   `Stain` row with the housing flag (now `Stain.IsHousingApplicable`).
 - **Matching**: they list placed objects (`HousingObjectManager` objects, `housingRowId` →
@@ -74,8 +74,8 @@ yet.
   (`ItemUICategory` 78/79) go last.
 - **Outdoors**: only your plot's items, via the `HousingExteriorPlacedItems` container and a game
   function mapping (plot, slot) → furniture index (`E8 ?? ?? ?? ?? 44 0F B7 D8`). Garden
-  coordinates in the file are plot-local, turned by a hard-coded plot table (`Plots.cs`). Housing
-  Studio's own `public/housing/exteriors.json` has the same plots (with the opposite sign of turn),
+  coordinates in the file are plot-local, turned by a hard-coded plot table (`Plots.cs`).
+  Decorium's own `public/housing/exteriors.json` has the same plots (with the opposite sign of turn),
   so the plugin's `Data/plots.json` is generated from the site's data instead.
 - **Rate limit**: a fixed "placement interval" between items (`Framework.RunOnTick(…, interval)`);
   their README warns ~200 ms misses placements.

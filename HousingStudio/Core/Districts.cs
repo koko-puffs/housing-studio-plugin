@@ -2,7 +2,7 @@ using System;
 
 namespace HousingStudio.Core;
 
-/// <summary>Housing Studio's district keys, from a file's District line or the game's territory names.</summary>
+/// <summary>Decorium's district keys, from a file's District line or the game's territory names.</summary>
 public static class Districts
 {
     public static readonly string[] Keys = { "mist", "lavender-beds", "goblet", "shirogane", "empyreum" };

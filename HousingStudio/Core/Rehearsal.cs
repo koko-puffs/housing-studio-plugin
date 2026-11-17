@@ -204,7 +204,7 @@ public sealed class RehearsalReport
     public string Text(string? log = null)
     {
         var sb = new StringBuilder();
-        sb.Append("Housing Studio rehearsal");
+        sb.Append("Decorium rehearsal");
         if (Title.Length > 0) sb.Append(" of ").Append(Title);
         if (StartedAt != default) sb.Append(", ").Append(StartedAt.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture));
         sb.AppendLine();

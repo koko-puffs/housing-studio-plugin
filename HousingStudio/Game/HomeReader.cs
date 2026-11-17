@@ -78,7 +78,7 @@ public static unsafe class HomeReader
         if (current >= 0 && current != id.WardIndex && reportedWard != id.Id)
         {
             reportedWard = id.Id;
-            Services.Log.Warning($"Housing Studio: the house id's ward ({id.WardIndex}) isn't the game's current ward ({current}); the house id's is used.");
+            Services.Log.Warning($"Decorium: the house id's ward ({id.WardIndex}) isn't the game's current ward ({current}); the house id's is used.");
         }
         var facts = new HouseFacts(WorldName(), DistrictOf(id, ctx), id.WardIndex, id.PlotIndex, id.IsApartment, id.ApartmentDivision, id.RoomNumber, id.IsWorkshop);
         return HomeAddress.From(facts, out why);

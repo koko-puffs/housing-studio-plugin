@@ -8,7 +8,7 @@ namespace HousingStudio.Session;
 
 /// <summary>
 /// Saves what's placed where you are as a .build (the same JSON as MakePlace's files), so you can
-/// load it here again to put everything back, open it in MakePlace, or upload it to Housing Studio.
+/// load it here again to put everything back, open it in MakePlace, or upload it to Decorium.
 /// </summary>
 public static class Backups
 {

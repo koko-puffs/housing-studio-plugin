@@ -243,7 +243,7 @@ public sealed unsafe partial class FixtureRunner
         Result = Summary();
         if (Rehearsal && !reason.StartsWith("Stopped by you", StringComparison.Ordinal)) Rehearsals.Report.Issue("Setting the fixtures", $"Stopped: {reason}");
         log.Warn($"Fixtures {(Rehearsal ? "rehearsal " : string.Empty)}stopped: {reason}");
-        if (config.ChatMessages) Services.Chat.PrintError($"Stopped setting fixtures: {reason}", "Housing Studio");
+        if (config.ChatMessages) Services.Chat.PrintError($"Stopped setting fixtures: {reason}", "Decorium");
     }
 
     /// <summary>Every frame, on the framework thread.</summary>
@@ -288,7 +288,7 @@ public sealed unsafe partial class FixtureRunner
                 State = RunState.Finished;
                 Result = Summary();
                 log.Done($"Fixtures: {Result}");
-                if (config.ChatMessages) Services.Chat.Print($"Fixtures: {Result}", "Housing Studio");
+                if (config.ChatMessages) Services.Chat.Print($"Fixtures: {Result}", "Decorium");
                 break;
             case QueueState.Skipped:
             case QueueState.Stopped:
@@ -630,7 +630,7 @@ public sealed unsafe partial class FixtureRunner
                 if (!asked)
                 {
                     asked = true;
-                    if (config.ChatMessages) Services.Chat.Print(label[(label.IndexOf(':') + 1)..].Trim(), "Housing Studio");
+                    if (config.ChatMessages) Services.Chat.Print(label[(label.IndexOf(':') + 1)..].Trim(), "Decorium");
                 }
                 return StepOutcome.Waiting;
             },

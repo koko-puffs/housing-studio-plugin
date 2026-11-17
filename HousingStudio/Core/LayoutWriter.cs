@@ -27,7 +27,7 @@ public sealed record SavedFixture(string Level, string Type, uint ItemId, string
 public sealed record SavedHome(string? HouseSize, string? Style, IReadOnlyList<SavedFixture> Interior, IReadOnlyList<SavedFixture> Exterior, int? Plot, int? Light = null);
 
 /// <summary>
-/// Writes what's placed as a layout, the same JSON Housing Studio's site writes for a build
+/// Writes what's placed as a layout, the same JSON Decorium's site writes for a build
 /// (build/model.ts <c>toLayout</c>) and MakePlace reads, so a backup taken before placing can be
 /// loaded again here, uploaded to the site, or opened in MakePlace.
 /// </summary>
